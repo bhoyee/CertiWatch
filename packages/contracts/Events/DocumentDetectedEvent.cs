@@ -1,0 +1,18 @@
+using CertiWatch.Contracts.Enums;
+
+namespace CertiWatch.Contracts.Events;
+
+public sealed record DocumentDetectedEvent(
+    Guid TenantId,
+    Guid SourceId,
+    string DeviceToken,
+    string FileName,
+    string PathOrUrl,
+    string FileHash,
+    string MimeType,
+    long FileSize,
+    IReadOnlyList<string> VendorHints,
+    IReadOnlyDictionary<string, string> ExtractedFields,
+    ProcessingStatus InitialStatus,
+    DateTime DetectedAt
+);

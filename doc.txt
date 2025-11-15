@@ -1,0 +1,378 @@
+CertiWatch
+
+“CertiWatch scans certificates from folders or cloud drives, extracts expiry information with OCR, and automatically alerts managers before training expires.”
+
+It demonstrates:
+
+Backend mastery
+
+Real pipeline
+
+DevOps
+
+Frontend UX
+
+OCR / AI
+
+Background workers
+
+Multi-tenant SaaS
+
+A product mindset
+
+Cloud architecture
+
+Security awareness
+==========================
+It proves full-stack + dev ops capability
+
+When you mention:
+
+multi-tenant architecture
+
+.NET backend
+
+Next.js frontend
+
+Redis queues
+
+OCR pipeline
+
+Azure or Cloudflare infra
+
+CI/CD
+
+deployment
+
+workers
+
+local agent
+000000000000000000000000000000000000000
+✔ It shows real engineering skills
+
+Your app includes:
+• OCR
+• Local system agent
+• Cloud connectors
+• Background workers
+• Multi-tenant SaaS
+• File parsing
+• Rules engine
+• Email workflows
+• Automation
+• Actual business logic
+• Real-world problem solving
+• Security
+• DevOps
+000000000000000000000000000000000000000000000000
+
+Use this single prompt.
+
+ROLE
+You are a senior full stack engineer with 5+ years experience. Ship a production SaaS called Silent Auditor. Deliver code, infra, tests, CI, and deployment scripts. Target SMBs. No staff accounts. Admin only.
+
+MISSION
+Build a certificate compliance scanner that reads PDFs and images from local folders and optional cloud drives. Extract staff name, course, issue date, expiry date. Infer expiry when missing using a rule engine. Support global defaults and tenant overrides. Send weekly digests and expiry reminders. Provide one click approvals from email. Ship a thin admin UI.
+
+PRIMARY MODES
+Local Agent mode. Watches ordinary system folders. No cloud storage required.
+Cloud connectors mode. Optional Google Drive, OneDrive, Dropbox with read only scopes.
+
+ARCHITECTURE
+Modular monolith for backend. Clear modules. Auth. Devices. Sources. Ingestion. OCR. Parsing. Rules. Records. Notifications. Reports. Connectors. Admin.
+Local Agent sends events to API over HTTPS with device enrollment. Queue if offline.
+Workers process OCR and reminders.
+
+STACK
+Frontend. Next.js 15. React. TypeScript. Tailwind. TanStack Query. Vercel deploy.
+Backend API. .NET 8 Minimal APIs in C#. MediatR. FluentValidation.
+Workers. .NET 8 BackgroundService for OCR and reminders.
+Local Agent. .NET 8. Windows Service and systemd daemon. Cross platform packaging.
+DB. PostgreSQL 16 with pg_trgm. Redis for queues and rate limit.
+OCR. Azure Computer Vision Read API. Fallback Tesseract local.
+Storage. Only paths and hashes by default. Optional Cloudflare R2 for hosted copies if tenant opts in.
+Auth. Cookie sessions for admin UI. Magic links for review actions. No passwords for staff.
+Cloud. Azure Container Apps for API and workers. Azure Database for PostgreSQL Flexible Server. Azure Key Vault. Azure Storage when used. Cloudflare for DNS. WAF. Turnstile on forms.
+IaC. Terraform for Azure and Cloudflare. Script to set Vercel env.
+
+MULTI TENANT RULES
+Two layers of rules.
+Global rules. Owned by the SaaS. Default validity for common courses.
+Company rules. Owned by tenant. Overrides global. Can add vendor specific overrides.
+Rule precedence. Company exact. Company vendor override. Company regex. Global exact. Global vendor override. Global regex. Tag. Company default. Fallback guess.
+Example. First Aid is 12 months at this tenant. Set company override. Printed expiry on a certificate always wins.
+
+FEATURES
+Connect folders in Local Agent. Optional connect cloud drives.
+OCR and parse PDFs and images. Template agnostic parser. Regex and keyword maps and vendor hints. Expiry inference via course rules. Confidence scores.
+Weekly digest email. New records. Expiring soon. Expired. Low confidence. One click Approve. Fix date. Ignore.
+Expiry reminders with lead times. 60. 30. 7. 1 days. Snooze 7 days.
+Exports. CSV and PDF. Audit ready report.
+Thin admin UI. Staff list. Records list. Rules table with overrides. Device health. Source list.
+
+REPO LAYOUT
+/infra
+/terraform
+azure
+cloudflare
+outputs
+/.github
+/workflows
+ci.yml
+/apps
+/frontend     Next.js app
+/api          .NET Minimal API
+/worker       .NET BackgroundService
+/agent        .NET local agent
+/packages
+/contracts    DTOs. OpenAPI
+/parsing      regex. keyword maps. vendor profiles
+/emails       templates for digest and reminders
+/scripts
+dev.sh
+seed.sh
+migrate.sh
+e2e.sh
+/docs
+readme.md
+setup.md
+security.md
+api.md
+agent-install.md
+troubleshooting.md
+
+DATABASE SCHEMA
+tenants
+id uuid pk
+name text
+plan text
+created_at timestamptz
+users
+id uuid pk
+tenant_id uuid fk
+email citext unique
+name text
+role text
+created_at timestamptz
+devices
+id uuid pk
+tenant_id uuid fk
+name text
+os text
+enrolled_at timestamptz
+last_seen_at timestamptz
+status text
+sources
+id uuid pk
+tenant_id uuid fk
+type text values local gdrive onedrive dropbox
+display_name text
+config jsonb
+created_at timestamptz
+documents
+id uuid pk
+tenant_id uuid fk
+source_id uuid fk
+vendor_id uuid nullable
+path_or_url text
+file_name text
+file_hash text
+mime_type text
+processed_at timestamptz
+processing_status text values pending ok needs_review failed
+created_at timestamptz
+records
+id uuid pk
+tenant_id uuid fk
+document_id uuid fk
+staff_name text
+course_name text
+issuer text
+issue_date date nullable
+expiry_date date nullable
+expiry_derived bool default false
+confidence numeric
+fields jsonb
+created_at timestamptz
+updated_at timestamptz
+course_rules
+id uuid pk
+tenant_id uuid fk nullable for global
+course_name text
+match_regex text nullable
+tag text nullable
+issuer_override text nullable
+default_validity_months int nullable
+is_renewable bool default true
+is_one_time bool default false
+vendors
+id uuid pk
+name text
+hints text[]
+patterns jsonb
+reminders
+id uuid pk
+tenant_id uuid fk
+record_id uuid fk
+type text values digest expiry
+scheduled_for timestamptz
+sent_at timestamptz nullable
+audit_logs
+id uuid pk
+tenant_id uuid fk
+actor_id uuid nullable
+action text
+meta jsonb
+created_at timestamptz
+
+INDEXES
+btree on records.expiry_date
+gin on records.fields
+gin on vendors.hints
+trigram on records.staff_name
+trigram on records.course_name
+composite on documents.processing_status and documents.created_at desc
+
+GLOBAL SEED RULES
+Seed around 50 common courses with defaults. Mark editable. Example rows.
+First Aid 36 months renewable true
+Fire Safety 12 months renewable true
+Food Hygiene Level 2 12 months renewable true
+Manual Handling 24 months renewable true
+Safeguarding Adults 24 months renewable true
+GDPR Awareness 12 months renewable true
+Infection Control 12 months renewable true
+Health and Safety Induction 36 months renewable true
+Equality and Diversity 36 months renewable true
+COSHH Awareness 12 months renewable true
+
+TENANT OVERRIDES
+Allow tenants to override any global rule. Example. First Aid 12 months for a tenant. Update derived expiries on save. Do not change records with printed expiry.
+
+API CONTRACTS
+Auth
+POST /api/auth/login
+POST /api/auth/magic
+GET  /api/auth/callback
+Devices
+POST /api/devices/enroll
+POST /api/devices/heartbeat
+POST /api/devices/events
+Sources
+POST /api/sources
+GET  /api/sources
+DELETE /api/sources/{id}
+Records
+GET  /api/records
+GET  /api/records/{id}
+PATCH /api/records/{id}
+Documents
+GET  /api/documents/{id}/preview
+Rules
+GET  /api/course-rules
+POST /api/course-rules
+PATCH /api/course-rules/{id}
+Reports
+GET  /api/reports/digest-preview
+POST /api/reports/export-pdf
+Admin
+GET  /api/admin/healthz
+GET  /api/admin/ingestion-logs
+
+LOCAL AGENT SPEC
+Watch multiple folders recursively. FileSystemWatcher with fallback polling.
+Support PDF JPG PNG TIFF.
+Image preprocessing. Deskew. Denoise. Contrast boost.
+Local OCR option using Tesseract. Configurable per tenant.
+Cloud OCR option using Azure Vision Read API.
+Extract text blocks and send DocumentDetected event with file_hash file_name path source_id mime_type size detected_text vendor_hints.
+Queue offline. Backoff with jitter. TLS only. Device token in OS keychain. Windows Service installer. systemd unit service. launchd daemon.
+
+PARSING PIPELINE
+Normalize text. Split into lines and blocks with positions when available.
+Detect candidates.
+Dates with regex for dd MMM yyyy. dd/MM/yyyy. yyyy-MM-dd.
+Staff name with keywords. name. candidate. learner.
+Issue with issued. awarded on. completion date.
+Expiry with expiry. valid until. renew by. expires. validity to.
+Course with course. qualification. training. certificate in.
+Issuer with by. provider. awarding body.
+Choose best candidate per field based on proximity and order. Increase score if matched keyword is near. Increase score for vendor profile match.
+If expiry missing and issue present. Compute expiry from rule. Set expiry_derived true.
+If no rule. Try keyword tags. Try trigram to nearest known course. If confidence low. Set unknown and queue for weekly email.
+
+VENDOR PROFILING
+Detect issuer hints by logo text. footer domain. address lines. phone. email domain.
+Store learned patterns after three samples per vendor. Future docs gain score from these patterns.
+
+WEEKLY DIGEST
+Every Monday 09:00 Europe London by default. List new records. Expiring soon. Expired. Low confidence.
+Include one click actions via signed magic links. Approve. Fix date. Ignore. Include common date presets. 6m. 12m. 24m. 36m. Permanent.
+Expiry reminders at tenant lead times. 60 30 7 1 days. Snooze 7 days.
+
+SECURITY
+HTTPS only. HSTS. CSP with nonce. SameSite Lax cookies. CSRF tokens for UI mutations.
+RLS on all tenant data. Every query filters by tenant_id. Global rules have tenant_id null.
+Device enrollment via one time code. Rotate device tokens. Keys in Azure Key Vault.
+PII minimization. Store file path and hash. Do not store documents unless tenant opts in.
+Audit every change. Rate limit per device and per tenant. Turnstile on public forms.
+
+ENV VARIABLES
+API
+POSTGRES_URL
+REDIS_URL
+KEY_VAULT_NAME
+COOKIE_SECRET
+MAGIC_LINK_SECRET
+AZURE_VISION_ENDPOINT
+AZURE_VISION_KEY
+EMAIL_PROVIDER_KEY
+WORKER
+same as API plus CRON_EXPRESSIONS
+AGENT
+API_BASE_URL
+ENROLLMENT_CODE
+DEVICE_NAME
+FRONTEND
+NEXT_PUBLIC_API_BASE_URL
+TURNSTILE_SITE_KEY
+
+CI WORKFLOW
+On pull request. Lint. Unit tests. Integration tests with Testcontainers. Build docker images. CodeQL scan. Trivy scan. Playwright e2e for frontend. Terraform plan.
+On main. Build and push images. Run migrations. Terraform apply to staging. Smoke tests. Promote to prod.
+
+TERRAFORM OUTPUTS
+Resource group. Container Apps env. API app. Worker app. Postgres Flexible Server with VNET. Redis. Key Vault. Storage. Monitor workspace and alerts. Managed identity. Cloudflare zone and WAF. DNS records. Vercel env.
+Outputs for api url. frontend url. connection strings in Key Vault.
+
+SEED DATA
+Global course rules as listed. Vendor profiles starter with ten issuers. Samples in packages/parsing.
+Sample documents with fake text for tests. Include issue only. issue plus expiry. no dates. handwritten noise case. low contrast case.
+
+ACCEPTANCE TESTS
+Seed DB. Run agent in test mode against a sample folder. Process a mixed batch of PDFs and JPGs. Records appear with extracted fields and confidence. A First Aid record with no expiry gets 12 months when tenant override is set. Weekly digest preview renders. One click Approve updates a record. Reminders schedule correctly. RLS blocks cross tenant access. Agent queues while offline then flushes. Cloud connectors off by default. Turn on Google Drive and process deltas. Printed expiry overrides rules.
+
+DELIVERY
+Return the full repository structure. Include real code stubs that compile. Provide env.example files. Dockerfiles. GitHub Actions workflow. Terraform files. Installer scripts for agent on Windows Linux macOS. Seed data. Sample PDFs. A quickstart with copy paste commands to run dev and deploy.
+
+QUICKSTART
+dev
+scripts/dev.sh
+run docker compose for Postgres and Redis
+start api worker frontend with hot reload
+migrate
+scripts/migrate.sh
+seed
+scripts/seed.sh
+deploy
+terraform init
+terraform apply
+push images
+set env in Key Vault and Vercel
+run smoke tests
+
+BUSINESS RULES TO DEMONSTRATE
+First Aid equals 12 months for this tenant. Show company override in UI and emails.
+Printed expiry on a certificate always wins over rules.
+Unknown courses follow tenant default until confirmed in email.
+One time courses never send reminders and show as permanent records.

@@ -1,0 +1,27 @@
+# dotnet
+bin/
+obj/
+*.user
+*.suo
+*.swp
+
+# node
+node_modules/
+.next/
+!.github/
+
+# python
+__pycache__/
+
+# env
+*.env
+.env
+apps/**/.env
+
+# tooling
+.vs/
+.idea/
+.DS_Store
+coverage/
+playwright-report/
+test-results/
