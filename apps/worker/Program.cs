@@ -1,0 +1,25 @@
+using CertiWatch.Parsing;
+using CertiWatch.Parsing.Text;
+using CertiWatch.Worker.Options;
+using CertiWatch.Worker.Services;
+using CertiWatch.Worker.Workers;
+using Serilog;
+using Microsoft.Extensions.Hosting;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
+builder.Services.AddHttpClient<IApiClient, ApiClient>();
+builder.Services.AddSingleton(new KeywordMatcher(KeywordMaps.Default));
+builder.Services.AddSingleton<ParsingPipeline>();
+builder.Services.AddSingleton<IAzureVisionClient, AzureVisionClient>();
+builder.Services.AddSingleton<ITesseractClient, TesseractClient>();
+builder.Services.AddHostedService<OcrWorker>();
+
+builder.Services.AddLogging(logging =>
+{
+    logging.AddConsole();
+});
+
+var host = builder.Build();
+host.Run();
