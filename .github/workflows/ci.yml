@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install frontend deps
+        run: npm install --prefix apps/frontend --legacy-peer-deps
+      - name: Restore
+        run: dotnet restore CertiWatch.sln
+      - name: Lint frontend
+        run: npm run lint --prefix apps/frontend || true
+      - name: Frontend build
+        run: npm run build --prefix apps/frontend
+      - name: Test
+        run: dotnet test --no-restore --verbosity normal
+      - name: Frontend unit tests
+        run: npm run test --prefix apps/frontend
+      - name: Playwright e2e
+        run: npx playwright install --with-deps && npm run test:e2e --prefix apps/frontend
+      - name: Build api image
+        run: |
+          docker build -f apps/api/Dockerfile -t ghcr.io/$GITHUB_REPOSITORY/api:${GITHUB_SHA} .
+      - name: Build worker image
+        run: |
+          docker build -f apps/worker/Dockerfile -t ghcr.io/$GITHUB_REPOSITORY/worker:${GITHUB_SHA} .
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+      - name: CodeQL init
+        uses: github/codeql-action/init@v3
+        with:
+          languages: 'csharp, javascript'
+      - name: CodeQL analyze
+        uses: github/codeql-action/analyze@v3
+      - name: Terraform plan
+        if: github.event_name == 'pull_request'
+        working-directory: terraform/azure
+        run: |
+          terraform init -backend=false
+          terraform plan -var prefix=preview
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      - name: Push images
+        run: |
+          docker tag ghcr.io/$GITHUB_REPOSITORY/api:${GITHUB_SHA} ${{ secrets.ACR_LOGIN_SERVER }}/certiwatch-api:${GITHUB_SHA}
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/certiwatch-api:${GITHUB_SHA}
+      - name: Run migrations
+        run: dotnet ef database update --project apps/api --startup-project apps/api
+      - name: Terraform apply
+        working-directory: terraform/azure
+        run: |
+          terraform init
+          terraform apply -auto-approve -var prefix=prod -var api_image=${{ secrets.ACR_LOGIN_SERVER }}/certiwatch-api:${GITHUB_SHA} -var worker_image=${{ secrets.ACR_LOGIN_SERVER }}/certiwatch-worker:${GITHUB_SHA} -var postgres_password=${{ secrets.POSTGRES_PASSWORD }}
