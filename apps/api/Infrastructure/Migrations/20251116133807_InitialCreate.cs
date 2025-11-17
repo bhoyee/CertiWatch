@@ -246,16 +246,16 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                 columns: new[] { "Id", "CourseName", "CreatedAt", "DefaultValidityMonths", "IsOneTime", "IsRenewable", "IssuerOverride", "MatchRegex", "Tag", "TenantId" },
                 values: new object[,]
                 {
-                    { new Guid("00000000-0000-0000-0000-000000000001"), "First Aid", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4207), 36, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000002"), "Fire Safety", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4211), 12, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000003"), "Food Hygiene Level 2", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4213), 12, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000004"), "Manual Handling", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4214), 24, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000005"), "Safeguarding Adults", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4215), 24, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000006"), "GDPR Awareness", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4217), 12, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000007"), "Infection Control", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4218), 12, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000008"), "Health and Safety Induction", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4272), 36, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000009"), "Equality and Diversity", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4273), 36, false, true, null, null, null, null },
-                    { new Guid("00000000-0000-0000-0000-000000000010"), "COSHH Awareness", new DateTime(2025, 11, 14, 19, 31, 57, 937, DateTimeKind.Utc).AddTicks(4277), 12, false, true, null, null, null, null }
+                    { new Guid("00000000-0000-0000-0000-000000000001"), "First Aid", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8319), 36, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000002"), "Fire Safety", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8349), 12, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000003"), "Food Hygiene Level 2", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8356), 12, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000004"), "Manual Handling", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8363), 24, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000005"), "Safeguarding Adults", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8369), 24, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000006"), "GDPR Awareness", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8385), 12, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000007"), "Infection Control", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8392), 12, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000008"), "Health and Safety Induction", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8399), 36, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000009"), "Equality and Diversity", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8406), 36, false, true, null, null, null, null },
+                    { new Guid("00000000-0000-0000-0000-000000000010"), "COSHH Awareness", new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8419), 12, false, true, null, null, null, null }
                 });
 
             migrationBuilder.CreateIndex(
