@@ -16,7 +16,10 @@ __pycache__/
 # env
 *.env
 .env
+*.env.local
+.env.local
 apps/**/.env
+apps/**/.env.local
 
 # tooling
 .vs/
