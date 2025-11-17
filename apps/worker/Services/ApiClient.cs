@@ -21,7 +21,7 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
         {
             var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/events", new
             {
-                deviceId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                deviceId = _options.DeviceId,
                 documents = new[] { payload }
             }, cancellationToken);
 
