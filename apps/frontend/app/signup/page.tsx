@@ -1,4 +1,4 @@
-"use client";
+ï»¿"use client";
 
 import { useState } from "react";
 import { postJson } from "../../lib/api";
@@ -88,7 +88,7 @@ export default function SignupPage() {
             <p className="mt-2 text-sm text-slate-600">{plan.description}</p>
             <ul className="mt-3 space-y-1 text-sm text-slate-600">
               {plan.features.map((feature) => (
-                <li key={feature}>• {feature}</li>
+                <li key={feature}>â€¢ {feature}</li>
               ))}
             </ul>
           </button>
@@ -135,7 +135,7 @@ export default function SignupPage() {
           disabled={loading}
           className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500 disabled:opacity-50"
         >
-          {loading ? "Redirecting to Stripe…" : `Start ${selectedPlan.name}`}
+          {loading ? "Redirecting to Stripeâ€¦" : `Start ${selectedPlan.name}`}
         </button>
       </form>
     </div>
