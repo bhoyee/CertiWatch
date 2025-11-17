@@ -1,4 +1,4 @@
-import { fetchJson } from "../../../lib/api";
+ï»¿import { fetchJson } from "../../../lib/api";
 
 type Rule = {
   id: string;
@@ -42,7 +42,7 @@ export default async function RulesPage() {
             {rules.map((rule) => (
               <tr key={rule.id}>
                 <td className="px-4 py-3 text-sm font-medium text-slate-900">{rule.courseName}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{rule.defaultValidityMonths ?? "—"}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{rule.defaultValidityMonths ?? "--"}</td>
                 <td className="px-4 py-3 text-sm">
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold uppercase text-slate-600">
                     {rule.isGlobal ? "Global" : "Tenant"}

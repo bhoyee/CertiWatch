@@ -1,4 +1,4 @@
-import { fetchJson } from "../../../lib/api";
+ï»¿import { fetchJson } from "../../../lib/api";
 
 type Device = {
   id: string;
@@ -30,7 +30,7 @@ export default async function DevicesPage() {
             <p className="text-lg font-semibold text-slate-900">{device.name}</p>
             <p className="text-sm text-slate-500">{device.operatingSystem}</p>
             <p className="mt-2 text-sm text-slate-600">
-              Last seen {device.lastSeenAt ?? "never"} · Status {device.status}
+              Last seen {device.lastSeenAt ?? "never"} | Status {device.status}
             </p>
           </div>
         ))}
