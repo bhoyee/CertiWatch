@@ -7,3 +7,23 @@ export async function fetchJson<T>(path: string): Promise<T> {
   }
   return (await response.json()) as T;
 }
+
+export async function postJson<TResponse, TBody extends Record<string, unknown>>(
+  path: string,
+  body: TBody
+): Promise<TResponse> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}

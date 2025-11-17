@@ -1,7 +1,7 @@
-/** @type {import(''next'').NextConfig} */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    reactCompiler: true
+    // leave empty for now; re-enable reactCompiler later if you install the plugin
   }
 };
 
