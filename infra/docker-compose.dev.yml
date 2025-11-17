@@ -19,3 +19,5 @@ services:
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
 volumes:
   postgres_data:
+
+
