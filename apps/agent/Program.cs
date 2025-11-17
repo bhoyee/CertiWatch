@@ -7,7 +7,11 @@ using Microsoft.Extensions.Options;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
-builder.Services.AddHttpClient<IAgentClient, AgentClient>();
+builder.Services.AddHttpClient<IAgentClient, AgentClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
 builder.Services.AddSingleton<IAgentQueue>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;

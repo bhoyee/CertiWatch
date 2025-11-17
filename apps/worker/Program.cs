@@ -9,7 +9,11 @@ using Microsoft.Extensions.Hosting;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
-builder.Services.AddHttpClient<IApiClient, ApiClient>();
+builder.Services.AddHttpClient<IApiClient, ApiClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
 builder.Services.AddSingleton(new KeywordMatcher(KeywordMaps.Default));
 builder.Services.AddSingleton<ParsingPipeline>();
 builder.Services.AddSingleton<IAzureVisionClient, AzureVisionClient>();

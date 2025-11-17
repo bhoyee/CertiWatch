@@ -2,7 +2,7 @@ namespace CertiWatch.Agent.Options;
 
 public sealed class AgentOptions
 {
-    public string ApiBaseUrl { get; set; } = "https://localhost:5001";
+    public string ApiBaseUrl { get; set; } = "http://localhost:5001";
     public Guid TenantId { get; set; } = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     public Guid SourceId { get; set; } = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     public string EnrollmentCode { get; set; } = "DEV-000000";
