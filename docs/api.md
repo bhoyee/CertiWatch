@@ -1,4 +1,4 @@
-# API Reference (excerpt)
+﻿# API Reference (excerpt)
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
@@ -12,5 +12,7 @@
 | PATCH | /api/course-rules/{id} | Update override |
 | GET | /api/reports/digest-preview | Render weekly digest HTML |
 | POST | /api/reports/export-pdf | Export compliance report |
+| POST | /api/billing/checkout | Create Stripe Checkout session |
+| POST | /api/billing/webhook | Stripe webhook (tenant provisioning) |
 
 All endpoints require the `X-Tenant-Id` header in admin mode. Device endpoints additionally expect the device token in the `DeviceToken` header.
