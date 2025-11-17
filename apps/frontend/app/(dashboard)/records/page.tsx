@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { RecordTable } from "../../../components/RecordTable";
 import { fetchJson } from "../../../lib/api";
 import { RecordDto } from "../../../types";

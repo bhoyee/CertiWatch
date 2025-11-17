@@ -1,3 +1,5 @@
+﻿export const dynamic = "force-dynamic";
+
 import { fetchJson } from "../../../lib/api";
 
 type Source = {

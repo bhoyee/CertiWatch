@@ -1,4 +1,6 @@
-﻿import { fetchJson } from "../../../lib/api";
+﻿export const dynamic = "force-dynamic";
+
+import { fetchJson } from "../../../lib/api";
 
 type Device = {
   id: string;
