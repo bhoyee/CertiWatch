@@ -27,6 +27,7 @@
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="Stripe.net" Version="44.17.0" />
   </ItemGroup>
 
   <ItemGroup>

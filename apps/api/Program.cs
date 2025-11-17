@@ -14,6 +14,7 @@ using CertiWatch.Api.Infrastructure.Jobs;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
+using CertiWatch.Api.Features.Billing;
 using CertiWatch.Parsing;
 using CertiWatch.Parsing.Text;
 using FluentValidation;
@@ -21,6 +22,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
 using CertiWatch.Contracts.Requests;
+using Stripe;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,9 +57,16 @@ builder.Services.AddHostedService<WeeklyDigestJob>();
 builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("MagicLinks"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ReminderOptions>(builder.Configuration.GetSection("Reminders"));
+builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
+var stripeConfig = builder.Configuration.GetSection("Stripe").Get<StripeOptions>();
+if (!string.IsNullOrWhiteSpace(stripeConfig?.SecretKey))
+{
+    StripeConfiguration.ApiKey = stripeConfig.SecretKey;
+}
 
 builder.Services.AddScoped<IValidator<CreateCourseRuleRequest>, CreateCourseRuleValidator>();
 builder.Services.AddScoped<IValidator<UpdateCourseRuleRequest>, UpdateCourseRuleValidator>();
+builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 
 builder.Services.AddMediatR(typeof(Program));
 
@@ -83,6 +93,25 @@ app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 app.UseCors();
 app.UseAuthentication();
+if (app.Environment.IsDevelopment())
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.User?.Identity?.IsAuthenticated != true)
+        {
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                new Claim(ClaimTypes.Email, "dev@certiwatch.local"),
+                new Claim(ClaimTypes.Role, "admin"),
+                new Claim("tenant_id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+            };
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Dev"));
+        }
+
+        await next();
+    });
+}
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
 
@@ -95,6 +124,7 @@ app.MapCourseRuleEndpoints();
 app.MapReportEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
+app.MapBillingEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
