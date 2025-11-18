@@ -69,7 +69,7 @@ Your app includes:
 Use this single prompt.
 
 ROLE
-You are a senior full stack engineer with 5+ years experience. Ship a production SaaS called Silent Auditor. Deliver code, infra, tests, CI, and deployment scripts. Target SMBs. No staff accounts. Admin only.
+You are a senior full stack engineer with 5+ years experience. Ship a production SaaS called CertiWatch. Deliver code, infra, tests, CI, and deployment scripts. Target SMBs. No staff accounts. Admin only.
 
 MISSION
 Build a certificate compliance scanner that reads PDFs and images from local folders and optional cloud drives. Extract staff name, course, issue date, expiry date. Infer expiry when missing using a rule engine. Support global defaults and tenant overrides. Send weekly digests and expiry reminders. Provide one click approvals from email. Ship a thin admin UI.
@@ -376,3 +376,42 @@ First Aid equals 12 months for this tenant. Show company override in UI and emai
 Printed expiry on a certificate always wins over rules.
 Unknown courses follow tenant default until confirmed in email.
 One time courses never send reminders and show as permanent records.
+
+
+
+-----------------------------=========
+
+$env:Stripe__WebhookSecret="your_whsec_here"
+$env:Stripe__SecretKey="your_sk_here"
+dotnet watch --project apps/api/CertiWatch.Api.csproj
+
+=============================
+Here’s a practical milestone plan to take Silent Auditor from the current core into a production-grade SaaS:
+
+Milestone 1 – Stripe Signup & Tenant Provisioning
+Implement Stripe Checkout for self-serve signup (trial + paid plans).
+Add /billing webhooks to create tenants, assign plan, and seed an admin user on successful payment.
+Add a lightweight signup UI (Next.js) that directs users to Stripe and confirms provisioning.
+Document the workflow (README + docs/onboarding.md).
+Milestone 2 – Auth & Admin Dashboard
+Implement hosted magic-link login (API endpoints + email template + UI login page).
+Gate the Next.js dashboard behind session middleware.
+Add admin invite flow (create users, send magic link, enforce roles).
+Flesh out the dashboard navigation with real data (records, rules, devices, sources).
+Milestone 3 – Staff Upload Portal
+Add APIs + storage path for staff uploads (one-time upload links, metadata).
+Build a “submit certificate” portal reachable via signed link; uploads flow directly into the tenant’s queue.
+Surface upload history/status to admins.
+Milestone 4 – Device & Source Management UX
+Full CRUD for sources (local folders vs. cloud connectors) and device health page (status, heartbeat, enrollment codes).
+Display agent statuses and queued documents, with actions to pause/revoke tokens.
+Milestone 5 – Notifications & Reports
+Finish reminder scheduling + weekly digest previews in UI.
+One-click magic links for approve/fix/ignore.
+CSV/PDF export pages with real data and filters.
+Milestone 6 – Packaging & Deployment
+Harden local agent installers (MSI/EXE + systemd service scripts).
+Wire Stripe plan limits into feature toggles (record limits, retention).
+Finalize Terraform for staging/prod, GitHub Actions pipelines, logging/monitoring docs.
+Comprehensive documentation (README becomes full technical doc; new /docs setup/install/operator guides).
+If this ordering works, I’ll start with Milestone 1 (Stripe signup/billing + tenant provisioning). Let me know if you want a different order or more detail before coding.

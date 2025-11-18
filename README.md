@@ -1,4 +1,4 @@
-﻿# CertiWatch – Silent Auditor
+# CertiWatch
 
 CertiWatch is a SaaS certificate-compliance platform for SMBs. It ingests PDFs/scans via local agents or cloud connectors, extracts staff/course metadata, infers expiries with tenant rules, and keeps admins ahead with reminders/digests.
 
@@ -53,3 +53,28 @@ Milestone 1 introduces a real billing flow so customers can self-serve:
 - `docs/troubleshooting.md` – common issues
 
 This README serves as the technical high-level. Feature deep dives, operator guides, and future milestones live under `/docs`.
+
+## Docker quickstart
+
+Use Docker to run the stack locally (API on 5002, frontend on 3000, Postgres/Redis, worker inside the network):
+
+```bash
+cp .env.docker.example .env    # fill Stripe, email SMTP, worker device IDs if you have them
+docker compose up --build
+```
+
+If you don’t have device credentials yet, start the API container, then from host run:
+
+```bash
+curl -X POST http://localhost:5002/api/devices/enroll \
+  -H "Content-Type: application/json" \
+  -d '{ "deviceName": "local-worker", "operatingSystem": "docker", "enrollmentCode": "local-dev" }'
+```
+
+Copy the returned `deviceId`/`deviceToken` into `.env` (`WORKER__...`) and re-run `docker compose up` to bring the worker online.
+
+Billing in Docker:
+- Frontend: http://localhost:3300, API: http://localhost:5002.
+- Set Stripe envs in `.env` (`Stripe__SecretKey`, `Stripe__WebhookSecret`, plan price IDs) and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+- Run Stripe CLI locally: `stripe listen --forward-to http://localhost:5002/api/billing/webhook` and use the printed `whsec`.
+- You can trigger a session for testing with `stripe trigger checkout.session.completed`.
