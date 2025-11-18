@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6; background: #f8fafc; padding: 24px;">
+    <div style="max-width: 640px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
+      <h2 style="margin-top: 0; color: #0f172a;">Welcome to CertiWatch</h2>
+      <p style="margin: 0 0 12px;">Hi {{admin_name}},</p>
+      <p style="margin: 0 0 12px;">Your workspace <strong>{{company_name}}</strong> is live on the <strong>{{plan_name}}</strong> plan.</p>
+      <p style="margin: 0 0 12px; color: #334155;">You’re on a 7-day trial. Billing starts after the trial ends unless you cancel before then.</p>
+      <div style="background: #f1f5f9; border-radius: 8px; padding: 12px; margin: 12px 0;">
+        <p style="margin: 0; font-size: 14px; color: #334155;">
+          <strong>Admin email:</strong> {{admin_email}}<br />
+          <strong>Plan:</strong> {{plan_name}}<br />
+          <strong>Trial:</strong> 7 days
+        </p>
+      </div>
+      <p style="margin: 0 0 16px;">
+        <a href="{{magic_link}}" style="display: inline-block; padding: 12px 18px; background: #2563eb; color: #ffffff; text-decoration: none; border-radius: 8px;">
+          Sign in now
+        </a>
+      </p>
+      <p style="margin: 0 0 8px;"><strong>Next steps:</strong></p>
+      <ol style="margin: 0 0 16px 20px; padding: 0; color: #334155;">
+        <li>Login to the admin app and invite other admins.</li>
+        <li>Enroll a device (agent/worker) and point it at your certificate folders.</li>
+        <li>Review parsed records, confirm issuers/dates, and adjust rules if needed.</li>
+      </ol>
+      <p style="margin: 0 0 8px;">If you didn’t request this, ignore this email.</p>
+      <p style="margin: 0;">— The CertiWatch team</p>
+    </div>
+  </body>
+</html>
