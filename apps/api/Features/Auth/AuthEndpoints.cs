@@ -1,8 +1,13 @@
+using CertiWatch.Api.Configuration;
+using CertiWatch.Api.Domain.Entities;
+using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Services;
+using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CertiWatch.Api.Features.Auth;
 
@@ -11,62 +16,96 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/auth");
-        group.MapPost("/login", LoginAsync);
-        group.MapPost("/magic", AcceptMagicLinkAsync);
-        group.MapGet("/callback", CallbackAsync);
-        return group;
+        group.MapPost("/magic-link", SendMagicLinkAsync).AllowAnonymous();
+        group.MapGet("/magic-link/verify", VerifyMagicLinkAsync).AllowAnonymous();
+        group.MapPost("/invite", InviteAdminAsync);
+        return routes;
     }
 
-    private static async Task<IResult> LoginAsync(
-        AuthLoginRequest request,
+    private static async Task<IResult> SendMagicLinkAsync(
+        MagicLinkRequest request,
+        IOptions<MagicLinkOptions> magicOptions,
+        IEmailTemplateRenderer renderer,
+        IEmailService emailService,
         AppDbContext db,
-        IMagicLinkService magicLinks,
-        IDateTimeProvider clock,
+        ITenantContextAccessor tenantAccessor,
         CancellationToken token)
     {
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Name == request.Tenant, token);
-        if (tenant is null)
+        var tenantId = tenantAccessor.Current.TenantId;
+        var existing = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
+        if (existing is null)
         {
-            tenant = new Domain.Entities.Tenant
-            {
-                Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                Name = request.Tenant,
-                Plan = "trial",
-                CreatedAtUtc = clock.UtcNow
-            };
-            db.Tenants.Add(tenant);
-            await db.SaveChangesAsync(token);
-        }
-
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenant.Id, token);
-        if (user is null)
-        {
-            user = new Domain.Entities.User
+            var user = new User
             {
                 Id = Guid.NewGuid(),
-                TenantId = tenant.Id,
+                TenantId = tenantId,
                 Email = request.Email,
-                Role = "admin",
-                CreatedAt = clock.UtcNow
+                Name = request.Email,
+                Role = "admin"
             };
             db.Users.Add(user);
             await db.SaveChangesAsync(token);
         }
 
-        var link = magicLinks.CreateLink(tenant.Id, Guid.Empty, "login");
-        return Results.Ok(new { message = "Magic link sent", link });
+        var options = magicOptions.Value;
+        var tokenString = MagicLinkTokenService.CreateToken(request.Email, tenantId, options.Secret, TimeSpan.FromMinutes(options.ExpiryMinutes));
+        var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
+        var html = renderer.RenderMagicLink(request.Email, link);
+        await emailService.SendAsync(request.Email, "Your CertiWatch login link", html, token);
+
+        return Results.Ok(new { success = true });
     }
 
-    private static IResult AcceptMagicLinkAsync(MagicLinkRequest request, IMagicLinkService magicLinks)
+    private static IResult VerifyMagicLinkAsync(
+        string token,
+        IOptions<MagicLinkOptions> magicOptions)
     {
-        var response = magicLinks.Validate(request);
-        return response.Accepted ? Results.Ok(response) : Results.BadRequest(response);
+        var options = magicOptions.Value;
+        var payload = MagicLinkTokenService.ValidateToken(token, options.Secret);
+        if (payload is null)
+        {
+            return Results.BadRequest(new { error = "invalid_or_expired" });
+        }
+
+        return Results.Ok(new MagicLinkVerifyResponse(payload.Value.Email, payload.Value.TenantId));
     }
 
-    private static IResult CallbackAsync(string token, string payload, string? action, IMagicLinkService magicLinks)
+    private static async Task<IResult> InviteAdminAsync(
+        InviteUserRequest request,
+        IOptions<MagicLinkOptions> magicOptions,
+        IEmailTemplateRenderer renderer,
+        IEmailService emailService,
+        AppDbContext db,
+        ITenantContextAccessor tenantAccessor,
+        CancellationToken token)
     {
-        var request = new MagicLinkRequest { Token = token, Payload = payload, Action = action };
-        var result = magicLinks.Validate(request);
-        return result.Accepted ? Results.Ok(result) : Results.BadRequest(result);
+        var tenantId = tenantAccessor.Current.TenantId;
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
+        if (user is null)
+        {
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Email = request.Email,
+                Name = request.Email,
+                Role = string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role
+            };
+            db.Users.Add(user);
+            await db.SaveChangesAsync(token);
+        }
+
+        var options = magicOptions.Value;
+        var tokenString = MagicLinkTokenService.CreateToken(request.Email, tenantId, options.Secret, TimeSpan.FromMinutes(options.ExpiryMinutes));
+        var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
+        var html = renderer.RenderMagicLink(request.Email, link);
+        await emailService.SendAsync(request.Email, $"You've been invited to CertiWatch ({tenantId})", html, token);
+
+        return Results.Ok(new { success = true });
     }
 }
+
+public sealed record MagicLinkRequest(string Email);
+
+public sealed record InviteUserRequest(string Email, string Role);

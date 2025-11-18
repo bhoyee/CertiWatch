@@ -16,5 +16,6 @@ public sealed class StripeOptions
     public string SuccessUrl { get; init; } = "https://app.certiwatch.com/signup/success";
     public string CancelUrl { get; init; } = "https://app.certiwatch.com/signup";
     public int TrialDays { get; init; } = 14;
+    public MagicLinkOptions MagicLinks { get; init; } = new();
     public IReadOnlyList<StripePlanOption> Plans { get; init; } = Array.Empty<StripePlanOption>();
 }

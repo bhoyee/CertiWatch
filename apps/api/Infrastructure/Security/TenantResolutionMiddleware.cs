@@ -1,15 +1,32 @@
 using System.Security.Claims;
 using CertiWatch.Contracts.Tenancy;
+using CertiWatch.Api.Configuration;
+using CertiWatch.Api.Features.Auth;
+using Microsoft.Extensions.Options;
 
 namespace CertiWatch.Api.Infrastructure.Security;
 
-public sealed class TenantResolutionMiddleware(RequestDelegate next)
+public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<MagicLinkOptions> magicOptions)
 {
     public async Task InvokeAsync(HttpContext context, ITenantContextAccessor accessor)
     {
-        var tenantId = ResolveTenantId(context);
+        var magic = context.Request.Cookies["cw_session"];
+        Guid? magicTenant = null;
+        string? magicEmail = null;
+
+        if (!string.IsNullOrWhiteSpace(magic))
+        {
+            var payload = MagicLinkTokenService.ValidateToken(magic, magicOptions.Value.Secret);
+            if (payload is not null)
+            {
+                magicTenant = payload.Value.TenantId;
+                magicEmail = payload.Value.Email;
+            }
+        }
+
+        var tenantId = magicTenant ?? ResolveTenantId(context);
         var userId = ResolveUserId(context);
-        var email = context.User?.Identity?.Name ?? context.Request.Headers["X-Admin-Email"].FirstOrDefault() ?? "admin@certiwatch.local";
+        var email = magicEmail ?? context.User?.Identity?.Name ?? context.Request.Headers["X-Admin-Email"].FirstOrDefault() ?? "admin@certiwatch.local";
         var role = context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value ?? "admin";
 
         accessor.Set(new TenantContext

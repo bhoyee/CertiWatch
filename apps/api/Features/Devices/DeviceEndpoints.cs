@@ -39,6 +39,31 @@ public static class DeviceEndpoints
     private static async Task<IResult> EnrollAsync(EnrollDeviceRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
         var tenantId = tenantAccessor.Current.TenantId;
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, token);
+        if (tenant is null)
+        {
+            tenant = new Tenant
+            {
+                Id = tenantId,
+                Name = request.DeviceName ?? "Local Tenant",
+                Plan = "starter",
+                CreatedAtUtc = clock.UtcNow
+            };
+
+            var adminEmail = tenantAccessor.Current.Email ?? "admin@certiwatch.local";
+            tenant.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Email = adminEmail,
+                Name = adminEmail,
+                Role = "admin"
+            });
+
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync(token);
+        }
+
         var device = new Device
         {
             Id = Guid.NewGuid(),

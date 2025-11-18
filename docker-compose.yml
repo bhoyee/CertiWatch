@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: certiwatch
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__postgres: Host=postgres;Username=postgres;Password=postgres;Database=certiwatch
+      Stripe__SecretKey: ${Stripe__SecretKey:-sk_test_xxx}
+      Stripe__WebhookSecret: ${Stripe__WebhookSecret:-whsec_xxx}
+      Stripe__SuccessUrl: http://localhost:3300/signup/success
+      Stripe__CancelUrl: http://localhost:3300/signup
+      Stripe__TrialDays: 7
+      Stripe__Plans__0__PlanId: starter
+      Stripe__Plans__0__PriceId: ${Stripe__Plans__0__PriceId:-price_starter}
+      Stripe__Plans__0__DisplayName: Starter
+      Stripe__Plans__0__RecordLimit: 50
+      Stripe__Plans__1__PlanId: growth
+      Stripe__Plans__1__PriceId: ${Stripe__Plans__1__PriceId:-price_growth}
+      Stripe__Plans__1__DisplayName: Growth
+      Stripe__Plans__1__RecordLimit: 500
+      Stripe__Plans__2__PlanId: pro
+      Stripe__Plans__2__PriceId: ${Stripe__Plans__2__PriceId:-price_pro}
+      Stripe__Plans__2__DisplayName: Pro
+      Stripe__Plans__2__RecordLimit: 0
+      Email__FromAddress: ${Email__FromAddress:-hello@salisu.dev}
+      Email__FromName: ${Email__FromName:-IncidentPulse}
+      Email__SmtpHost: ${Email__SmtpHost:-smtp.resend.com}
+      Email__SmtpPort: ${Email__SmtpPort:-587}
+      Email__SmtpUsername: ${Email__SmtpUsername:-resend}
+      Email__SmtpPassword: ${Email__SmtpPassword:-re_XXXX}
+      Email__SmtpEncryption: ${Email__SmtpEncryption:-starttls}
+    ports:
+      - "5002:8080"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    depends_on:
+      - api
+    environment:
+      WORKER__ApiBaseUrl: http://api:8080
+      WORKER__DeviceId: 479bf42a-3c3a-411f-9dd8-9d598145c26a
+      WORKER__DeviceToken: 5+4wnaTOkHidVCQTQwoOswO6LRjFf/MW+9vgosfrDpM=
+      WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      DOTNET_ENVIRONMENT: Development
+    volumes:
+      - ./samples/documents:/samples/documents:ro
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://host.docker.internal:5002
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://host.docker.internal:5002
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
+    ports:
+      - "3300:3000"
+
+volumes:
+  postgres_data:

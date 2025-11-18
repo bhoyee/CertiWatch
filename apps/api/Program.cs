@@ -20,6 +20,7 @@ using CertiWatch.Parsing.Text;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using CertiWatch.Contracts.Requests;
 using Stripe;
@@ -84,6 +85,11 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+});
+
+builder.Services.Configure<JsonOptions>(o =>
+{
+    o.JsonSerializerOptions.PropertyNamingPolicy = null;
 });
 
 var app = builder.Build();
