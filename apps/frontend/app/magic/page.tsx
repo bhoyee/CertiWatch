@@ -38,7 +38,15 @@ function MagicVerifier() {
         if (!res.ok) {
           throw new Error("Invalid or expired link");
         }
-        Cookies.set("cw_session", token, { expires: 7, sameSite: "lax" });
+        const body = await res.json();
+        const expiresAt = new Date(body.expiresAt);
+        const now = Date.now();
+        const msUntilExpiry = Math.max(0, expiresAt.getTime() - now);
+        const days = Math.max(1, msUntilExpiry / (1000 * 60 * 60 * 24));
+        Cookies.set("cw_session", body.token, { expires: days, sameSite: "lax" });
+        if (body.deviceId) {
+          Cookies.set("cw_device", body.deviceId, { expires: 365, sameSite: "lax" });
+        }
         router.replace("/records");
       } catch {
         router.replace("/login");

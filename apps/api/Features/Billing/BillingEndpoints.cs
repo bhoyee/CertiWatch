@@ -124,7 +124,13 @@ public static class BillingEndpoints
                 var tenant = await provisioningService.ProvisionTenantAsync(companyName, planId, adminEmail, adminName, cancellationToken);
 
                 var planDisplay = options.Plans.FirstOrDefault(p => p.PlanId == planId)?.DisplayName ?? planId;
-                var magicLink = MagicLinkTokenService.CreateToken(adminEmail, tenant.Id, options.MagicLinks.Secret, TimeSpan.FromMinutes(options.MagicLinks.ExpiryMinutes));
+                var magicLink = MagicLinkTokenService.CreateToken(
+                    adminEmail,
+                    tenant.Id,
+                    options.MagicLinks.Secret,
+                    TimeSpan.FromMinutes(options.MagicLinks.ExpiryMinutes),
+                    purpose: "magic",
+                    rememberDevice: true);
                 var link = $"{options.MagicLinks.BaseUrl.TrimEnd('/')}/magic?token={magicLink}";
                 var html = renderer.RenderWelcome(companyName, planDisplay, adminName, adminEmail, link);
                 await emailService.SendAsync(adminEmail, $"Welcome to CertiWatch ({planDisplay})", html, cancellationToken);

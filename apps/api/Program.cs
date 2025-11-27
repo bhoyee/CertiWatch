@@ -89,7 +89,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.Configure<JsonOptions>(o =>
 {
-    o.JsonSerializerOptions.PropertyNamingPolicy = null;
+    o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
 
 var app = builder.Build();

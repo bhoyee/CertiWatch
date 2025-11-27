@@ -49,10 +49,22 @@ public static class AuthEndpoints
         }
 
         var options = magicOptions.Value;
-        var tokenString = MagicLinkTokenService.CreateToken(request.Email, tenantId, options.Secret, TimeSpan.FromMinutes(options.ExpiryMinutes));
+        var tokenString = MagicLinkTokenService.CreateToken(
+            request.Email,
+            tenantId,
+            options.Secret,
+            TimeSpan.FromMinutes(options.ExpiryMinutes),
+            purpose: "magic",
+            rememberDevice: request.RememberDevice,
+            deviceId: request.DeviceId);
         var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
         var html = renderer.RenderMagicLink(request.Email, link);
         await emailService.SendAsync(request.Email, "Your CertiWatch login link", html, token);
+
+        if (!string.IsNullOrWhiteSpace(request.FallbackEmail) && !string.Equals(request.FallbackEmail, request.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            await emailService.SendAsync(request.FallbackEmail!, "Your CertiWatch login link (fallback)", html, token);
+        }
 
         return Results.Ok(new { success = true });
     }
@@ -63,12 +75,26 @@ public static class AuthEndpoints
     {
         var options = magicOptions.Value;
         var payload = MagicLinkTokenService.ValidateToken(token, options.Secret);
-        if (payload is null)
+        if (payload is null || payload.Value.Purpose != "magic")
         {
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
 
-        return Results.Ok(new MagicLinkVerifyResponse(payload.Value.Email, payload.Value.TenantId));
+        var sessionLifetime = payload.Value.RememberDevice
+            ? TimeSpan.FromDays(options.LongSessionDays)
+            : TimeSpan.FromHours(options.ShortSessionHours);
+
+        var sessionToken = MagicLinkTokenService.CreateToken(
+            payload.Value.Email,
+            payload.Value.TenantId,
+            options.Secret,
+            sessionLifetime,
+            purpose: "session",
+            rememberDevice: payload.Value.RememberDevice,
+            deviceId: payload.Value.DeviceId);
+
+        var expiresAt = DateTimeOffset.UtcNow.Add(sessionLifetime);
+        return Results.Ok(new MagicLinkVerifyResponse(payload.Value.Email, payload.Value.TenantId, sessionToken, expiresAt, payload.Value.DeviceId));
     }
 
     private static async Task<IResult> InviteAdminAsync(
@@ -97,7 +123,14 @@ public static class AuthEndpoints
         }
 
         var options = magicOptions.Value;
-        var tokenString = MagicLinkTokenService.CreateToken(request.Email, tenantId, options.Secret, TimeSpan.FromMinutes(options.ExpiryMinutes));
+        var tokenString = MagicLinkTokenService.CreateToken(
+            request.Email,
+            tenantId,
+            options.Secret,
+            TimeSpan.FromMinutes(options.ExpiryMinutes),
+            purpose: "magic",
+            rememberDevice: true,
+            deviceId: null);
         var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
         var html = renderer.RenderMagicLink(request.Email, link);
         await emailService.SendAsync(request.Email, $"You've been invited to CertiWatch ({tenantId})", html, token);
@@ -106,6 +139,6 @@ public static class AuthEndpoints
     }
 }
 
-public sealed record MagicLinkRequest(string Email);
+public sealed record MagicLinkRequest(string Email, string? FallbackEmail, bool RememberDevice, string? DeviceId);
 
 public sealed record InviteUserRequest(string Email, string Role);

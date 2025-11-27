@@ -10,17 +10,26 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
 {
     public async Task InvokeAsync(HttpContext context, ITenantContextAccessor accessor)
     {
-        var magic = context.Request.Cookies["cw_session"];
+        var sessionToken = context.Request.Cookies["cw_session"];
         Guid? magicTenant = null;
         string? magicEmail = null;
 
-        if (!string.IsNullOrWhiteSpace(magic))
+        if (!string.IsNullOrWhiteSpace(sessionToken))
         {
-            var payload = MagicLinkTokenService.ValidateToken(magic, magicOptions.Value.Secret);
-            if (payload is not null)
+            var payload = MagicLinkTokenService.ValidateToken(sessionToken, magicOptions.Value.Secret);
+            if (payload is not null && payload.Value.Purpose == "session")
             {
-                magicTenant = payload.Value.TenantId;
-                magicEmail = payload.Value.Email;
+                var deviceCookie = context.Request.Cookies["cw_device"];
+                if (string.IsNullOrWhiteSpace(payload.Value.DeviceId))
+                {
+                    magicTenant = payload.Value.TenantId;
+                    magicEmail = payload.Value.Email;
+                }
+                else if (payload.Value.DeviceId == deviceCookie)
+                {
+                    magicTenant = payload.Value.TenantId;
+                    magicEmail = payload.Value.Email;
+                }
             }
         }
 

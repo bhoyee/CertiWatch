@@ -6,18 +6,18 @@ namespace CertiWatch.Api.Features.Auth;
 
 internal static class MagicLinkTokenService
 {
-    private sealed record Payload(string Email, Guid TenantId, long Exp);
+    private sealed record Payload(string Email, Guid TenantId, long Exp, string Purpose, bool RememberDevice, string? DeviceId);
 
-    public static string CreateToken(string email, Guid tenantId, string secret, TimeSpan lifetime)
+    public static string CreateToken(string email, Guid tenantId, string secret, TimeSpan lifetime, string purpose = "magic", bool rememberDevice = false, string? deviceId = null)
     {
-        var payload = new Payload(email, tenantId, DateTimeOffset.UtcNow.Add(lifetime).ToUnixTimeSeconds());
+        var payload = new Payload(email, tenantId, DateTimeOffset.UtcNow.Add(lifetime).ToUnixTimeSeconds(), purpose, rememberDevice, deviceId);
         var json = JsonSerializer.Serialize(payload);
         var data = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
         var sig = Sign(data, secret);
         return $"{data}.{sig}";
     }
 
-    public static (string Email, Guid TenantId)? ValidateToken(string token, string secret)
+    public static (string Email, Guid TenantId, string Purpose, bool RememberDevice, string? DeviceId)? ValidateToken(string token, string secret)
     {
         var parts = token.Split('.');
         if (parts.Length != 2) return null;
@@ -28,7 +28,7 @@ internal static class MagicLinkTokenService
         var payload = JsonSerializer.Deserialize<Payload>(json);
         if (payload is null) return null;
         if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() > payload.Exp) return null;
-        return (payload.Email, payload.TenantId);
+        return (payload.Email, payload.TenantId, payload.Purpose, payload.RememberDevice, payload.DeviceId);
     }
 
     private static string Sign(string data, string secret)

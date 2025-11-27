@@ -12,4 +12,5 @@ Auth & dashboard (Milestone 2):
 - Frontend pages: `/login` (request magic link), `/magic` (verify token, set `cw_session` cookie), dashboard routes gated by middleware expecting `cw_session`.
 - Admin invite UI: `/admin/invite` sends invites via `POST /api/auth/invite`.
 - Logout route: `/logout` clears the session cookie.
+- “Stay signed in” issues a long-lived session (30 days) and binds to a device cookie (`cw_device`). Optional fallback email can receive the same link.
 

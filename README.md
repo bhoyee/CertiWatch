@@ -78,3 +78,7 @@ Billing in Docker:
 - Set Stripe envs in `.env` (`Stripe__SecretKey`, `Stripe__WebhookSecret`, plan price IDs) and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
 - Run Stripe CLI locally: `stripe listen --forward-to http://localhost:5002/api/billing/webhook` and use the printed `whsec`.
 - You can trigger a session for testing with `stripe trigger checkout.session.completed`.
+
+Auth defaults:
+- Magic links are short-lived; the session cookie is long-lived (30 days) when “stay signed in” is checked.
+- Links can be sent to a fallback org email; the session is bound to a device identifier cookie (`cw_device`).
