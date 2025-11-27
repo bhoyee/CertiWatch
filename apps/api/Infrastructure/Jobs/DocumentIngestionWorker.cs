@@ -4,6 +4,7 @@ using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Services;
 using CertiWatch.Parsing;
 using CertiWatch.Parsing.Rules;
+using CertiWatch.Contracts.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace CertiWatch.Api.Infrastructure.Jobs;
@@ -37,11 +38,27 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var inference = scope.ServiceProvider.GetRequiredService<IRuleInferenceService>();
 
+                var sourceId = docEvent.SourceId == Guid.Empty ? Guid.NewGuid() : docEvent.SourceId;
+                var source = await db.Sources.FirstOrDefaultAsync(s => s.Id == sourceId, stoppingToken);
+                if (source is null)
+                {
+                    source = new Source
+                    {
+                        Id = sourceId,
+                        TenantId = docEvent.TenantId,
+                        DisplayName = "Worker Source",
+                        Type = SourceType.Local,
+                        ConfigJson = "{}",
+                        CreatedAt = docEvent.DetectedAt
+                    };
+                    db.Sources.Add(source);
+                }
+
                 var document = new Document
                 {
                     Id = Guid.NewGuid(),
                     TenantId = docEvent.TenantId,
-                    SourceId = docEvent.SourceId,
+                    SourceId = sourceId,
                     FileName = docEvent.FileName,
                     FileHash = docEvent.FileHash,
                     PathOrUrl = docEvent.PathOrUrl,
