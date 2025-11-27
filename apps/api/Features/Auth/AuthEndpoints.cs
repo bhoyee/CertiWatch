@@ -36,7 +36,8 @@ public static class AuthEndpoints
             .FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
         if (existing is null)
         {
-            return Results.BadRequest(new { friendlyError = "We couldn't find that email. Please sign up to start your trial." });
+            const string message = "We couldn't find that email. Please sign up to start your trial.";
+            return Results.Text(message, "text/plain", statusCode: StatusCodes.Status400BadRequest);
         }
 
         var options = magicOptions.Value;
