@@ -40,7 +40,12 @@ export default function LoginPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || "Failed to send magic link");
+        try {
+          const parsed = JSON.parse(text);
+          throw new Error(parsed.friendlyError || parsed.error || "Failed to send magic link");
+        } catch {
+          throw new Error(text || "Failed to send magic link");
+        }
       }
       setStatus("sent");
     } catch (err: any) {

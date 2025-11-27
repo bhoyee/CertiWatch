@@ -36,16 +36,7 @@ public static class AuthEndpoints
             .FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
         if (existing is null)
         {
-            var user = new User
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                Email = request.Email,
-                Name = request.Email,
-                Role = "admin"
-            };
-            db.Users.Add(user);
-            await db.SaveChangesAsync(token);
+            return Results.BadRequest(new { friendlyError = "We couldn't find that email. Please sign up to start your trial." });
         }
 
         var options = magicOptions.Value;
