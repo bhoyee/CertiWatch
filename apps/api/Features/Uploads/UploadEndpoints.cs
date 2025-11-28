@@ -73,7 +73,7 @@ public static class UploadEndpoints
         {
             var html = $"""
                 <p>Hello{(string.IsNullOrWhiteSpace(request.StaffName) ? "" : $" {request.StaffName}")},</p>
-                <p>You have been invited to upload your certificate{(string.IsNullOrWhiteSpace(request.CourseName) ? "" : $" for <strong>{request.CourseName}</strong>")}.</p>
+                <p>You have been invited to upload your certificate.</p>
                 <p>This link expires at {expiresAt:u}:</p>
                 <p><a href="{link}">{link}</a></p>
                 <p>If you did not expect this, please ignore this email.</p>
@@ -110,7 +110,7 @@ public static class UploadEndpoints
     private static async Task<IResult> ValidateAsync([FromRoute(Name = "token")] string tokenValue, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
     {
         var req = await db.UploadRequests.AsNoTracking().FirstOrDefaultAsync(u => u.Token == tokenValue, token);
-        if (req is null || req.ExpiresAt < clock.UtcNow || req.Status == UploadStatus.Completed)
+        if (req is null || req.ExpiresAt < clock.UtcNow)
         {
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
@@ -135,7 +135,7 @@ public static class UploadEndpoints
         CancellationToken token)
     {
         var req = await db.UploadRequests.FirstOrDefaultAsync(u => u.Token == tokenValue, token);
-        if (req is null || req.ExpiresAt < clock.UtcNow || req.Status == UploadStatus.Completed)
+        if (req is null || req.ExpiresAt < clock.UtcNow)
         {
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
@@ -155,7 +155,6 @@ public static class UploadEndpoints
         var size = new FileInfo(destPath).Length;
         var fields = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(req.StaffName)) fields["staff_name"] = req.StaffName!;
-        if (!string.IsNullOrWhiteSpace(req.CourseName)) fields["course_name"] = req.CourseName!;
         if (req.ExpiryHint.HasValue) fields["expiry_date"] = req.ExpiryHint.Value.ToString("yyyy-MM-dd");
 
         await queue.EnqueueAsync(new DocumentDetectedEvent(
@@ -172,7 +171,7 @@ public static class UploadEndpoints
             Contracts.Enums.ProcessingStatus.Pending,
             clock.UtcNow), token);
 
-        req.Status = UploadStatus.Completed;
+        req.Status = UploadStatus.Pending;
         req.FilePath = destPath;
         req.OriginalFileName = fileName;
         req.UsedAt = clock.UtcNow;

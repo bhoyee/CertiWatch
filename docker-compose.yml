@@ -71,6 +71,7 @@ services:
       WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
       DOTNET_ENVIRONMENT: Development
     volumes:
+      - ./uploads:/app/uploads:ro
       - ./samples/documents:/samples/documents:ro
 
   frontend:
@@ -87,6 +88,8 @@ services:
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
     ports:
       - "3300:3000"
+    volumes:
+      - ./uploads:/app/uploads
 
 volumes:
   postgres_data:

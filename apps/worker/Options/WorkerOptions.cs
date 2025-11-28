@@ -11,8 +11,11 @@ public sealed class WorkerOptions
     public string DeviceToken { get; set; } = "dev-token";
     public string AzureVisionEndpoint { get; set; } = string.Empty;
     public string AzureVisionKey { get; set; } = string.Empty;
-    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { DefaultSamplesPath };
+    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { DefaultSamplesPath, UploadsPath };
 
     private static string DefaultSamplesPath =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "documents"));
+
+    private static string UploadsPath =>
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "uploads"));
 }
