@@ -7,7 +7,7 @@ type Device = {
   id: string;
   name: string;
   operatingSystem: string | null;
-  status: string;
+  status: string | number;
   lastSeenAt: string | null;
 };
 
@@ -45,7 +45,7 @@ export default function DevicesPage() {
               <tr key={d.id} className="hover:bg-slate-50">
                 <Cell>{d.name}</Cell>
                 <Cell>{d.operatingSystem ?? "—"}</Cell>
-                <Cell className="capitalize">{d.status.toLowerCase()}</Cell>
+                <Cell className="capitalize">{String(d.status ?? "").toLowerCase() || "unknown"}</Cell>
                 <Cell>{d.lastSeenAt ?? "—"}</Cell>
               </tr>
             ))}
