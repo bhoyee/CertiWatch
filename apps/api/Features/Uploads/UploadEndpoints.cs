@@ -104,7 +104,7 @@ public static class UploadEndpoints
         }));
     }
 
-    private static async Task<IResult> ValidateAsync(string tokenValue, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
+    private static async Task<IResult> ValidateAsync([FromRoute(Name = "token")] string tokenValue, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
     {
         var req = await db.UploadRequests.AsNoTracking().FirstOrDefaultAsync(u => u.Token == tokenValue, token);
         if (req is null || req.ExpiresAt < clock.UtcNow || req.Status == UploadStatus.Completed)
@@ -123,7 +123,7 @@ public static class UploadEndpoints
     }
 
     private static async Task<IResult> UploadFileAsync(
-        string tokenValue,
+        [FromRoute(Name = "token")] string tokenValue,
         [FromForm] UploadFileForm form,
         AppDbContext db,
         ITenantContextAccessor accessor,
