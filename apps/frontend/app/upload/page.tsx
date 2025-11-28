@@ -106,6 +106,7 @@ export default function UploadPage() {
               required
               type="file"
               multiple
+              name="files"
               accept=".pdf,image/*"
               onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               className="mt-1 block w-full text-sm text-slate-700"
