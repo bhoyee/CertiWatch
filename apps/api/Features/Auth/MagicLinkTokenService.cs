@@ -12,7 +12,7 @@ internal static class MagicLinkTokenService
     {
         var payload = new Payload(email, tenantId, DateTimeOffset.UtcNow.Add(lifetime).ToUnixTimeSeconds(), purpose, rememberDevice, deviceId);
         var json = JsonSerializer.Serialize(payload);
-        var data = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        var data = Base64UrlEncode(Encoding.UTF8.GetBytes(json));
         var sig = Sign(data, secret);
         return $"{data}.{sig}";
     }
@@ -24,7 +24,7 @@ internal static class MagicLinkTokenService
         var data = parts[0];
         var sig = parts[1];
         if (!ConstantTimeEquals(Sign(data, secret), sig)) return null;
-        var json = Encoding.UTF8.GetString(Convert.FromBase64String(data));
+        var json = Encoding.UTF8.GetString(Base64UrlDecode(data));
         var payload = JsonSerializer.Deserialize<Payload>(json);
         if (payload is null) return null;
         if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() > payload.Exp) return null;
@@ -35,7 +35,7 @@ internal static class MagicLinkTokenService
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return Convert.ToBase64String(hash);
+        return Base64UrlEncode(hash);
     }
 
     private static bool ConstantTimeEquals(string a, string b)
@@ -46,5 +46,22 @@ internal static class MagicLinkTokenService
         var diff = 0;
         for (var i = 0; i < ba.Length; i++) diff |= ba[i] ^ bb[i];
         return diff == 0;
+    }
+
+    private static string Base64UrlEncode(byte[] input)
+    {
+        var base64 = Convert.ToBase64String(input);
+        return base64.Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    private static byte[] Base64UrlDecode(string input)
+    {
+        var padded = input.Replace("-", "+").Replace("_", "/");
+        switch (padded.Length % 4)
+        {
+            case 2: padded += "=="; break;
+            case 3: padded += "="; break;
+        }
+        return Convert.FromBase64String(padded);
     }
 }
