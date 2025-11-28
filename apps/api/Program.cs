@@ -8,6 +8,7 @@ using CertiWatch.Api.Features.Records;
 using CertiWatch.Api.Features.Reports;
 using CertiWatch.Api.Features.Rules;
 using CertiWatch.Api.Features.Rules.Validators;
+using CertiWatch.Api.Features.Uploads;
 using CertiWatch.Api.Features.Sources;
 using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Jobs;
@@ -135,6 +136,7 @@ app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
 app.MapBillingEndpoints();
 app.MapTenantEndpoints();
+app.MapUploadEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

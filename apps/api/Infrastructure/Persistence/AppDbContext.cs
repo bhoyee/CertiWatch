@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<Reminder> Reminders => Set<Reminder>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<UploadRequest> UploadRequests => Set<UploadRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Source>(entity =>
         {
             entity.Property(s => s.ConfigJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<UploadRequest>(entity =>
+        {
+            entity.HasIndex(u => new { u.TenantId, u.Token }).IsUnique();
         });
 
         SeedGlobalRules(modelBuilder);
