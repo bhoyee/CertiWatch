@@ -21,7 +21,7 @@ export default function UploadsPage() {
   const [history, setHistory] = useState<UploadHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ staffName: "", staffEmail: "", courseName: "", expiryDate: "" });
+  const [form, setForm] = useState({ staffName: "", staffEmail: "", expiryDate: "" });
   const [lastLink, setLastLink] = useState<CreateResponse | null>(null);
 
   const loadHistory = () => {
@@ -42,7 +42,6 @@ export default function UploadsPage() {
       const body: any = {
         staffName: form.staffName || null,
         staffEmail: form.staffEmail || null,
-        courseName: form.courseName || null,
         expiryDate: form.expiryDate ? form.expiryDate : null
       };
       const res = await postJson<CreateResponse, typeof body>("/api/uploads/requests", body);
@@ -59,7 +58,7 @@ export default function UploadsPage() {
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
-        <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Course/expiry are optional.</p>
+        <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Expiry is optional.</p>
         <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700">Staff name</label>
@@ -82,16 +81,6 @@ export default function UploadsPage() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Course name</label>
-            <input
-              type="text"
-              value={form.courseName}
-              onChange={(e) => setForm({ ...form, courseName: e.target.value })}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="First Aid"
-            />
-          </div>
-          <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700">Expiry hint (optional)</label>
             <input
               type="date"
@@ -110,8 +99,7 @@ export default function UploadsPage() {
             </button>
             {lastLink && (
               <div className="text-xs text-slate-700">
-                Link: <a className="text-blue-600 underline" href={lastLink.link}>{lastLink.link}</a> (expires{" "}
-                {new Date(lastLink.expiresAt).toLocaleString()})
+                Link: <a className="text-blue-600 underline" href={lastLink.link}>{lastLink.link}</a> (expires {new Date(lastLink.expiresAt).toLocaleString()})
               </div>
             )}
           </div>
@@ -139,7 +127,6 @@ export default function UploadsPage() {
               <tr>
                 <Header>Staff</Header>
                 <Header>Email</Header>
-                <Header>Course</Header>
                 <Header>Status</Header>
                 <Header>Created</Header>
                 <Header>Used</Header>
@@ -149,12 +136,11 @@ export default function UploadsPage() {
             <tbody className="divide-y divide-slate-200">
               {history.map((h) => (
                 <tr key={h.id} className="hover:bg-slate-50">
-                  <Cell>{h.staffName ?? "â€”"}</Cell>
-                  <Cell>{h.staffEmail ?? "â€”"}</Cell>
-                  <Cell>{h.courseName ?? "â€”"}</Cell>
+                  <Cell>{h.staffName ?? "—"}</Cell>
+                  <Cell>{h.staffEmail ?? "—"}</Cell>
                   <Cell className="capitalize">{String(h.status ?? "").toLowerCase()}</Cell>
                   <Cell>{new Date(h.createdAt).toLocaleString()}</Cell>
-                  <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "â€”"}</Cell>
+                  <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "—"}</Cell>
                   <Cell>{new Date(h.expiresAt).toLocaleString()}</Cell>
                 </tr>
               ))}
