@@ -69,7 +69,7 @@ public static class DeviceEndpoints
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = request.DeviceName,
-            OperatingSystem = request.OperatingSystem,
+            OperatingSystem = request.OperatingSystem ?? "unknown",
             DeviceToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             Status = Contracts.Enums.DeviceStatus.Enrolled,
             EnrolledAt = clock.UtcNow,
