@@ -12,7 +12,7 @@ type RecordDto = {
   expiryDate: string | null;
   expiryDerived: boolean;
   confidence: number;
-  processingStatus: string;
+  processingStatus: string | number;
 };
 
 type PagedResult<T> = {
@@ -72,7 +72,7 @@ export default function RecordsPage() {
                   {r.expiryDate ?? "—"}
                   {r.expiryDerived ? " (derived)" : ""}
                 </Cell>
-                <Cell className="capitalize">{r.processingStatus.toLowerCase()}</Cell>
+                <Cell className="capitalize">{String(r.processingStatus).toLowerCase()}</Cell>
               </tr>
             ))}
           </tbody>
