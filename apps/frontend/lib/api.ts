@@ -1,7 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
 export async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const response = await fetch(`${API_BASE}${path}`, { cache: "no-store", credentials: "include" });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -18,6 +18,7 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
     headers: {
       "Content-Type": "application/json"
     },
+    credentials: "include",
     body: JSON.stringify(body)
   });
 

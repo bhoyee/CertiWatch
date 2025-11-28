@@ -1,38 +1,91 @@
-﻿export const dynamic = "force-dynamic";
+"use client";
 
-import { fetchJson } from "../../../lib/api";
+import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/api";
 
-type Source = {
+type SourceDto = {
   id: string;
-  displayName: string;
   type: string;
+  displayName: string;
+  config: Record<string, string>;
+  createdAt: string;
 };
 
-async function loadSources(): Promise<Source[]> {
-  try {
-    return await fetchJson<Source[]>("/api/sources");
-  } catch {
-    return [];
-  }
+export default function SourcesPage() {
+  const [sources, setSources] = useState<SourceDto[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchJson<SourceDto[]>("/api/sources")
+      .then(setSources)
+      .catch((err) => setError(err.message ?? "Failed to load sources"));
+  }, []);
+
+  if (error) return <ErrorCard message={error} />;
+  if (!sources) return <LoadingCard />;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4">
+        <h1 className="text-lg font-semibold text-slate-900">Sources</h1>
+        <p className="text-sm text-slate-600">Configured ingestion sources.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <Header>Name</Header>
+              <Header>Type</Header>
+              <Header>Created</Header>
+              <Header>Config</Header>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {sources.map((s) => (
+              <tr key={s.id} className="hover:bg-slate-50">
+                <Cell>{s.displayName}</Cell>
+                <Cell className="capitalize">{s.type.toLowerCase()}</Cell>
+                <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
+                <Cell>
+                  {Object.keys(s.config).length === 0 ? (
+                    <span className="text-slate-500">—</span>
+                  ) : (
+                    <div className="text-xs text-slate-700">
+                      {Object.entries(s.config).map(([k, v]) => (
+                        <div key={k}>
+                          <span className="font-medium">{k}:</span> {v}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Cell>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
-export default async function SourcesPage() {
-  const sources = await loadSources();
+function Header({ children }: { children: React.ReactNode }) {
+  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</th>;
+}
+
+function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
+}
+
+function LoadingCard() {
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm text-slate-500">Sources</p>
-        <h1 className="text-2xl font-semibold">Connected Folders</h1>
-      </div>
-      <div className="space-y-2">
-        {sources.map((source) => (
-          <div key={source.id} className="rounded-lg border bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-900">{source.displayName}</p>
-            <p className="text-xs uppercase text-slate-500">{source.type}</p>
-          </div>
-        ))}
-        {!sources.length && <p className="text-sm text-slate-500">No sources configured.</p>}
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Loading sources…</div>
+  );
+}
+
+function ErrorCard({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+      Failed to load sources: {message}
     </div>
   );
 }

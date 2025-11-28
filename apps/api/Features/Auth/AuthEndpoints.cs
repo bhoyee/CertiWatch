@@ -98,6 +98,11 @@ public static class AuthEndpoints
         ITenantContextAccessor tenantAccessor,
         CancellationToken token)
     {
+        if (!string.Equals(tenantAccessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = tenantAccessor.Current.TenantId;
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
         if (user is null)

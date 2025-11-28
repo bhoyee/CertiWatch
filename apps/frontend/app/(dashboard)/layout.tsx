@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { PlanBanner } from "./PlanBanner";
 
 const navItems = [
   { href: "/records", label: "Records" },
@@ -32,7 +33,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
         </aside>
-        <main className="flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="flex-1 px-4 py-6 md:px-8">
+          <PlanBanner />
+          {children}
+        </main>
       </div>
     </div>
   );

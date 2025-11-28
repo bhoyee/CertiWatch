@@ -2,17 +2,20 @@ using System.Security.Claims;
 using CertiWatch.Contracts.Tenancy;
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Features.Auth;
+using CertiWatch.Api.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 
 namespace CertiWatch.Api.Infrastructure.Security;
 
 public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<MagicLinkOptions> magicOptions)
 {
-    public async Task InvokeAsync(HttpContext context, ITenantContextAccessor accessor)
+    public async Task InvokeAsync(HttpContext context, ITenantContextAccessor accessor, AppDbContext db)
     {
         var sessionToken = context.Request.Cookies["cw_session"];
         Guid? magicTenant = null;
         string? magicEmail = null;
+        string? roleFromUser = null;
 
         if (!string.IsNullOrWhiteSpace(sessionToken))
         {
@@ -38,12 +41,22 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
         var email = magicEmail ?? context.User?.Identity?.Name ?? context.Request.Headers["X-Admin-Email"].FirstOrDefault() ?? "admin@certiwatch.local";
         var role = context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value ?? "admin";
 
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email && u.TenantId == tenantId);
+            if (user is not null)
+            {
+                roleFromUser = user.Role;
+                userId = user.Id;
+            }
+        }
+
         accessor.Set(new TenantContext
         {
             TenantId = tenantId,
             UserId = userId,
             Email = email,
-            Role = role
+            Role = roleFromUser ?? role
         });
 
         await next(context);

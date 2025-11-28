@@ -131,6 +131,7 @@ app.MapReportEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
 app.MapBillingEndpoints();
+app.MapTenantEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
