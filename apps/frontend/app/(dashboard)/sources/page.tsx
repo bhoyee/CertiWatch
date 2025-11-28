@@ -44,7 +44,7 @@ export default function SourcesPage() {
             {sources.map((s) => (
               <tr key={s.id} className="hover:bg-slate-50">
                 <Cell>{s.displayName}</Cell>
-                <Cell className="capitalize">{s.type.toLowerCase()}</Cell>
+                <Cell className="capitalize">{String(s.type ?? "").toLowerCase() || "—"}</Cell>
                 <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
                 <Cell>
                   {s.config && Object.keys(s.config).length > 0 ? (
