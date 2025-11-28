@@ -9,6 +9,7 @@ using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Events;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -24,6 +25,7 @@ public static class UploadEndpoints
     {
         var group = routes.MapGroup("/api/uploads");
         group.WithMetadata(new IgnoreAntiforgeryTokenAttribute());
+        group.DisableAntiforgery();
         group.MapPost("/requests", CreateRequestAsync).RequireAuthorization();
         group.MapGet("/history", HistoryAsync).RequireAuthorization();
         group.MapGet("/{token}", ValidateAsync).AllowAnonymous();
