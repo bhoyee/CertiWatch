@@ -16,7 +16,6 @@ type UploadHistoryItem = {
 type CreateResponse = { token: string; link: string; expiresAt: string };
 
 type FormState = {
-  staffName: string;
   staffEmail: string;
   expiryDate: string;
 };
@@ -25,7 +24,7 @@ export default function UploadsPage() {
   const [history, setHistory] = useState<UploadHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<FormState>({ staffName: "", staffEmail: "", expiryDate: "" });
+  const [form, setForm] = useState<FormState>({ staffEmail: "", expiryDate: "" });
   const [lastLink, setLastLink] = useState<CreateResponse | null>(null);
 
   const loadHistory = () => {
@@ -44,7 +43,6 @@ export default function UploadsPage() {
     setError(null);
     try {
       const body: Record<string, any> = {
-        staffName: form.staffName || null,
         staffEmail: form.staffEmail || null,
         expiryDate: form.expiryDate ? form.expiryDate : null
       };
@@ -64,16 +62,6 @@ export default function UploadsPage() {
         <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
         <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Expiry is optional.</p>
         <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Staff name</label>
-            <input
-              type="text"
-              value={form.staffName}
-              onChange={(e) => setForm({ ...form, staffName: e.target.value })}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="Jane Doe"
-            />
-          </div>
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700">Staff email</label>
             <input
