@@ -23,6 +23,7 @@ public static class UploadEndpoints
     public static IEndpointRouteBuilder MapUploadEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/uploads");
+        group.WithMetadata(new IgnoreAntiforgeryTokenAttribute());
         group.MapPost("/requests", CreateRequestAsync).RequireAuthorization();
         group.MapGet("/history", HistoryAsync).RequireAuthorization();
         group.MapGet("/{token}", ValidateAsync).AllowAnonymous();
