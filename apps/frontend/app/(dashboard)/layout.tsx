@@ -1,11 +1,11 @@
- "use client";
+"use client";
 
 import Link from "next/link";
 import { ReactNode, useState } from "react";
 import { PlanBanner } from "./PlanBanner";
 
 const navItems = [
-  { href: "/", label: "Analytics" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/records", label: "Records" },
   { href: "/rules", label: "Rules" },
   { href: "/devices", label: "Devices" },
@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 function Logo() {
   return (
     <div className="mb-6 px-2">
-      <Link href="/" className="text-lg font-bold text-slate-900">
+      <Link href="/analytics" className="text-lg font-bold text-slate-900">
         CertiWatch
       </Link>
     </div>

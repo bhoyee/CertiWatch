@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path + "/"));
   const session = request.cookies.get("cw_session");
   if (session && (pathname === "/login" || pathname === "/signup" || pathname === "/magic")) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/analytics", request.url));
   }
   if (isPublic) return NextResponse.next();
 

@@ -47,7 +47,7 @@ function MagicVerifier() {
         if (body.deviceId) {
           Cookies.set("cw_device", body.deviceId, { expires: 365, sameSite: "lax" });
         }
-        router.replace("/records");
+        router.replace("/analytics");
       } catch {
         router.replace("/login");
       }
