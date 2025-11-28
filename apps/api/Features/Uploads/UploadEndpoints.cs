@@ -36,6 +36,7 @@ public static class UploadEndpoints
         ITenantContextAccessor accessor,
         IOptions<MagicLinkOptions> magicOptions,
         IDateTimeProvider clock,
+        IEmailService emailService,
         CancellationToken token)
     {
         if (!string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
@@ -64,6 +65,19 @@ public static class UploadEndpoints
 
         var baseUrl = magicOptions.Value.BaseUrl.TrimEnd('/');
         var link = $"{baseUrl}/upload?token={rawToken}";
+
+        if (!string.IsNullOrWhiteSpace(request.StaffEmail))
+        {
+            var html = $"""
+                <p>Hello{(string.IsNullOrWhiteSpace(request.StaffName) ? "" : $" {request.StaffName}")},</p>
+                <p>You have been invited to upload your certificate{(string.IsNullOrWhiteSpace(request.CourseName) ? "" : $" for <strong>{request.CourseName}</strong>")}.</p>
+                <p>This link expires at {expiresAt:u}:</p>
+                <p><a href="{link}">{link}</a></p>
+                <p>If you did not expect this, please ignore this email.</p>
+            """;
+            await emailService.SendAsync(request.StaffEmail!, "Upload your certificate", html, token);
+        }
+
         return Results.Ok(new UploadLinkResponse(rawToken, link, expiresAt));
     }
 
