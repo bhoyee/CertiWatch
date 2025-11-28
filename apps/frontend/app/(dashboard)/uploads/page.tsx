@@ -59,7 +59,7 @@ export default function UploadsPage() {
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
-        <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate.</p>
+        <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Course/expiry are optional.</p>
         <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700">Staff name</label>
