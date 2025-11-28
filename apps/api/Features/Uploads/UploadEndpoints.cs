@@ -142,34 +142,43 @@ public static class UploadEndpoints
 
         var tenantId = req.TenantId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
-        var uploadDir = Path.Combine(AppContext.BaseDirectory, "uploads", tenantId.ToString(), req.Id.ToString("N"));
-        Directory.CreateDirectory(uploadDir);
-        var fileName = Path.GetFileName(form.File.FileName);
-        var destPath = Path.Combine(uploadDir, fileName);
-        await using (var stream = File.Create(destPath))
+        if (form.Files is null || form.Files.Count == 0)
         {
-            await form.File.CopyToAsync(stream, token);
+            return Results.BadRequest(new { error = "no_files" });
         }
 
-        var fileHash = ComputeHash(destPath);
-        var size = new FileInfo(destPath).Length;
+        var uploadDir = Path.Combine(AppContext.BaseDirectory, "uploads", tenantId.ToString(), req.Id.ToString("N"));
+        Directory.CreateDirectory(uploadDir);
         var fields = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(req.StaffName)) fields["staff_name"] = req.StaffName!;
         if (req.ExpiryHint.HasValue) fields["expiry_date"] = req.ExpiryHint.Value.ToString("yyyy-MM-dd");
 
-        await queue.EnqueueAsync(new DocumentDetectedEvent(
-            tenantId,
-            source.Id,
-            UploadDeviceToken,
-            fileName,
-            destPath,
-            fileHash,
-            form.File.ContentType ?? "application/octet-stream",
-            size,
-            Array.Empty<string>(),
-            fields,
-            Contracts.Enums.ProcessingStatus.Pending,
-            clock.UtcNow), token);
+        foreach (var file in form.Files)
+        {
+            var fileName = Path.GetFileName(file.FileName);
+            var destPath = Path.Combine(uploadDir, fileName);
+            await using (var stream = File.Create(destPath))
+            {
+                await file.CopyToAsync(stream, token);
+            }
+
+            var fileHash = ComputeHash(destPath);
+            var size = new FileInfo(destPath).Length;
+
+            await queue.EnqueueAsync(new DocumentDetectedEvent(
+                tenantId,
+                source.Id,
+                UploadDeviceToken,
+                fileName,
+                destPath,
+                fileHash,
+                file.ContentType ?? "application/octet-stream",
+                size,
+                Array.Empty<string>(),
+                fields,
+                Contracts.Enums.ProcessingStatus.Pending,
+                clock.UtcNow), token);
+        }
 
         req.Status = UploadStatus.Pending;
         req.FilePath = destPath;
@@ -216,4 +225,4 @@ public static class UploadEndpoints
 
 public sealed record CreateUploadRequest(string? StaffName, string? StaffEmail, string? CourseName, DateOnly? ExpiryDate);
 
-public sealed record UploadFileForm(IFormFile File);
+public sealed record UploadFileForm(List<IFormFile> Files);

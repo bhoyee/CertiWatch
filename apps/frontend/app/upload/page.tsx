@@ -12,7 +12,7 @@ type UploadMeta = {
 
 export default function UploadPage() {
   const [meta, setMeta] = useState<UploadMeta | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const token = useMemo(() => {
@@ -38,11 +38,11 @@ export default function UploadPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !token) return;
+    if (!files.length || !token) return;
     setStatus("loading");
     setError(null);
     const form = new FormData();
-    form.append("file", file);
+    files.forEach((f) => form.append("files", f));
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002"}/api/uploads/${encodeURIComponent(token)}/file`,
@@ -101,18 +101,19 @@ export default function UploadPage() {
         </div>
         <form className="mt-6 space-y-4" onSubmit={submit}>
           <div>
-            <label className="block text-sm font-medium text-slate-700">File</label>
+            <label className="block text-sm font-medium text-slate-700">File(s)</label>
             <input
               required
               type="file"
+              multiple
               accept=".pdf,image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               className="mt-1 block w-full text-sm text-slate-700"
             />
           </div>
           <button
             type="submit"
-            disabled={status === "loading" || !file}
+            disabled={status === "loading" || !files.length}
             className="w-full rounded-md bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
           >
             {status === "loading" ? "Uploading..." : "Submit"}
