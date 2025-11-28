@@ -13,4 +13,5 @@ Auth & dashboard (Milestone 2):
 - Admin invite UI: `/admin/invite` sends invites via `POST /api/auth/invite`.
 - Logout route: `/logout` clears the session cookie.
 - “Stay signed in” issues a long-lived session (30 days) and binds to a device cookie (`cw_device`). Optional fallback email can receive the same link.
+- Login requires an existing user; unknown emails return a 400 plain text message (“We couldn't find that email. Please sign up to start your trial.”). Add users via signup (Stripe checkout) or admin invites.
 
