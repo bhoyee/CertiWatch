@@ -77,9 +77,7 @@ function Cell({ children, className = "" }: { children: React.ReactNode; classNa
 }
 
 function LoadingCard() {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Loading sources…</div>
-  );
+  return <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Loading sources...</div>;
 }
 
 function ErrorCard({ message }: { message: string }) {
