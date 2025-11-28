@@ -78,12 +78,12 @@ services:
       context: ./apps/frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://host.docker.internal:5002
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:5002
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
     depends_on:
       - api
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://host.docker.internal:5002
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:5002
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
     ports:
       - "3300:3000"
