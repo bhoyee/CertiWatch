@@ -1,4 +1,7 @@
+ "use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const features = [
   {
@@ -67,6 +70,12 @@ const plans = [
 ];
 
 export default function LandingPage() {
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    setHasSession(document.cookie.includes("cw_session="));
+  }, []);
+
   return (
     <main className="bg-slate-50 pb-16">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -89,18 +98,29 @@ export default function LandingPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="hidden rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 md:inline-flex"
-            >
-              Login
-            </Link>
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
-            >
-              Start 7-day trial
-            </Link>
+            {hasSession ? (
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
+              >
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="hidden rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 md:inline-flex"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                >
+                  Start 7-day trial
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -118,18 +138,29 @@ export default function LandingPage() {
               applies your rules, and keeps admins ahead with reminders and one-click approvals.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link
-                href="/signup"
-                className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
-              >
-                Start 7-day trial
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300"
-              >
-                Login
-              </Link>
+              {hasSession ? (
+                <Link
+                  href="/"
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                >
+                  Go to dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                  >
+                    Start 7-day trial
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300"
+                  >
+                    Login
+                  </Link>
+                </>
+              )}
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-600">
               <span>OCR + rule engine</span>
@@ -251,12 +282,20 @@ export default function LandingPage() {
               hello@certiwatch.com
             </Link>
             <span className="hidden text-slate-300 md:inline">|</span>
-            <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-500">
-              Start trial
-            </Link>
-            <Link href="/login" className="font-semibold text-slate-800 hover:text-slate-900">
-              Login
-            </Link>
+            {hasSession ? (
+              <Link href="/" className="font-semibold text-blue-600 hover:text-blue-500">
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-500">
+                  Start trial
+                </Link>
+                <Link href="/login" className="font-semibold text-slate-800 hover:text-slate-900">
+                  Login
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </footer>
