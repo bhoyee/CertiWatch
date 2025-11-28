@@ -140,11 +140,11 @@ export default function UploadsPage() {
             <tbody className="divide-y divide-slate-200">
               {history.map((h) => (
                 <tr key={h.id} className="hover:bg-slate-50">
-                  <Cell>{h.staffName ?? "—"}</Cell>
-                  <Cell>{h.staffEmail ?? "—"}</Cell>
+                  <Cell>{h.staffName ?? "?"}</Cell>
+                  <Cell>{h.staffEmail ?? "?"}</Cell>
                   <Cell className="capitalize">{String(h.status ?? "").toLowerCase()}</Cell>
                   <Cell>{new Date(h.createdAt).toLocaleString()}</Cell>
-                  <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "—"}</Cell>
+                  <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "?"}</Cell>
                   <Cell>{new Date(h.expiresAt).toLocaleString()}</Cell>
                 </tr>
               ))}
