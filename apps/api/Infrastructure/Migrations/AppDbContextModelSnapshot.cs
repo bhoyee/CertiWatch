@@ -96,7 +96,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             CourseName = "First Aid",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8319),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6806),
                             DefaultValidityMonths = 36,
                             IsOneTime = false,
                             IsRenewable = true
@@ -105,7 +105,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000002"),
                             CourseName = "Fire Safety",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8349),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6812),
                             DefaultValidityMonths = 12,
                             IsOneTime = false,
                             IsRenewable = true
@@ -114,7 +114,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000003"),
                             CourseName = "Food Hygiene Level 2",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8356),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6813),
                             DefaultValidityMonths = 12,
                             IsOneTime = false,
                             IsRenewable = true
@@ -123,7 +123,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000004"),
                             CourseName = "Manual Handling",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8363),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6814),
                             DefaultValidityMonths = 24,
                             IsOneTime = false,
                             IsRenewable = true
@@ -132,7 +132,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000005"),
                             CourseName = "Safeguarding Adults",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8369),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6815),
                             DefaultValidityMonths = 24,
                             IsOneTime = false,
                             IsRenewable = true
@@ -141,7 +141,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000006"),
                             CourseName = "GDPR Awareness",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8385),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6819),
                             DefaultValidityMonths = 12,
                             IsOneTime = false,
                             IsRenewable = true
@@ -150,7 +150,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000007"),
                             CourseName = "Infection Control",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8392),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6820),
                             DefaultValidityMonths = 12,
                             IsOneTime = false,
                             IsRenewable = true
@@ -159,7 +159,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000008"),
                             CourseName = "Health and Safety Induction",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8399),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6821),
                             DefaultValidityMonths = 36,
                             IsOneTime = false,
                             IsRenewable = true
@@ -168,7 +168,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000009"),
                             CourseName = "Equality and Diversity",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8406),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6822),
                             DefaultValidityMonths = 36,
                             IsOneTime = false,
                             IsRenewable = true
@@ -177,7 +177,7 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000010"),
                             CourseName = "COSHH Awareness",
-                            CreatedAt = new DateTime(2025, 11, 16, 13, 38, 5, 152, DateTimeKind.Utc).AddTicks(8419),
+                            CreatedAt = new DateTime(2025, 11, 28, 15, 51, 36, 354, DateTimeKind.Utc).AddTicks(6824),
                             DefaultValidityMonths = 12,
                             IsOneTime = false,
                             IsRenewable = true
@@ -427,6 +427,57 @@ namespace CertiWatch.Api.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Tenants");
+                });
+
+            modelBuilder.Entity("CertiWatch.Api.Domain.Entities.UploadRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CourseName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ExpiryHint")
+                        .HasColumnType("date");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StaffEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StaffName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Token")
+                        .IsUnique();
+
+                    b.ToTable("UploadRequests");
                 });
 
             modelBuilder.Entity("CertiWatch.Api.Domain.Entities.User", b =>

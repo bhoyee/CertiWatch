@@ -7,8 +7,6 @@ type UploadHistoryItem = {
   id: string;
   staffName?: string;
   staffEmail?: string;
-  courseName?: string;
-  expiryHint?: string;
   status: string;
   createdAt: string;
   usedAt?: string;
@@ -17,11 +15,17 @@ type UploadHistoryItem = {
 
 type CreateResponse = { token: string; link: string; expiresAt: string };
 
+type FormState = {
+  staffName: string;
+  staffEmail: string;
+  expiryDate: string;
+};
+
 export default function UploadsPage() {
   const [history, setHistory] = useState<UploadHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ staffName: "", staffEmail: "", expiryDate: "" });
+  const [form, setForm] = useState<FormState>({ staffName: "", staffEmail: "", expiryDate: "" });
   const [lastLink, setLastLink] = useState<CreateResponse | null>(null);
 
   const loadHistory = () => {
@@ -39,7 +43,7 @@ export default function UploadsPage() {
     setCreating(true);
     setError(null);
     try {
-      const body: any = {
+      const body: Record<string, any> = {
         staffName: form.staffName || null,
         staffEmail: form.staffEmail || null,
         expiryDate: form.expiryDate ? form.expiryDate : null
