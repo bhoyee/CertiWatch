@@ -7,7 +7,7 @@ type SourceDto = {
   id: string;
   type: string;
   displayName: string;
-  config: Record<string, string>;
+  config?: Record<string, string>;
   createdAt: string;
 };
 
@@ -47,9 +47,7 @@ export default function SourcesPage() {
                 <Cell className="capitalize">{s.type.toLowerCase()}</Cell>
                 <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
                 <Cell>
-                  {Object.keys(s.config).length === 0 ? (
-                    <span className="text-slate-500">—</span>
-                  ) : (
+                  {s.config && Object.keys(s.config).length > 0 ? (
                     <div className="text-xs text-slate-700">
                       {Object.entries(s.config).map(([k, v]) => (
                         <div key={k}>
@@ -57,6 +55,8 @@ export default function SourcesPage() {
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <span className="text-slate-500">—</span>
                   )}
                 </Cell>
               </tr>

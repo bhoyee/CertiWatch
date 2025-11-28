@@ -34,7 +34,7 @@ export function PlanBanner() {
   if (!plan) {
     return (
       <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-        Loading plan…
+        Loading plan...
       </div>
     );
   }
@@ -64,7 +64,7 @@ export function PlanBanner() {
       </div>
       {nearLimit && (
         <p className="mt-2 text-sm text-amber-700">
-          You’re approaching your record limit. Consider upgrading to avoid interruptions.
+          You are approaching your record limit. Consider upgrading to avoid interruptions.
         </p>
       )}
     </div>
