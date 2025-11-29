@@ -17,5 +17,5 @@ public sealed class WorkerOptions
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "documents"));
 
     private static string UploadsPath =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "uploads"));
+        "/uploads";
 }

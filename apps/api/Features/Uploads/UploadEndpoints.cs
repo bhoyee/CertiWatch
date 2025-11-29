@@ -147,7 +147,7 @@ public static class UploadEndpoints
             return Results.BadRequest(new { error = "no_files" });
         }
 
-        var uploadDir = Path.Combine(AppContext.BaseDirectory, "uploads", tenantId.ToString(), req.Id.ToString("N"));
+        var uploadDir = Path.Combine("/uploads", tenantId.ToString(), req.Id.ToString("N"));
         Directory.CreateDirectory(uploadDir);
         var fields = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(req.StaffName)) fields["staff_name"] = req.StaffName!;
