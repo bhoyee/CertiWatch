@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace CertiWatch.Api.Features.Uploads;
 
@@ -133,6 +134,7 @@ public static class UploadEndpoints
         IDateTimeProvider clock,
         IOptions<StorageOptions> storageOptions,
         IIngestionQueue queue,
+        HttpContext httpContext,
         CancellationToken token)
     {
         var req = await db.UploadRequests.FirstOrDefaultAsync(u => u.Token == tokenValue, token);
@@ -143,7 +145,14 @@ public static class UploadEndpoints
 
         var tenantId = req.TenantId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
-        if (form is null || form.Files is null || form.Files.Count == 0)
+        IReadOnlyCollection<IFormFile>? fileCollection = form?.Files;
+        if (fileCollection is null || fileCollection.Count == 0)
+        {
+            // Fallback to raw request form in case model binding failed to populate the DTO
+            fileCollection = httpContext?.Request?.Form?.Files;
+        }
+
+        if (fileCollection is null || fileCollection.Count == 0)
         {
             return Results.BadRequest(new { error = "no_files" });
         }
@@ -158,7 +167,7 @@ public static class UploadEndpoints
         string? lastDestPath = null;
         string? lastFileName = null;
 
-        foreach (var file in form.Files)
+        foreach (var file in fileCollection)
         {
             var fileName = Path.GetFileName(file.FileName);
             var destPath = Path.Combine(uploadDir, fileName);
