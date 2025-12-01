@@ -55,8 +55,12 @@ services:
       Email__SmtpUsername: ${Email__SmtpUsername:-resend}
       Email__SmtpPassword: ${Email__SmtpPassword:-re_XXXX}
       Email__SmtpEncryption: ${Email__SmtpEncryption:-starttls}
+      Storage__UploadsRoot: /uploads
     ports:
       - "5002:8080"
+    volumes:
+      - ./uploads:/uploads
+      - ./samples/documents:/samples/documents:ro
 
   worker:
     build:

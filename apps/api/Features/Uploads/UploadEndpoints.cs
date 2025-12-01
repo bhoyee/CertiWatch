@@ -131,6 +131,7 @@ public static class UploadEndpoints
         AppDbContext db,
         ITenantContextAccessor accessor,
         IDateTimeProvider clock,
+        IOptions<StorageOptions> storageOptions,
         IIngestionQueue queue,
         CancellationToken token)
     {
@@ -142,16 +143,20 @@ public static class UploadEndpoints
 
         var tenantId = req.TenantId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
-        if (form.Files is null || form.Files.Count == 0)
+        if (form is null || form.Files is null || form.Files.Count == 0)
         {
             return Results.BadRequest(new { error = "no_files" });
         }
 
-        var uploadDir = Path.Combine("/uploads", tenantId.ToString(), req.Id.ToString("N"));
+        var root = GetUploadsRoot(storageOptions.Value);
+        var uploadDir = Path.Combine(root, tenantId.ToString(), req.Id.ToString("N"));
         Directory.CreateDirectory(uploadDir);
         var fields = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(req.StaffName)) fields["staff_name"] = req.StaffName!;
         if (req.ExpiryHint.HasValue) fields["expiry_date"] = req.ExpiryHint.Value.ToString("yyyy-MM-dd");
+
+        string? lastDestPath = null;
+        string? lastFileName = null;
 
         foreach (var file in form.Files)
         {
@@ -161,6 +166,9 @@ public static class UploadEndpoints
             {
                 await file.CopyToAsync(stream, token);
             }
+
+            lastDestPath = destPath;
+            lastFileName = fileName;
 
             var fileHash = ComputeHash(destPath);
             var size = new FileInfo(destPath).Length;
@@ -181,8 +189,8 @@ public static class UploadEndpoints
         }
 
         req.Status = UploadStatus.Pending;
-        req.FilePath = destPath;
-        req.OriginalFileName = fileName;
+        req.FilePath = lastDestPath;
+        req.OriginalFileName = lastFileName;
         req.UsedAt = clock.UtcNow;
         await db.SaveChangesAsync(token);
 
@@ -206,6 +214,12 @@ public static class UploadEndpoints
         db.Sources.Add(src);
         await db.SaveChangesAsync(token);
         return src;
+    }
+
+    private static string GetUploadsRoot(StorageOptions options)
+    {
+        var root = string.IsNullOrWhiteSpace(options.UploadsRoot) ? "/uploads" : options.UploadsRoot;
+        return root.TrimEnd(Path.DirectorySeparatorChar);
     }
 
     private static string GenerateToken()

@@ -60,6 +60,16 @@ builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("M
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ReminderOptions>(builder.Configuration.GetSection("Reminders"));
 builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.PostConfigure<StorageOptions>(options =>
+{
+    if (string.IsNullOrWhiteSpace(options.UploadsRoot))
+    {
+        options.UploadsRoot = "/uploads";
+    }
+
+    Directory.CreateDirectory(options.UploadsRoot);
+});
 var stripeConfig = builder.Configuration.GetSection("Stripe").Get<StripeOptions>();
 if (!string.IsNullOrWhiteSpace(stripeConfig?.SecretKey))
 {
