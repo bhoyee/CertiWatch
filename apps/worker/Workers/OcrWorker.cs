@@ -89,11 +89,17 @@ public sealed class OcrWorker : BackgroundService
 
     private async Task<string> ExtractTextAsync(string file, CancellationToken token)
     {
+        var useAzure = !string.IsNullOrWhiteSpace(_options.AzureVisionEndpoint) &&
+                       !string.IsNullOrWhiteSpace(_options.AzureVisionKey);
+
         try
         {
-            return Path.GetExtension(file).Equals(".pdf", StringComparison.OrdinalIgnoreCase)
-                ? await _vision.ExtractTextAsync(file, token)
-                : await _tesseract.ExtractTextAsync(file, token);
+            if (useAzure)
+            {
+                return await _vision.ExtractTextAsync(file, token);
+            }
+
+            return await _tesseract.ExtractTextAsync(file, token);
         }
         catch (Exception ex)
         {

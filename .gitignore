@@ -28,3 +28,4 @@ apps/**/.env.local
 coverage/
 playwright-report/
 test-results/
+/uploads/

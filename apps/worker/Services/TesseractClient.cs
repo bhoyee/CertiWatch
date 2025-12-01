@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Text;
+
 namespace CertiWatch.Worker.Services;
 
 public interface ITesseractClient
@@ -9,7 +12,102 @@ public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesserac
 {
     public async Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken)
     {
-        logger.LogDebug("Reading file {File} using built-in parser", filePath);
-        return await File.ReadAllTextAsync(filePath, cancellationToken);
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        if (ext == ".pdf")
+        {
+            return await ExtractPdfAsync(filePath, cancellationToken);
+        }
+
+        return await RunTesseractAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> ExtractPdfAsync(string filePath, CancellationToken cancellationToken)
+    {
+        // Convert PDF pages to PNGs with poppler (pdftoppm), then OCR each page with tesseract.
+        var tempDir = Path.Combine(Path.GetTempPath(), "ocr-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var prefix = Path.Combine(tempDir, "page");
+            await RunProcessAsync("pdftoppm", $"-png \"{filePath}\" \"{prefix}\"", cancellationToken);
+
+            var pages = Directory.EnumerateFiles(tempDir, "page-*.png")
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (pages.Count == 0)
+            {
+                logger.LogWarning("PDF {File} produced no pages for OCR", filePath);
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder();
+            foreach (var page in pages)
+            {
+                var text = await RunTesseractAsync(page, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    sb.AppendLine(text);
+                }
+            }
+
+            return sb.ToString();
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* ignore */ }
+        }
+    }
+
+    private async Task<string> RunTesseractAsync(string imagePath, CancellationToken cancellationToken)
+    {
+        return await RunProcessAsync("tesseract", $"\"{imagePath}\" stdout -l eng", cancellationToken);
+    }
+
+    private async Task<string> RunProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process { StartInfo = startInfo };
+        var output = new StringBuilder();
+        var error = new StringBuilder();
+
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) output.AppendLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) error.AppendLine(e.Data);
+        };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        await Task.WhenAny(process.WaitForExitAsync(cancellationToken), Task.Delay(Timeout.Infinite, cancellationToken));
+
+        if (!process.HasExited)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+        }
+
+        if (process.ExitCode != 0)
+        {
+            logger.LogWarning("Process {File} {Args} exited with {Code}. stderr: {Error}", fileName, arguments, process.ExitCode, error.ToString());
+        }
+
+        return output.ToString();
     }
 }
