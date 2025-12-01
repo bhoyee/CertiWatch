@@ -15,10 +15,29 @@ public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesserac
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         if (ext == ".pdf")
         {
+            var text = await TryPdfToTextAsync(filePath, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+            // Fall back to OCR on rasterized pages
             return await ExtractPdfAsync(filePath, cancellationToken);
         }
 
         return await RunTesseractAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> TryPdfToTextAsync(string filePath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await RunProcessAsync("pdftotext", $"-layout \"{filePath}\" -", cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "pdftotext failed for {File}, will fall back to OCR", filePath);
+            return string.Empty;
+        }
     }
 
     private async Task<string> ExtractPdfAsync(string filePath, CancellationToken cancellationToken)
@@ -30,7 +49,7 @@ public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesserac
         try
         {
             var prefix = Path.Combine(tempDir, "page");
-            await RunProcessAsync("pdftoppm", $"-png \"{filePath}\" \"{prefix}\"", cancellationToken);
+            await RunProcessAsync("pdftoppm", $"-r 300 -gray -png \"{filePath}\" \"{prefix}\"", cancellationToken);
 
             var pages = Directory.EnumerateFiles(tempDir, "page-*.png")
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
@@ -62,7 +81,7 @@ public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesserac
 
     private async Task<string> RunTesseractAsync(string imagePath, CancellationToken cancellationToken)
     {
-        return await RunProcessAsync("tesseract", $"\"{imagePath}\" stdout -l eng", cancellationToken);
+        return await RunProcessAsync("tesseract", $"\"{imagePath}\" stdout -l eng --oem 1 --psm 6", cancellationToken);
     }
 
     private async Task<string> RunProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
