@@ -147,7 +147,11 @@ public sealed class OcrWorker : BackgroundService
         // Staff name: first line that looks like a name (Title Case, 2+ words)
         if (!fields.ContainsKey("staff_name"))
         {
-            var nameLine = normalizedLines.FirstOrDefault(l => Regex.IsMatch(l, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$"));
+            var nameLine = normalizedLines.FirstOrDefault(l =>
+                Regex.IsMatch(l, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$") &&
+                !l.Contains("Autism", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("First Aid", StringComparison.OrdinalIgnoreCase) &&
+                !Regex.IsMatch(l, @"\d"));
             if (!string.IsNullOrWhiteSpace(nameLine))
             {
                 fields["staff_name"] = nameLine;
@@ -163,6 +167,15 @@ public sealed class OcrWorker : BackgroundService
                 {
                     fields["issue_date"] = dt.ToString("yyyy-MM-dd");
                     break;
+                }
+                var m = Regex.Match(line, @"(?<month>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<day>\d{1,2})(?:st|nd|rd|th)?\s+(?<year>\d{4})", RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    if (DateTime.TryParse($"{m.Groups["month"].Value} {m.Groups["day"].Value} {m.Groups["year"].Value}", out var dt2))
+                    {
+                        fields["issue_date"] = dt2.ToString("yyyy-MM-dd");
+                        break;
+                    }
                 }
             }
         }
