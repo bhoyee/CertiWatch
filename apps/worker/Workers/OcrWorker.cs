@@ -160,7 +160,7 @@ public sealed class OcrWorker : BackgroundService
             }
         }
 
-        // Staff name: first line that looks like a name (Title Case, 2+ words)
+        // Staff name: prefer the line after "certificate is awarded to", otherwise first plausible Title Case name
         if (fields.TryGetValue("staff_name", out var existingStaff) && !string.IsNullOrWhiteSpace(existingStaff))
         {
             var courseValue = fields.TryGetValue("course_name", out var c0) ? c0 : null;
@@ -179,19 +179,25 @@ public sealed class OcrWorker : BackgroundService
         if (!fields.ContainsKey("staff_name"))
         {
             var courseValue = fields.TryGetValue("course_name", out var c) ? c : null;
-            var nameLine = normalizedLines.FirstOrDefault(l =>
-                Regex.IsMatch(l, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$") &&
-                !l.Contains("Autism", StringComparison.OrdinalIgnoreCase) &&
-                !l.Contains("First Aid", StringComparison.OrdinalIgnoreCase) &&
-                (courseValue == null || !l.Contains(courseValue, StringComparison.OrdinalIgnoreCase)) &&
-                !l.Contains("Certificate", StringComparison.OrdinalIgnoreCase) &&
-                !l.Contains("Council", StringComparison.OrdinalIgnoreCase) &&
-                !l.Contains("Learning", StringComparison.OrdinalIgnoreCase) &&
-                !l.Contains("Development", StringComparison.OrdinalIgnoreCase) &&
-                !Regex.IsMatch(l, @"\d"));
-            if (!string.IsNullOrWhiteSpace(nameLine))
+
+            var awardedIdx = normalizedLines.FindIndex(l =>
+                l.Contains("certificate is awarded to", StringComparison.OrdinalIgnoreCase));
+            if (awardedIdx >= 0 && awardedIdx + 1 < normalizedLines.Count)
             {
-                fields["staff_name"] = nameLine;
+                var candidate = normalizedLines[awardedIdx + 1];
+                if (LooksLikeName(candidate, courseValue))
+                {
+                    fields["staff_name"] = candidate;
+                }
+            }
+
+            if (!fields.ContainsKey("staff_name"))
+            {
+                var nameLine = normalizedLines.FirstOrDefault(l => LooksLikeName(l, courseValue));
+                if (!string.IsNullOrWhiteSpace(nameLine))
+                {
+                    fields["staff_name"] = nameLine;
+                }
             }
         }
 
@@ -218,6 +224,17 @@ public sealed class OcrWorker : BackgroundService
         }
 
         return fields;
+    }
+
+    private static bool LooksLikeName(string line, string? courseValue)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        if (Regex.IsMatch(line, @"\d")) return false;
+        if (Regex.IsMatch(line, @"certificate|council|learning|development", RegexOptions.IgnoreCase)) return false;
+        if (!string.IsNullOrWhiteSpace(courseValue) && line.Contains(courseValue, StringComparison.OrdinalIgnoreCase)) return false;
+        if (line.Contains("Autism", StringComparison.OrdinalIgnoreCase) || line.Contains("First Aid", StringComparison.OrdinalIgnoreCase)) return false;
+        // Simple Title Case with at least two words
+        return Regex.IsMatch(line, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$");
     }
 
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
