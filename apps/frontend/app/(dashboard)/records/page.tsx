@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchJson } from "../../../lib/api";
 
 type RecordDto = {
@@ -25,29 +25,26 @@ type PagedResult<T> = {
 export default function RecordsPage() {
   const [data, setData] = useState<PagedResult<RecordDto> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchJson<PagedResult<RecordDto>>("/api/records?take=10")
+      .then((res) => {
+        setData(res);
+        setError(null);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => setError(err.message ?? "Failed to load records"))
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
-    let active = true;
-
-    const load = () =>
-      fetchJson<PagedResult<RecordDto>>("/api/records?take=10")
-        .then((res) => {
-          if (!active) return;
-          setData(res);
-          setError(null);
-        })
-        .catch((err) => {
-          if (!active) return;
-          setError(err.message ?? "Failed to load records");
-        });
-
     load();
-    const interval = setInterval(load, 5000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, []);
+    const interval = setInterval(load, 2000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   if (error) {
     return <ErrorCard message={error} />;
@@ -64,7 +61,23 @@ export default function RecordsPage() {
           <h1 className="text-lg font-semibold text-slate-900">Records</h1>
           <p className="text-sm text-slate-600">Latest 10 records for your tenant.</p>
         </div>
-        <span className="text-sm text-slate-600">Total: {data.total}</span>
+        <div className="flex items-center space-x-3">
+          <span className="text-sm text-slate-600">
+            Total: {data.total}
+            {lastUpdated && (
+              <span className="ml-2 text-xs text-slate-500">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+          </span>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
