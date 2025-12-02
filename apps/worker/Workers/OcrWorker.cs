@@ -123,7 +123,18 @@ public sealed class OcrWorker : BackgroundService
         {
             if (lower.Contains("autism awareness"))
             {
-                fields["course_name"] = "Autism Awareness: Level 2";
+                if (lower.Contains("level 1"))
+                {
+                    fields["course_name"] = "Autism Awareness: Level 1";
+                }
+                else if (lower.Contains("level 2"))
+                {
+                    fields["course_name"] = "Autism Awareness: Level 2";
+                }
+                else
+                {
+                    fields["course_name"] = "Autism Awareness";
+                }
             }
             else if (lower.Contains("first aid"))
             {
@@ -141,6 +152,11 @@ public sealed class OcrWorker : BackgroundService
             else if (lower.Contains("rescueone"))
             {
                 fields["issuer"] = "RescueOne";
+            }
+            else if (fields.TryGetValue("course_name", out var courseValue) &&
+                     courseValue.StartsWith("Autism Awareness", StringComparison.OrdinalIgnoreCase))
+            {
+                fields["issuer"] = "Hull City Council";
             }
         }
 

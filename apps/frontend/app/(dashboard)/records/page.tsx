@@ -27,9 +27,26 @@ export default function RecordsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchJson<PagedResult<RecordDto>>("/api/records?take=10")
-      .then(setData)
-      .catch((err) => setError(err.message ?? "Failed to load records"));
+    let active = true;
+
+    const load = () =>
+      fetchJson<PagedResult<RecordDto>>("/api/records?take=10")
+        .then((res) => {
+          if (!active) return;
+          setData(res);
+          setError(null);
+        })
+        .catch((err) => {
+          if (!active) return;
+          setError(err.message ?? "Failed to load records");
+        });
+
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   if (error) {
