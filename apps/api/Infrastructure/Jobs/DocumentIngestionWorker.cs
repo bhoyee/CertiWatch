@@ -67,12 +67,20 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     CreatedAt = docEvent.DetectedAt
                 };
 
+                // Prefer the worker-extracted fields; only fall back to parsing/keywords if missing
                 var parsed = _pipeline.Parse(string.Join('\n', docEvent.ExtractedFields.Select(kv => $"{kv.Key}:{kv.Value}")));
-                var staff = parsed.Result.StaffName ?? docEvent.ExtractedFields.GetValueOrDefault("staff_name") ?? "Unknown";
-                var course = parsed.Result.CourseName ?? docEvent.ExtractedFields.GetValueOrDefault("course_name") ?? "Unknown Course";
-                var issuer = parsed.Result.Issuer ?? docEvent.ExtractedFields.GetValueOrDefault("issuer");
-                var issueDate = parsed.Result.IssueDate ?? TryParse(docEvent.ExtractedFields.GetValueOrDefault("issue_date"));
-                var expiryDate = parsed.Result.ExpiryDate ?? TryParse(docEvent.ExtractedFields.GetValueOrDefault("expiry_date"));
+                var staff = docEvent.ExtractedFields.GetValueOrDefault("staff_name")
+                            ?? parsed.Result.StaffName
+                            ?? "Unknown";
+                var course = docEvent.ExtractedFields.GetValueOrDefault("course_name")
+                             ?? parsed.Result.CourseName
+                             ?? "Unknown Course";
+                var issuer = docEvent.ExtractedFields.GetValueOrDefault("issuer")
+                             ?? parsed.Result.Issuer;
+                var issueDate = TryParse(docEvent.ExtractedFields.GetValueOrDefault("issue_date"))
+                                ?? parsed.Result.IssueDate;
+                var expiryDate = TryParse(docEvent.ExtractedFields.GetValueOrDefault("expiry_date"))
+                                 ?? parsed.Result.ExpiryDate;
 
                 if (!expiryDate.HasValue)
                 {

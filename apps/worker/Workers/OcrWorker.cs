@@ -180,6 +180,16 @@ public sealed class OcrWorker : BackgroundService
         {
             var courseValue = fields.TryGetValue("course_name", out var c) ? c : null;
 
+            var awardedMatch = Regex.Match(parsed.RawText ?? string.Empty, @"(?i)certificate\s+is\s+awarded\s+to\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)+)");
+            if (awardedMatch.Success)
+            {
+                var candidate = awardedMatch.Groups[1].Value.Trim();
+                if (LooksLikeName(candidate, courseValue))
+                {
+                    fields["staff_name"] = candidate;
+                }
+            }
+
             var awardedIdx = normalizedLines.FindIndex(l =>
                 l.Contains("certificate is awarded to", StringComparison.OrdinalIgnoreCase));
             if (awardedIdx >= 0 && awardedIdx + 1 < normalizedLines.Count)
