@@ -161,6 +161,21 @@ public sealed class OcrWorker : BackgroundService
         }
 
         // Staff name: first line that looks like a name (Title Case, 2+ words)
+        if (fields.TryGetValue("staff_name", out var existingStaff) && !string.IsNullOrWhiteSpace(existingStaff))
+        {
+            var courseValue = fields.TryGetValue("course_name", out var c0) ? c0 : null;
+            if (!string.IsNullOrWhiteSpace(courseValue) &&
+                existingStaff.Contains(courseValue, StringComparison.OrdinalIgnoreCase))
+            {
+                fields.Remove("staff_name");
+            }
+            else if (existingStaff.Contains("autism", StringComparison.OrdinalIgnoreCase) ||
+                     existingStaff.Contains("first aid", StringComparison.OrdinalIgnoreCase))
+            {
+                fields.Remove("staff_name");
+            }
+        }
+
         if (!fields.ContainsKey("staff_name"))
         {
             var courseValue = fields.TryGetValue("course_name", out var c) ? c : null;
@@ -169,6 +184,10 @@ public sealed class OcrWorker : BackgroundService
                 !l.Contains("Autism", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("First Aid", StringComparison.OrdinalIgnoreCase) &&
                 (courseValue == null || !l.Contains(courseValue, StringComparison.OrdinalIgnoreCase)) &&
+                !l.Contains("Certificate", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Council", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Learning", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Development", StringComparison.OrdinalIgnoreCase) &&
                 !Regex.IsMatch(l, @"\d"));
             if (!string.IsNullOrWhiteSpace(nameLine))
             {
