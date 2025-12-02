@@ -147,10 +147,12 @@ public sealed class OcrWorker : BackgroundService
         // Staff name: first line that looks like a name (Title Case, 2+ words)
         if (!fields.ContainsKey("staff_name"))
         {
+            var courseValue = fields.TryGetValue("course_name", out var c) ? c : null;
             var nameLine = normalizedLines.FirstOrDefault(l =>
                 Regex.IsMatch(l, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$") &&
                 !l.Contains("Autism", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("First Aid", StringComparison.OrdinalIgnoreCase) &&
+                (courseValue == null || !l.Contains(courseValue, StringComparison.OrdinalIgnoreCase)) &&
                 !Regex.IsMatch(l, @"\d"));
             if (!string.IsNullOrWhiteSpace(nameLine))
             {
