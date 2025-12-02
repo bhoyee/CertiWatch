@@ -68,12 +68,14 @@ services:
       dockerfile: apps/worker/Dockerfile
     depends_on:
       - api
+      - doctr
     environment:
       WORKER__ApiBaseUrl: http://api:8080
       WORKER__DeviceId: 479bf42a-3c3a-411f-9dd8-9d598145c26a
       WORKER__DeviceToken: 5+4wnaTOkHidVCQTQwoOswO6LRjFf/MW+9vgosfrDpM=
       WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
       DOTNET_ENVIRONMENT: Development
+      DOCTR__BaseUrl: http://doctr:8000
     volumes:
       - ./uploads:/uploads:ro
       - ./samples/documents:/samples/documents:ro
@@ -87,6 +89,7 @@ services:
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
     depends_on:
       - api
+      - worker
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:5002
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
@@ -94,6 +97,18 @@ services:
       - "3300:3000"
     volumes:
       - ./uploads:/uploads
+
+  doctr:
+    build:
+      context: ./apps/ocr-doctr
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
 
 volumes:
   postgres_data:

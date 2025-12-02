@@ -43,7 +43,7 @@ Milestone 1 introduces a real billing flow so customers can self-serve:
 - **Rules & records**: global+tenant rule precedence with automatic reprocessing.
 - **Notifications**: weekly digest + configurable expiry reminders (mail templates live in `/emails`).
 - **Deploy**: Terraform under `/terraform`, CI/CD in `.github/workflows/ci.yml` (lint, tests, docker build, security scans, terraform plan).
-- **OCR defaults**: worker runs Tesseract + poppler for PDF/image text extraction (built into the worker Docker image). For host-native runs install `tesseract-ocr` and `poppler-utils`; cloud OCR (Azure/GCP/etc.) is optional via env vars.
+- **OCR defaults**: worker runs Tesseract + poppler and can call a docTR sidecar (FastAPI, `apps/ocr-doctr`) for higher-quality OCR. For host-native runs install `tesseract-ocr` and `poppler-utils`; cloud OCR (Azure/GCP/etc.) is optional via env vars.
 
 ## Documentation Index
 

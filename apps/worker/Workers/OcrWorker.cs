@@ -15,6 +15,7 @@ public sealed class OcrWorker : BackgroundService
     private readonly WorkerOptions _options;
     private readonly IAzureVisionClient _vision;
     private readonly ITesseractClient _tesseract;
+    private readonly IDoctrClient _doctr;
     private readonly ParsingPipeline _pipeline;
     private readonly IApiClient _apiClient;
     private readonly ILogger<OcrWorker> _logger;
@@ -24,6 +25,7 @@ public sealed class OcrWorker : BackgroundService
         IOptions<WorkerOptions> options,
         IAzureVisionClient vision,
         ITesseractClient tesseract,
+        IDoctrClient doctr,
         ParsingPipeline pipeline,
         IApiClient apiClient,
         ILogger<OcrWorker> logger)
@@ -31,6 +33,7 @@ public sealed class OcrWorker : BackgroundService
         _options = options.Value;
         _vision = vision;
         _tesseract = tesseract;
+        _doctr = doctr;
         _pipeline = pipeline;
         _apiClient = apiClient;
         _logger = logger;
@@ -94,9 +97,22 @@ public sealed class OcrWorker : BackgroundService
     {
         var useAzure = !string.IsNullOrWhiteSpace(_options.AzureVisionEndpoint) &&
                        !string.IsNullOrWhiteSpace(_options.AzureVisionKey);
+        var useDoctr = !string.IsNullOrWhiteSpace(_options.DoctrBaseUrl);
 
         try
         {
+            if (useDoctr)
+            {
+                try
+                {
+                    return await _doctr.ExtractTextAsync(file, token);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Doctr OCR failed for {File}, falling back", file);
+                }
+            }
+
             if (useAzure)
             {
                 return await _vision.ExtractTextAsync(file, token);

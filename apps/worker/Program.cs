@@ -18,6 +18,7 @@ builder.Services.AddSingleton(new KeywordMatcher(KeywordMaps.Default));
 builder.Services.AddSingleton<ParsingPipeline>();
 builder.Services.AddSingleton<IAzureVisionClient, AzureVisionClient>();
 builder.Services.AddSingleton<ITesseractClient, TesseractClient>();
+builder.Services.AddHttpClient<IDoctrClient, DoctrClient>();
 builder.Services.AddHostedService<OcrWorker>();
 
 builder.Services.AddLogging(logging =>

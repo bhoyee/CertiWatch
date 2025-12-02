@@ -11,6 +11,7 @@ public sealed class WorkerOptions
     public string DeviceToken { get; set; } = "dev-token";
     public string AzureVisionEndpoint { get; set; } = string.Empty;
     public string AzureVisionKey { get; set; } = string.Empty;
+    public string DoctrBaseUrl { get; set; } = string.Empty;
     public IReadOnlyList<string> WatchPaths { get; set; } = new[] { DefaultSamplesPath, UploadsPath };
 
     private static string DefaultSamplesPath =>
