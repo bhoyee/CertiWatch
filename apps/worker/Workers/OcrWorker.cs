@@ -113,7 +113,9 @@ public sealed class OcrWorker : BackgroundService
 
     private Dictionary<string, string> BuildFields(ParsedDocument parsed)
     {
-        var fields = parsed.Result.Fields.ToDictionary(f => f.Key, f => f.Value, StringComparer.OrdinalIgnoreCase);
+        var fields = parsed.Result.Fields
+            .GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase);
         var lines = parsed.Lines ?? Array.Empty<string>();
         var normalizedLines = lines.Select(l => l.Trim()).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
         var lower = (parsed.RawText ?? string.Empty).ToLowerInvariant();
