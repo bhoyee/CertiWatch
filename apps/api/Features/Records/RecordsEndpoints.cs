@@ -100,13 +100,16 @@ public static class RecordsEndpoints
     private static RecordDto ToDto(Record record)
     {
         var fields = DeserializeFields(record.FieldsJson);
+        var staff = NormalizeText(record.StaffName) ?? "Unknown";
+        var course = NormalizeText(record.CourseName) ?? "Unknown Course";
+        var issuer = NormalizeText(record.Issuer);
         return new RecordDto(
             record.Id,
             record.TenantId,
             record.DocumentId,
-            record.StaffName,
-            record.CourseName,
-            record.Issuer,
+            staff,
+            course,
+            issuer,
             record.IssueDate,
             record.ExpiryDate,
             record.ExpiryDerived,
@@ -122,6 +125,26 @@ public static class RecordsEndpoints
             fields,
             record.CreatedAt,
             record.UpdatedAt);
+    }
+
+    private static string? NormalizeText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var cleaned = value.Trim();
+        cleaned = cleaned.TrimEnd(',', ';');
+        if (cleaned.Length >= 2 && cleaned.StartsWith("\"") && cleaned.EndsWith("\""))
+        {
+            cleaned = cleaned[1..^1];
+        }
+
+        cleaned = cleaned.Trim().Trim('"', '\'');
+        cleaned = cleaned.TrimEnd(',', ';').Trim();
+
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
     }
 
     private static IReadOnlyDictionary<string, string> DeserializeFields(string json)

@@ -65,7 +65,11 @@ public sealed class ReminderScheduler : BackgroundService
 
             foreach (var lead in _options.LeadDays)
             {
-                var scheduledFor = record.ExpiryDate!.Value.ToDateTime(TimeOnly.MinValue).AddDays(-lead);
+                // Ensure we store UTC DateTimes for Postgres timestamp with time zone
+                var expiryUtc = DateTime.SpecifyKind(
+                    record.ExpiryDate!.Value.ToDateTime(TimeOnly.MinValue),
+                    DateTimeKind.Utc);
+                var scheduledFor = expiryUtc.AddDays(-lead);
                 if (scheduledFor <= now)
                 {
                     continue;

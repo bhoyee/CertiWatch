@@ -12,6 +12,8 @@ public sealed class WorkerOptions
     public string AzureVisionEndpoint { get; set; } = string.Empty;
     public string AzureVisionKey { get; set; } = string.Empty;
     public string DoctrBaseUrl { get; set; } = string.Empty;
+    public string DeepSeekApiKey { get; set; } = string.Empty;
+    public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com";
     public IReadOnlyList<string> WatchPaths { get; set; } = new[] { DefaultSamplesPath, UploadsPath };
 
     private static string DefaultSamplesPath =>

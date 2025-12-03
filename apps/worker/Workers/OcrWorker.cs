@@ -16,6 +16,7 @@ public sealed class OcrWorker : BackgroundService
     private readonly IAzureVisionClient _vision;
     private readonly ITesseractClient _tesseract;
     private readonly IDoctrClient _doctr;
+    private readonly IDeepSeekClient _deepSeek;
     private readonly ParsingPipeline _pipeline;
     private readonly IApiClient _apiClient;
     private readonly ILogger<OcrWorker> _logger;
@@ -26,6 +27,7 @@ public sealed class OcrWorker : BackgroundService
         IAzureVisionClient vision,
         ITesseractClient tesseract,
         IDoctrClient doctr,
+        IDeepSeekClient deepSeek,
         ParsingPipeline pipeline,
         IApiClient apiClient,
         ILogger<OcrWorker> logger)
@@ -34,6 +36,7 @@ public sealed class OcrWorker : BackgroundService
         _vision = vision;
         _tesseract = tesseract;
         _doctr = doctr;
+        _deepSeek = deepSeek;
         _pipeline = pipeline;
         _apiClient = apiClient;
         _logger = logger;
@@ -74,6 +77,8 @@ public sealed class OcrWorker : BackgroundService
                 var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fileBytes)).ToLowerInvariant();
                 var parsed = _pipeline.Parse(text);
                 var fields = BuildFields(parsed);
+                var sanitizedFields = SanitizeFields(fields);
+                _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
                     _options.TenantId,
                     _options.SourceId,
@@ -84,7 +89,7 @@ public sealed class OcrWorker : BackgroundService
                     MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
                     new FileInfo(file).Length,
                     parsed.VendorHints,
-                    fields,
+                    sanitizedFields,
                     ProcessingStatus.Pending,
                     DateTime.UtcNow);
 
@@ -95,30 +100,55 @@ public sealed class OcrWorker : BackgroundService
 
     private async Task<string> ExtractTextAsync(string file, CancellationToken token)
     {
+        // Step 1: OCR (PaddleOCR > Azure Vision > Tesseract)
         var useAzure = !string.IsNullOrWhiteSpace(_options.AzureVisionEndpoint) &&
                        !string.IsNullOrWhiteSpace(_options.AzureVisionKey);
         var useDoctr = !string.IsNullOrWhiteSpace(_options.DoctrBaseUrl);
+        var useDeepSeek = !string.IsNullOrWhiteSpace(_options.DeepSeekApiKey);
 
         try
         {
+            string rawText;
+
             if (useDoctr)
             {
                 try
                 {
-                    return await _doctr.ExtractTextAsync(file, token);
+                    rawText = await _doctr.ExtractTextAsync(file, token);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Doctr OCR failed for {File}, falling back", file);
+                    rawText = string.Empty;
+                }
+            }
+            else if (useAzure)
+            {
+                rawText = await _vision.ExtractTextAsync(file, token);
+            }
+            else
+            {
+                rawText = await _tesseract.ExtractTextAsync(file, token);
+            }
+
+            // Step 2: DeepSeek extraction on raw OCR text
+            if (useDeepSeek && !string.IsNullOrWhiteSpace(rawText))
+            {
+                try
+                {
+                    var refined = await _deepSeek.ExtractTextAsync(rawText, token);
+                    if (!string.IsNullOrWhiteSpace(refined))
+                    {
+                        return refined + Environment.NewLine + rawText;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "DeepSeek extract failed for {File}, falling back to raw OCR", file);
                 }
             }
 
-            if (useAzure)
-            {
-                return await _vision.ExtractTextAsync(file, token);
-            }
-
-            return await _tesseract.ExtractTextAsync(file, token);
+            return rawText;
         }
         catch (Exception ex)
         {
@@ -139,6 +169,10 @@ public sealed class OcrWorker : BackgroundService
         // Course heuristics
         if (!fields.ContainsKey("course_name"))
         {
+            if (lower.Contains("dignity in care"))
+            {
+                fields["course_name"] = "Dignity in Care";
+            }
             if (lower.Contains("autism awareness"))
             {
                 if (lower.Contains("level 1"))
@@ -160,6 +194,20 @@ public sealed class OcrWorker : BackgroundService
             }
         }
 
+        // Florence / training cert noise cleanup
+        if (fields.TryGetValue("course_name", out var noisyCourse))
+        {
+            if (noisyCourse.Equals("TRAININGCERTIFICATE", StringComparison.OrdinalIgnoreCase) ||
+                noisyCourse.Equals("Training Certificate", StringComparison.OrdinalIgnoreCase))
+            {
+                fields.Remove("course_name");
+                if (lower.Contains("dignity in care"))
+                {
+                    fields["course_name"] = "Dignity in Care";
+                }
+            }
+        }
+
         // Issuer heuristics
         if (!fields.ContainsKey("issuer"))
         {
@@ -171,10 +219,52 @@ public sealed class OcrWorker : BackgroundService
             {
                 fields["issuer"] = "RescueOne";
             }
+            else if (lower.Contains("florence academy"))
+            {
+                fields["issuer"] = "Florence Academy";
+            }
             else if (fields.TryGetValue("course_name", out var courseValue) &&
                      courseValue.StartsWith("Autism Awareness", StringComparison.OrdinalIgnoreCase))
             {
                 fields["issuer"] = "Hull City Council";
+            }
+        }
+
+        // Florence Academy-style certificates: "course delivered by Florence Academy on <date>"
+        for (var i = 0; i < normalizedLines.Count; i++)
+        {
+            var line = normalizedLines[i];
+            var m = Regex.Match(line, @"(?i)course delivered by\s+(?<issuer>.+?)\s+on\s+(?<date>.+)");
+            if (m.Success)
+            {
+                var issuerVal = m.Groups["issuer"].Value.Trim();
+                if (!fields.ContainsKey("issuer") && !string.IsNullOrWhiteSpace(issuerVal))
+                {
+                    fields["issuer"] = issuerVal;
+                }
+
+                if (!fields.ContainsKey("issue_date"))
+                {
+                    var dateText = m.Groups["date"].Value.Trim();
+                    if (DateTime.TryParse(dateText, out var dtFlor))
+                    {
+                        fields["issue_date"] = dtFlor.ToString("yyyy-MM-dd");
+                    }
+                }
+
+                if (!fields.ContainsKey("course_name") && i > 0)
+                {
+                    var prev = normalizedLines[i - 1];
+                    if (LooksLikeCourse(prev))
+                    {
+                        fields["course_name"] = prev;
+                    }
+                }
+            }
+
+            if (!fields.ContainsKey("issuer") && line.Contains("florence academy", StringComparison.OrdinalIgnoreCase))
+            {
+                fields["issuer"] = "Florence Academy";
             }
         }
 
@@ -190,6 +280,11 @@ public sealed class OcrWorker : BackgroundService
             else if (existingStaff.Contains("autism", StringComparison.OrdinalIgnoreCase) ||
                      existingStaff.Contains("first aid", StringComparison.OrdinalIgnoreCase))
             {
+                fields.Remove("staff_name");
+            }
+            else if (Regex.IsMatch(existingStaff, @"\d") || Regex.IsMatch(existingStaff, @"^[A-Z0-9]{4,}$"))
+            {
+                // Drop obvious certificate codes or IDs
                 fields.Remove("staff_name");
             }
         }
@@ -229,6 +324,17 @@ public sealed class OcrWorker : BackgroundService
             }
         }
 
+        // Guard against course bleeding into staff field
+        if (fields.TryGetValue("staff_name", out var staffVal) &&
+            fields.TryGetValue("course_name", out var courseVal2))
+        {
+            if (staffVal.Equals(courseVal2, StringComparison.OrdinalIgnoreCase) ||
+                staffVal.Contains(courseVal2, StringComparison.OrdinalIgnoreCase))
+            {
+                fields["staff_name"] = "Unknown";
+            }
+        }
+
         // Issue date: first parsable date line
         if (!fields.ContainsKey("issue_date"))
         {
@@ -254,6 +360,59 @@ public sealed class OcrWorker : BackgroundService
         return fields;
     }
 
+    private static Dictionary<string, string> SanitizeFields(Dictionary<string, string> fields)
+    {
+        var cleaned = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in fields)
+        {
+            var value = NormalizeText(kv.Value);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                cleaned[kv.Key] = value!;
+            }
+        }
+
+        return cleaned;
+    }
+
+    private static string? NormalizeText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var cleaned = value.Trim();
+        cleaned = cleaned.TrimEnd(',', ';');
+        cleaned = TrimQuotes(cleaned);
+
+        cleaned = cleaned.Trim().Trim('"', '\'', '“', '”', '‘', '’');
+        cleaned = cleaned.TrimEnd(',', ';').Trim();
+
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
+    private static string TrimQuotes(string text)
+    {
+        var quotePairs = new (char start, char end)[]
+        {
+            ('"', '"'),
+            ('“', '”'),
+            ('‘', '’'),
+            ('\'', '\'')
+        };
+
+        foreach (var (start, end) in quotePairs)
+        {
+            if (text.Length >= 2 && text.StartsWith(start) && text.EndsWith(end))
+            {
+                return text[1..^1];
+            }
+        }
+
+        return text;
+    }
+
     private static bool LooksLikeName(string line, string? courseValue)
     {
         if (string.IsNullOrWhiteSpace(line)) return false;
@@ -261,8 +420,19 @@ public sealed class OcrWorker : BackgroundService
         if (Regex.IsMatch(line, @"certificate|council|learning|development", RegexOptions.IgnoreCase)) return false;
         if (!string.IsNullOrWhiteSpace(courseValue) && line.Contains(courseValue, StringComparison.OrdinalIgnoreCase)) return false;
         if (line.Contains("Autism", StringComparison.OrdinalIgnoreCase) || line.Contains("First Aid", StringComparison.OrdinalIgnoreCase)) return false;
+        if (Regex.IsMatch(line, @"^[A-Z0-9]{4,}$")) return false;
         // Simple Title Case with at least two words
         return Regex.IsMatch(line, @"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$");
+    }
+
+    private static bool LooksLikeCourse(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (text.Length > 120) return false;
+        if (Regex.IsMatch(text, @"certificate|awarded|date|issue|expires|learning|development", RegexOptions.IgnoreCase)) return false;
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var titleish = words.Count(w => Regex.IsMatch(w, @"^[A-Z][A-Za-z0-9\\-]+$"));
+        return titleish >= 2;
     }
 
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)

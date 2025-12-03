@@ -182,6 +182,8 @@ public static class UploadEndpoints
             var fileHash = ComputeHash(destPath);
             var size = new FileInfo(destPath).Length;
 
+            // Enqueue immediately; deduplication in DocumentIngestionWorker is by tenant + file hash,
+            // so the worker's later OCR pass will update the same record instead of creating a new one.
             await queue.EnqueueAsync(new DocumentDetectedEvent(
                 tenantId,
                 source.Id,

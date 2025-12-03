@@ -1,4 +1,9 @@
 fastapi
 uvicorn[standard]
-python-doctr[torch]
+python-doctr
 Pillow
+opencv-python-headless==4.9.0.80
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
+python-multipart
+--extra-index-url https://download.pytorch.org/whl/cpu

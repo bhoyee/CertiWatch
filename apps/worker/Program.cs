@@ -19,6 +19,7 @@ builder.Services.AddSingleton<ParsingPipeline>();
 builder.Services.AddSingleton<IAzureVisionClient, AzureVisionClient>();
 builder.Services.AddSingleton<ITesseractClient, TesseractClient>();
 builder.Services.AddHttpClient<IDoctrClient, DoctrClient>();
+builder.Services.AddHttpClient<IDeepSeekClient, DeepSeekClient>();
 builder.Services.AddHostedService<OcrWorker>();
 
 builder.Services.AddLogging(logging =>

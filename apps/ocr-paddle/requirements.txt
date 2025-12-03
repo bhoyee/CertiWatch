@@ -1,0 +1,8 @@
+numpy==1.26.4
+fastapi
+uvicorn[standard]
+python-multipart
+paddlepaddle==2.6.2
+# PyMuPDF is pulled by paddleocr; keep it at 1.20.x to use prebuilt wheels
+PyMuPDF==1.20.2
+paddleocr==2.7.0.3
