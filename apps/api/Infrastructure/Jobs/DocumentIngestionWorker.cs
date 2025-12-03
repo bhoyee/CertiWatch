@@ -72,6 +72,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                  ?? parsed.Result.ExpiryDate;
                 var expiryDerived = !parsed.Result.ExpiryDate.HasValue && expiryDate.HasValue;
 
+                _logger.LogInformation("Ingesting file hash {FileHash} with fields staff={Staff} course={Course} issuer={Issuer}", docEvent.FileHash, staff, course, issuer);
+
                 if (!expiryDate.HasValue)
                 {
                     var match = await inference.InferAsync(docEvent.TenantId, course, issuer, docEvent.VendorHints, issueDate, stoppingToken);
@@ -83,16 +85,15 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 }
 
                 // If we have already seen this file hash for the tenant, update the latest record instead of inserting a duplicate
-                var existingDocument = await db.Documents
-                    .Include(d => d.Records)
-                    .Where(d => d.TenantId == docEvent.TenantId && d.FileHash == docEvent.FileHash)
-                    .OrderByDescending(d => d.CreatedAt)
+                var existingRecord = await db.Records
+                    .Include(r => r.Document)
+                    .Where(r => r.TenantId == docEvent.TenantId && r.Document!.FileHash == docEvent.FileHash)
+                    .OrderByDescending(r => r.CreatedAt)
                     .FirstOrDefaultAsync(stoppingToken);
 
-                Document document;
-                if (existingDocument is null)
+                if (existingRecord is null)
                 {
-                    document = new Document
+                    var document = new Document
                     {
                         Id = Guid.NewGuid(),
                         TenantId = docEvent.TenantId,
@@ -105,20 +106,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         CreatedAt = docEvent.DetectedAt
                     };
                     db.Documents.Add(document);
-                }
-                else
-                {
-                    document = existingDocument;
-                    document.SourceId = sourceId;
-                    document.FileName = docEvent.FileName;
-                    document.PathOrUrl = docEvent.PathOrUrl;
-                    document.MimeType = docEvent.MimeType;
-                    document.ProcessingStatus = docEvent.InitialStatus;
-                }
 
-                var existingRecord = document.Records.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
-                if (existingRecord is null)
-                {
                     var record = new Record
                     {
                         Id = Guid.NewGuid(),
@@ -141,6 +129,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 }
                 else
                 {
+                    var document = existingRecord.Document!;
+                    document.SourceId = sourceId;
+                    document.FileName = docEvent.FileName;
+                    document.PathOrUrl = docEvent.PathOrUrl;
+                    document.MimeType = docEvent.MimeType;
+                    document.ProcessingStatus = docEvent.InitialStatus;
+
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
                     existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
                     existingRecord.Issuer = issuer ?? NormalizeText(existingRecord.Issuer) ?? existingRecord.Issuer;
