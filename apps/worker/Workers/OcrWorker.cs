@@ -372,6 +372,20 @@ public sealed class OcrWorker : BackgroundService
             var value = NormalizeText(kv.Value);
             if (!string.IsNullOrWhiteSpace(value))
             {
+                var key = kv.Key.ToLowerInvariant();
+                if (key is "issue_date" or "expiry_date")
+                {
+                    if (DateTime.TryParse(value, out var dt))
+                    {
+                        value = dt.ToString("yyyy-MM-dd");
+                    }
+                    else
+                    {
+                        // Drop non-dates so we don't overwrite good AI dates with noise
+                        continue;
+                    }
+                }
+
                 cleaned[kv.Key] = value!;
             }
         }
