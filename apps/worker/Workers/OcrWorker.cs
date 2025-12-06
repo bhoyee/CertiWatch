@@ -86,6 +86,12 @@ public sealed class OcrWorker : BackgroundService
                     }
                 }
 
+                var fallbackIssueDate = ExtractFirstDate(text);
+                if (!fields.ContainsKey("issue_date") && fallbackIssueDate is not null)
+                {
+                    fields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
+                }
+
                 var sanitizedFields = SanitizeFields(fields);
                 _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
@@ -428,6 +434,31 @@ public sealed class OcrWorker : BackgroundService
         }
 
         return result;
+    }
+
+    private static DateOnly? ExtractFirstDate(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        // Simple date finder that matches common formats
+        var patterns = new[]
+        {
+            @"\b\d{4}-\d{2}-\d{2}\b",
+            @"\b\d{2}/\d{2}/\d{4}\b",
+            @"\b\d{2}-\d{2}-\d{4}\b",
+            @"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b",
+            @"\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December),?\s+\d{4}\b"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+            if (match.Success && DateTime.TryParse(match.Value, out var dt))
+            {
+                return DateOnly.FromDateTime(dt);
+            }
+        }
+
+        return null;
     }
 
     private static string Truncate(string value, int max)
