@@ -77,6 +77,15 @@ public sealed class OcrWorker : BackgroundService
                 var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fileBytes)).ToLowerInvariant();
                 var parsed = _pipeline.Parse(text);
                 var fields = BuildFields(parsed);
+                var aiFields = ExtractAiFields(text);
+                foreach (var kv in aiFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(kv.Value))
+                    {
+                        fields[kv.Key] = kv.Value;
+                    }
+                }
+
                 var sanitizedFields = SanitizeFields(fields);
                 _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
@@ -391,6 +400,34 @@ public sealed class OcrWorker : BackgroundService
         }
 
         return cleaned;
+    }
+
+    private static Dictionary<string, string> ExtractAiFields(string text)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(text)) return result;
+
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            var idx = line.IndexOf(':');
+            if (idx <= 0) continue;
+            var key = line[..idx].Trim();
+            var value = line[(idx + 1)..].Trim();
+            if (string.IsNullOrWhiteSpace(key)) continue;
+
+            // Only take known keys
+            if (key.Equals("staff_name", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("course_name", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("issuer", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("issue_date", StringComparison.OrdinalIgnoreCase) ||
+                key.Equals("expiry_date", StringComparison.OrdinalIgnoreCase))
+            {
+                result[key] = value;
+            }
+        }
+
+        return result;
     }
 
     private static string Truncate(string value, int max)
