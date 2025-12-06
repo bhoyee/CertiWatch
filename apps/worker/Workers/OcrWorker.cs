@@ -115,6 +115,7 @@ public sealed class OcrWorker : BackgroundService
                 try
                 {
                     rawText = await _doctr.ExtractTextAsync(file, token);
+                    _logger.LogInformation("OCR (Doctr) raw preview: {Preview}", Truncate(rawText, 500));
                 }
                 catch (Exception ex)
                 {
@@ -125,10 +126,12 @@ public sealed class OcrWorker : BackgroundService
             else if (useAzure)
             {
                 rawText = await _vision.ExtractTextAsync(file, token);
+                _logger.LogInformation("OCR (Azure Vision) raw preview: {Preview}", Truncate(rawText, 500));
             }
             else
             {
                 rawText = await _tesseract.ExtractTextAsync(file, token);
+                _logger.LogInformation("OCR (Tesseract) raw preview: {Preview}", Truncate(rawText, 500));
             }
 
             // Step 2: DeepSeek extraction on raw OCR text
@@ -137,6 +140,7 @@ public sealed class OcrWorker : BackgroundService
                 try
                 {
                     var refined = await _deepSeek.ExtractTextAsync(rawText, token);
+                    _logger.LogInformation("AI (DeepSeek) response preview: {Preview}", Truncate(refined, 500));
                     if (!string.IsNullOrWhiteSpace(refined))
                     {
                         return refined + Environment.NewLine + rawText;
@@ -373,6 +377,12 @@ public sealed class OcrWorker : BackgroundService
         }
 
         return cleaned;
+    }
+
+    private static string Truncate(string value, int max)
+    {
+        if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
+        return value.Length <= max ? value : value[..max] + "...";
     }
 
     private static string? NormalizeText(string? value)

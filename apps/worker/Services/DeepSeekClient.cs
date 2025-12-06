@@ -105,12 +105,15 @@ If a value is unknown, set it to null. Do not include any extra text or markdown
                     lines.Add($"{prop.Name}: {prop.Value.ToString()}");
                 }
 
+                _logger.LogInformation("DeepSeek parsed fields: {Fields}", string.Join(", ", lines));
                 return string.Join(Environment.NewLine, lines);
             }
             catch
             {
                 // If not valid JSON, just return the content as-is.
-                return content.Trim();
+                var trimmed = content.Trim();
+                _logger.LogInformation("DeepSeek raw content: {Preview}", Truncate(trimmed, 500));
+                return trimmed;
             }
         }
         catch (Exception ex)
@@ -118,5 +121,11 @@ If a value is unknown, set it to null. Do not include any extra text or markdown
             _logger.LogWarning(ex, "Failed to parse DeepSeek response");
             return string.Empty;
         }
+    }
+
+    private static string Truncate(string value, int max)
+    {
+        if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
+        return value.Length <= max ? value : value[..max] + "...";
     }
 }
