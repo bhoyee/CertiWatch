@@ -7,6 +7,7 @@ using CertiWatch.Worker.Services;
 using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 using CertiWatch.Parsing.Models;
+using System.Diagnostics;
 
 namespace CertiWatch.Worker.Workers;
 
@@ -147,6 +148,21 @@ public sealed class OcrWorker : BackgroundService
             {
                 rawText = await _tesseract.ExtractTextAsync(file, token);
                 _logger.LogInformation("OCR (Tesseract) raw preview: {Preview}", Truncate(rawText, 500));
+            }
+
+            // Step 1b: PDF text extraction fallback (captures embedded text like "October 8th 2025")
+            var pdfText = await TryReadPdfTextAsync(file, token);
+            if (!string.IsNullOrWhiteSpace(pdfText))
+            {
+                if (string.IsNullOrWhiteSpace(rawText))
+                {
+                    rawText = pdfText;
+                }
+                else
+                {
+                    rawText = rawText + Environment.NewLine + pdfText;
+                }
+                _logger.LogInformation("PDF text fallback preview: {Preview}", Truncate(pdfText, 500));
             }
 
             // Step 2: DeepSeek extraction on raw OCR text
@@ -467,6 +483,40 @@ public sealed class OcrWorker : BackgroundService
     {
         if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
         return value.Length <= max ? value : value[..max] + "...";
+    }
+
+    private static async Task<string?> TryReadPdfTextAsync(string file, CancellationToken token)
+    {
+        if (!file.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "pdftotext",
+                ArgumentList = { "-layout", file, "-" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                return null;
+            }
+
+            var output = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync(token);
+            return string.IsNullOrWhiteSpace(output) ? null : output;
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal; just log to debug
+            return null;
+        }
     }
 
     private static string? NormalizeText(string? value)
