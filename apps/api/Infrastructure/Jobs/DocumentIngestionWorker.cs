@@ -56,6 +56,9 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     db.Sources.Add(source);
                 }
 
+                var documentType = docEvent.DocumentType ?? "generic_certificate";
+                var extractionConfidence = docEvent.ExtractionConfidence;
+
                 var sanitizedFields = SanitizeFields(docEvent.ExtractedFields);
                 var parsed = _pipeline.Parse(string.Join('\n', sanitizedFields.Select(kv => $"{kv.Key}:{kv.Value}")));
                 var staff = sanitizedFields.GetValueOrDefault("staff_name")
@@ -71,6 +74,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 var expiryDate = TryParse(sanitizedFields.GetValueOrDefault("expiry_date"))
                                  ?? parsed.Result.ExpiryDate;
                 var expiryDerived = !parsed.Result.ExpiryDate.HasValue && expiryDate.HasValue;
+                var recordConfidence = extractionConfidence ?? (decimal)parsed.Result.Confidence;
 
                 _logger.LogInformation("Ingesting file hash {FileHash} with fields staff={Staff} course={Course} issuer={Issuer}", docEvent.FileHash, staff, course, issuer);
 
@@ -102,6 +106,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         FileHash = docEvent.FileHash,
                         PathOrUrl = docEvent.PathOrUrl,
                         MimeType = docEvent.MimeType,
+                        DocumentType = documentType,
+                        ExtractionConfidence = extractionConfidence,
                         ProcessingStatus = docEvent.InitialStatus,
                         CreatedAt = docEvent.DetectedAt
                     };
@@ -118,7 +124,9 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         IssueDate = issueDate,
                         ExpiryDate = expiryDate,
                         ExpiryDerived = expiryDerived,
-                        Confidence = (decimal)parsed.Result.Confidence,
+                        DocumentType = documentType,
+                        ExtractionConfidence = extractionConfidence,
+                        Confidence = recordConfidence,
                         ProcessingStatus = docEvent.InitialStatus,
                         FieldsJson = JsonSerializer.Serialize(sanitizedFields),
                         CreatedAt = docEvent.DetectedAt,
@@ -134,6 +142,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     document.FileName = docEvent.FileName;
                     document.PathOrUrl = docEvent.PathOrUrl;
                     document.MimeType = docEvent.MimeType;
+                    document.DocumentType = documentType;
+                    document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
                     document.ProcessingStatus = docEvent.InitialStatus;
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
@@ -146,7 +156,9 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         existingRecord.ExpiryDerived = expiryDerived;
                     }
 
-                    existingRecord.Confidence = Math.Max(existingRecord.Confidence, (decimal)parsed.Result.Confidence);
+                    existingRecord.DocumentType = documentType;
+                    existingRecord.ExtractionConfidence = extractionConfidence ?? existingRecord.ExtractionConfidence;
+                    existingRecord.Confidence = Math.Max(existingRecord.Confidence, recordConfidence);
                     existingRecord.ProcessingStatus = docEvent.InitialStatus;
                     existingRecord.FieldsJson = JsonSerializer.Serialize(sanitizedFields);
                     existingRecord.UpdatedAt = docEvent.DetectedAt;
