@@ -51,7 +51,7 @@ public static class RecordsEndpoints
 
         var detail = new RecordDetailDto(
             ToDto(entity),
-            new DocumentDto(entity.Document!.Id, entity.Document.TenantId, entity.Document.SourceId, entity.Document.FileName, entity.Document.PathOrUrl, entity.Document.FileHash, entity.Document.MimeType, entity.Document.ProcessingStatus, entity.Document.CreatedAt, entity.Document.ProcessedAt),
+            new DocumentDto(entity.Document!.Id, entity.Document.TenantId, entity.Document.SourceId, entity.Document.FileName, entity.Document.PathOrUrl, entity.Document.FileHash, entity.Document.MimeType, entity.Document.ProcessingStatus, entity.Document.CreatedAt, entity.Document.ProcessedAt, entity.Document.DocumentType, entity.Document.ExtractionConfidence),
             reminders.Select(r => new ReminderDto(r.Id, r.Type, r.RecordId, r.ScheduledFor, r.SentAt)).ToList(),
             audit.Select(a => new AuditLogDto(a.Id, a.ActorId, a.Action, DeserializeMeta(a.MetaJson), a.CreatedAt)).ToList(),
             new List<string> { "approve", "fix-date", "ignore" }
@@ -124,7 +124,9 @@ public static class RecordsEndpoints
             record.ProcessingStatus,
             fields,
             record.CreatedAt,
-            record.UpdatedAt);
+            record.UpdatedAt,
+            record.DocumentType,
+            record.ExtractionConfidence);
     }
 
     private static string? NormalizeText(string? value)
