@@ -11,6 +11,8 @@ public sealed class Document : BaseEntity
     public string FileName { get; set; } = string.Empty;
     public string FileHash { get; set; } = string.Empty;
     public string MimeType { get; set; } = "application/pdf";
+    public string? DocumentType { get; set; }
+    public decimal? ExtractionConfidence { get; set; }
     public DateTime? ProcessedAt { get; set; }
     public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
     public Source? Source { get; set; }
