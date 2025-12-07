@@ -88,6 +88,7 @@ public sealed class OcrWorker : BackgroundService
                 }
 
                 var fallbackIssueDate = ExtractFirstDate(text);
+                _logger.LogInformation("Fallback date probe for {File}: first date in text = {Date}", file, fallbackIssueDate);
                 if ((!fields.TryGetValue("issue_date", out var existingIssue) || string.IsNullOrWhiteSpace(existingIssue)) && fallbackIssueDate is not null)
                 {
                     fields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
@@ -464,8 +465,8 @@ public sealed class OcrWorker : BackgroundService
             @"\b\d{2}-\d{2}-\d{4}\b",
             @"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b",
             @"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December),?\s+\d{4}\b",
-            @"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}\\b",
-            @"\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\\.?\\s+\\d{4}\\b"
+            @"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b",
+            @"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{4}\b"
         };
 
         foreach (var pattern in patterns)
