@@ -103,5 +103,7 @@ public sealed class WeeklyDigestJob : BackgroundService
             record.ProcessingStatus,
             new Dictionary<string, string>(),
             record.CreatedAt,
-            record.UpdatedAt);
+            record.UpdatedAt,
+            record.DocumentType,
+            record.ExtractionConfidence);
 }
