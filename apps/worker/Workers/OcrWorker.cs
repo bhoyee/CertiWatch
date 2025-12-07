@@ -88,9 +88,10 @@ public sealed class OcrWorker : BackgroundService
                 }
 
                 var fallbackIssueDate = ExtractFirstDate(text);
-                if (!fields.ContainsKey("issue_date") && fallbackIssueDate is not null)
+                if ((!fields.TryGetValue("issue_date", out var existingIssue) || string.IsNullOrWhiteSpace(existingIssue)) && fallbackIssueDate is not null)
                 {
                     fields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
+                    _logger.LogInformation("Fallback issue_date extracted as {Date} for {File}", fallbackIssueDate.Value, file);
                 }
 
                 var sanitizedFields = SanitizeFields(fields);
