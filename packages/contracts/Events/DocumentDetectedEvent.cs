@@ -14,5 +14,7 @@ public sealed record DocumentDetectedEvent(
     IReadOnlyList<string> VendorHints,
     IReadOnlyDictionary<string, string> ExtractedFields,
     ProcessingStatus InitialStatus,
-    DateTime DetectedAt
+    DateTime DetectedAt,
+    string? DocumentType = null,
+    decimal? ExtractionConfidence = null
 );
