@@ -12,6 +12,8 @@ public sealed class Record : BaseEntity
     public DateOnly? IssueDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }
     public bool ExpiryDerived { get; set; }
+    public string? DocumentType { get; set; }
+    public decimal? ExtractionConfidence { get; set; }
     public decimal Confidence { get; set; }
     public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
     public string FieldsJson { get; set; } = "{}";
