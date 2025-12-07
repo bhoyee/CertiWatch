@@ -17,5 +17,7 @@ public sealed record RecordDto(
     ProcessingStatus ProcessingStatus,
     IReadOnlyDictionary<string, string>? Fields,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? DocumentType,
+    decimal? ExtractionConfidence
 );
