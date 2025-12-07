@@ -12,5 +12,7 @@ public sealed record DocumentDto(
     string MimeType,
     ProcessingStatus ProcessingStatus,
     DateTime CreatedAt,
-    DateTime? ProcessedAt
+    DateTime? ProcessedAt,
+    string? DocumentType,
+    decimal? ExtractionConfidence
 );
