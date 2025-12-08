@@ -68,27 +68,29 @@ public sealed class OcrWorker : BackgroundService
       var files = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
         .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
 
-      foreach (var file in files)
-      {
-        if (!_processed.TryAdd(file, DateTime.UtcNow))
-        {
-          continue;
-        }
-
-                var text = await ExtractTextAsync(file, token);
-                if (IsLowQuality(text))
+            foreach (var file in files)
+            {
+                if (!_processed.TryAdd(file, DateTime.UtcNow))
                 {
-                    _logger.LogWarning("Skipping {File} due to low-quality OCR/text (length={Length})", file, text?.Length ?? 0);
                     continue;
                 }
-        var fileBytes = await File.ReadAllBytesAsync(file, token);
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fileBytes)).ToLowerInvariant();
-        var parsed = _pipeline.Parse(text);
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // Structured DeepSeek extraction first
-        StructuredExtractionResult? structured = null;
-        try
+                var text = await ExtractTextAsync(file, token);
+                var needsReviewReasons = new List<string>();
+                if (IsLowQuality(text))
+                {
+                    _logger.LogWarning("Flagging {File} for review due to low-quality OCR/text (length={Length})", file, text?.Length ?? 0);
+                    needsReviewReasons.Add("low_quality");
+                }
+                var fileBytes = await File.ReadAllBytesAsync(file, token);
+                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fileBytes)).ToLowerInvariant();
+                var parsed = _pipeline.Parse(text);
+                var vendorHints = parsed.VendorHints?.ToList() ?? new List<string>();
+                var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                // Structured DeepSeek extraction first
+                StructuredExtractionResult? structured = null;
+                try
         {
           structured = await _deepSeek.ExtractStructuredAsync(text, _options.DocumentType, token);
         }
@@ -153,22 +155,40 @@ public sealed class OcrWorker : BackgroundService
                     sanitizedFields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
                 }
 
+                if (extractionConfidence.HasValue && extractionConfidence.Value < 0.90m)
+                {
+                    needsReviewReasons.Add("low_confidence");
+                    vendorHints.Add($"needs_review:low_confidence:{extractionConfidence.Value:F2}");
+                }
+
+                if (needsReviewReasons.Contains("low_quality"))
+                {
+                    vendorHints.Add("needs_review:low_quality");
+                    // If the OCR was low quality, clamp confidence pessimistically to 0.50 max
+                    if (extractionConfidence.HasValue)
+                    {
+                        extractionConfidence = Math.Min(extractionConfidence.Value, 0.50m);
+                    }
+                }
+
+                var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Pending;
+
                 _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
                     _options.TenantId,
                     _options.SourceId,
                     _options.DeviceToken,
           Path.GetFileName(file),
-          file,
-          hash,
-          MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
-          new FileInfo(file).Length,
-          parsed.VendorHints,
-          sanitizedFields,
-          ProcessingStatus.Pending,
-          DateTime.UtcNow,
-          _options.DocumentType,
-          extractionConfidence);
+                    file,
+                    hash,
+                    MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
+                    new FileInfo(file).Length,
+                    vendorHints,
+                    sanitizedFields,
+                    initialStatus,
+                    DateTime.UtcNow,
+                    _options.DocumentType,
+                    extractionConfidence);
 
                 await PublishWithRetryAsync(payload, token);
       }
