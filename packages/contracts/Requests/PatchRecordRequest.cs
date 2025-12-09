@@ -1,3 +1,5 @@
+using CertiWatch.Contracts.Enums;
+
 namespace CertiWatch.Contracts.Requests;
 
 public sealed class PatchRecordRequest
@@ -10,4 +12,8 @@ public sealed class PatchRecordRequest
     public bool? ExpiryDerived { get; init; }
     public bool? Ignore { get; init; }
     public decimal? Confidence { get; init; }
+    public ProcessingStatus? ProcessingStatus { get; init; }
+    public string? ReviewReason { get; init; }
+    public string? ReviewNotes { get; init; }
+    public decimal? ExtractionConfidence { get; init; }
 }

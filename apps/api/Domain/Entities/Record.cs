@@ -16,6 +16,10 @@ public sealed class Record : BaseEntity
     public decimal? ExtractionConfidence { get; set; }
     public decimal Confidence { get; set; }
     public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
+    public string? ReviewReason { get; set; }
+    public string? ReviewNotes { get; set; }
+    public Guid? ReviewedBy { get; set; }
+    public DateTime? ReviewedAt { get; set; }
     public string FieldsJson { get; set; } = "{}";
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public Document? Document { get; set; }
