@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Events;
 using CertiWatch.Parsing;
@@ -155,10 +156,13 @@ public sealed class OcrWorker : BackgroundService
                     sanitizedFields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
                 }
 
-                if (extractionConfidence.HasValue && extractionConfidence.Value < 0.90m)
+                // Required fields gate: if any core field is missing or contains a placeholder value, send to review
+                var requiredKeys = new[] { "staff_name", "course_name", "issuer", "issue_date" };
+                var missingRequired = requiredKeys.Any(k => HasMissingRequiredValue(sanitizedFields, k));
+                if (missingRequired)
                 {
-                    needsReviewReasons.Add("low_confidence");
-                    vendorHints.Add($"needs_review:low_confidence:{extractionConfidence.Value:F2}");
+                    needsReviewReasons.Add("missing_required");
+                    vendorHints.Add("needs_review:missing_required");
                 }
 
                 if (needsReviewReasons.Contains("low_quality"))
@@ -171,7 +175,7 @@ public sealed class OcrWorker : BackgroundService
                     }
                 }
 
-                var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Pending;
+                var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Ok;
 
                 _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
@@ -624,6 +628,25 @@ public sealed class OcrWorker : BackgroundService
     if (dt.Year is < 1900 or > 2100) return false;
     normalized = normalizedDate;
     return true;
+  }
+
+  private static readonly HashSet<string> MissingFieldSentinels = new(StringComparer.OrdinalIgnoreCase)
+  {
+    "null",
+    "unknown",
+    "unknown staff",
+    "unknown course",
+    "unknown issuer",
+    "n/a",
+    "-"
+  };
+
+  private static bool HasMissingRequiredValue(Dictionary<string, string> fields, string key)
+  {
+    if (!fields.TryGetValue(key, out var value)) return true;
+    var trimmed = value?.Trim();
+    if (string.IsNullOrWhiteSpace(trimmed)) return true;
+    return MissingFieldSentinels.Contains(trimmed);
   }
 
   private static decimal? BlendConfidence(StructuredExtractionResult? structured, Dictionary<string, string> finalFields)
