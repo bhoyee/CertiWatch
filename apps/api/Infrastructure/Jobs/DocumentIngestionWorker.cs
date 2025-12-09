@@ -58,6 +58,9 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                 var documentType = docEvent.DocumentType ?? "generic_certificate";
                 var extractionConfidence = docEvent.ExtractionConfidence;
+                var reviewHints = docEvent.VendorHints.Where(h => h.StartsWith("needs_review", StringComparison.OrdinalIgnoreCase)).ToList();
+                var reviewReason = reviewHints.Count > 0 ? string.Join(";", reviewHints) : null;
+                var processingStatus = reviewHints.Count > 0 ? ProcessingStatus.NeedsReview : docEvent.InitialStatus;
 
                 var sanitizedFields = SanitizeFields(docEvent.ExtractedFields);
                 var parsed = _pipeline.Parse(string.Join('\n', sanitizedFields.Select(kv => $"{kv.Key}:{kv.Value}")));
@@ -108,7 +111,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         MimeType = docEvent.MimeType,
                         DocumentType = documentType,
                         ExtractionConfidence = extractionConfidence,
-                        ProcessingStatus = docEvent.InitialStatus,
+                        ProcessingStatus = processingStatus,
                         CreatedAt = docEvent.DetectedAt
                     };
                     db.Documents.Add(document);
@@ -127,7 +130,11 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         DocumentType = documentType,
                         ExtractionConfidence = extractionConfidence,
                         Confidence = recordConfidence,
-                        ProcessingStatus = docEvent.InitialStatus,
+                        ProcessingStatus = processingStatus,
+                        ReviewReason = reviewReason,
+                        ReviewNotes = null,
+                        ReviewedAt = null,
+                        ReviewedBy = null,
                         FieldsJson = JsonSerializer.Serialize(sanitizedFields),
                         CreatedAt = docEvent.DetectedAt,
                         UpdatedAt = docEvent.DetectedAt
@@ -144,7 +151,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     document.MimeType = docEvent.MimeType;
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
-                    document.ProcessingStatus = docEvent.InitialStatus;
+                    document.ProcessingStatus = processingStatus;
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
                     existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
@@ -159,7 +166,31 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     existingRecord.DocumentType = documentType;
                     existingRecord.ExtractionConfidence = extractionConfidence ?? existingRecord.ExtractionConfidence;
                     existingRecord.Confidence = Math.Max(existingRecord.Confidence, recordConfidence);
-                    existingRecord.ProcessingStatus = docEvent.InitialStatus;
+
+                    // Auto-clear NeedsReview if a subsequent high-confidence pass succeeds without review hints.
+                    var shouldAutoClear = existingRecord.ProcessingStatus == ProcessingStatus.NeedsReview
+                                          && processingStatus != ProcessingStatus.NeedsReview
+                                          && existingRecord.Confidence >= 0.90m;
+                    if (shouldAutoClear)
+                    {
+                        processingStatus = ProcessingStatus.Ok;
+                    }
+
+                    existingRecord.ProcessingStatus = processingStatus;
+                    if (processingStatus == ProcessingStatus.NeedsReview)
+                    {
+                        existingRecord.ReviewReason = reviewReason;
+                        existingRecord.ReviewNotes = null;
+                        existingRecord.ReviewedBy = null;
+                        existingRecord.ReviewedAt = null;
+                    }
+                    else
+                    {
+                        existingRecord.ReviewReason = null;
+                        existingRecord.ReviewNotes = null;
+                        existingRecord.ReviewedBy = null;
+                        existingRecord.ReviewedAt = null;
+                    }
                     existingRecord.FieldsJson = JsonSerializer.Serialize(sanitizedFields);
                     existingRecord.UpdatedAt = docEvent.DetectedAt;
                     _logger.LogInformation("Updated record {RecordId} for hash {FileHash} with staff={Staff} course={Course}", existingRecord.Id, docEvent.FileHash, existingRecord.StaffName, existingRecord.CourseName);

@@ -1,21 +1,33 @@
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using System.IO;
 
 namespace CertiWatch.Api.Features.Documents;
 
 public static class DocumentsEndpoints
 {
+    private static readonly FileExtensionContentTypeProvider MimeProvider = new();
+
     public static IEndpointRouteBuilder MapDocumentEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/documents").RequireAuthorization();
         group.MapGet("/{id:guid}/preview", PreviewAsync);
+        group.MapGet("/{id:guid}/file", StreamAsync);
         return group;
     }
 
-    private static async Task<IResult> PreviewAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    private static async Task<IResult> PreviewAsync(
+        Guid id,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
     {
-        var document = await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+        var document = await db.Documents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+
         if (document is null)
         {
             return Results.NotFound();
@@ -29,5 +41,45 @@ public static class DocumentsEndpoints
             document.PathOrUrl,
             document.ProcessingStatus
         });
+    }
+
+    private static async Task<IResult> StreamAsync(
+        Guid id,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        HttpContext httpContext,
+        CancellationToken token)
+    {
+        var document = await db.Documents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+
+        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !File.Exists(document.PathOrUrl))
+        {
+            return Results.NotFound();
+        }
+
+        // Resolve a good content type
+        string contentType = document.MimeType ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            if (!MimeProvider.TryGetContentType(document.FileName, out contentType))
+            {
+                // If most of your stored docs are PDF, default to PDF
+                contentType = "application/pdf";
+            }
+        }
+
+        var stream = File.OpenRead(document.PathOrUrl);
+
+        // Force inline preview instead of attachment
+        httpContext.Response.Headers["Content-Disposition"] =
+            $"inline; filename=\"{document.FileName}\"";
+
+        // Optional hardening
+        httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        return Results.File(stream, contentType, enableRangeProcessing: true);
     }
 }

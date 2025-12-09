@@ -22,6 +22,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Serilog;
 using CertiWatch.Contracts.Requests;
 using Stripe;
@@ -87,6 +88,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.SlidingExpiration = true;
         options.Cookie.Name = "certiwatch_admin";
+        options.Cookie.SameSite = SameSiteMode.None;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.LoginPath = "/login";
     });
 
@@ -163,9 +166,9 @@ public static class SecurityHeaderExtensions
         return app.Use(async (context, next) =>
         {
             context.Response.Headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains";
-            context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'";
+            context.Response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; frame-ancestors 'self' http://localhost:3300 http://127.0.0.1:3300";
             context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-            context.Response.Headers["X-Frame-Options"] = "DENY";
             await next();
         });
     }

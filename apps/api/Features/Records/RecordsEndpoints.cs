@@ -78,6 +78,32 @@ public static class RecordsEndpoints
             entity.ExpiryDerived = false;
         }
         if (request.Confidence.HasValue) entity.Confidence = request.Confidence.Value;
+        if (request.ExtractionConfidence.HasValue) entity.ExtractionConfidence = request.ExtractionConfidence.Value;
+
+        if (request.ReviewReason is not null) entity.ReviewReason = request.ReviewReason;
+        if (request.ReviewNotes is not null) entity.ReviewNotes = request.ReviewNotes;
+
+        if (request.ProcessingStatus.HasValue)
+        {
+            entity.ProcessingStatus = request.ProcessingStatus.Value;
+            if (entity.ProcessingStatus == ProcessingStatus.NeedsReview)
+            {
+                entity.ReviewedBy = null;
+                entity.ReviewedAt = null;
+            }
+            else
+            {
+                entity.ReviewedBy = tenantAccessor.Current.UserId;
+                entity.ReviewedAt = clock.UtcNow;
+            }
+        }
+        else if (entity.ProcessingStatus != ProcessingStatus.NeedsReview && entity.ReviewedAt is null)
+        {
+            // If status is already resolved, stamp reviewer on first edit.
+            entity.ReviewedBy = tenantAccessor.Current.UserId;
+            entity.ReviewedAt = clock.UtcNow;
+        }
+
         entity.UpdatedAt = clock.UtcNow;
         await db.SaveChangesAsync(token);
 
@@ -122,6 +148,10 @@ public static class RecordsEndpoints
                 _ => RecordConfidenceBand.Unknown
             },
             record.ProcessingStatus,
+            record.ReviewReason,
+            record.ReviewNotes,
+            record.ReviewedBy,
+            record.ReviewedAt,
             fields,
             record.CreatedAt,
             record.UpdatedAt,
