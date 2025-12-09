@@ -9,4 +9,10 @@ export interface RecordDto {
   confidence?: number;
   documentType?: string | null;
   extractionConfidence?: number | null;
+  processingStatus?: number | string;
+  reviewReason?: string | null;
+  reviewNotes?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  fields?: Record<string, string>;
 }

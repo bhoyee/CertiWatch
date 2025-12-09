@@ -29,3 +29,25 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
 
   return (await response.json()) as TResponse;
 }
+
+export async function patchJson<TResponse, TBody extends Record<string, unknown>>(
+  path: string,
+  body: TBody
+): Promise<TResponse> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
