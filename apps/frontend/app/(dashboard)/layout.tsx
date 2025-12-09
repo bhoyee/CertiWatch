@@ -7,6 +7,7 @@ import { PlanBanner } from "./PlanBanner";
 const navItems = [
   { href: "/analytics", label: "Analytics" },
   { href: "/records", label: "Records" },
+  { href: "/review", label: "Review" },
   { href: "/rules", label: "Rules" },
   { href: "/devices", label: "Devices" },
   { href: "/uploads", label: "Uploads" },
