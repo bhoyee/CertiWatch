@@ -51,3 +51,16 @@ export async function patchJson<TResponse, TBody extends Record<string, unknown>
 
   return (await response.json()) as TResponse;
 }
+
+export async function deleteJson(path: string): Promise<void> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const response = await fetch(url, {
+    method: "DELETE",
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+}
