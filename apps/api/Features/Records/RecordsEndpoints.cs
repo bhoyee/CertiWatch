@@ -8,6 +8,7 @@ using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using Microsoft.EntityFrameworkCore;
+using System.IO;
 
 namespace CertiWatch.Api.Features.Records;
 
@@ -19,6 +20,7 @@ public static class RecordsEndpoints
         group.MapGet(string.Empty, ListAsync);
         group.MapGet("/{id:guid}", GetAsync);
         group.MapPatch("/{id:guid}", PatchAsync);
+        group.MapDelete("/{id:guid}", DeleteAsync);
         return group;
     }
 
@@ -119,6 +121,49 @@ public static class RecordsEndpoints
         await db.SaveChangesAsync(token);
 
         return Results.Ok(ToDto(entity));
+    }
+
+    private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
+    {
+        var entity = await db.Records.Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
+        if (entity is null)
+        {
+            return Results.NotFound();
+        }
+
+        var reminders = db.Reminders.Where(r => r.RecordId == id);
+        db.Reminders.RemoveRange(reminders);
+
+        var document = entity.Document;
+
+        db.Records.Remove(entity);
+
+        if (document is not null)
+        {
+            var hasOtherRecords = await db.Records.AsNoTracking()
+                .AnyAsync(r => r.DocumentId == document.Id && r.Id != entity.Id && r.TenantId == entity.TenantId, token);
+            if (!hasOtherRecords)
+            {
+                db.Documents.Remove(document);
+                if (!string.IsNullOrWhiteSpace(document.PathOrUrl) && File.Exists(document.PathOrUrl))
+                {
+                    File.Delete(document.PathOrUrl);
+                }
+            }
+        }
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = entity.TenantId,
+            ActorId = tenantAccessor.Current.UserId,
+            Action = "record.deleted",
+            MetaJson = JsonSerializer.Serialize(new { id }),
+            CreatedAt = clock.UtcNow
+        });
+
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
     }
 
     internal static RecordDto ToDtoForReport(Record record) => ToDto(record);
