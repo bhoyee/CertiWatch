@@ -91,6 +91,19 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
                 }
 
+                // Safeguard: if the course doesn't match any global or tenant rule, force review
+                var courseAllowed = await IsCourseAllowedAsync(db, docEvent.TenantId, course, issuer, docEvent.VendorHints, stoppingToken);
+                if (!courseAllowed)
+                {
+                    var ruleHint = "needs_review:unknown_course";
+                    if (!reviewHints.Contains(ruleHint))
+                    {
+                        reviewHints.Add(ruleHint);
+                    }
+                    reviewReason = string.Join(";", reviewHints);
+                    processingStatus = ProcessingStatus.NeedsReview;
+                }
+
                 // If we have already seen this file hash for the tenant, update the latest record instead of inserting a duplicate
                 var existingRecord = await db.Records
                     .Include(r => r.Document)
@@ -280,5 +293,52 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
         var tokens = DefaultUnknownTokens.Concat(unknownTokens);
         return tokens.Any(token => value.Equals(token, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static async Task<bool> IsCourseAllowedAsync(
+        AppDbContext db,
+        Guid tenantId,
+        string? courseName,
+        string? issuer,
+        IEnumerable<string>? tags,
+        CancellationToken token)
+    {
+        var globalRules = await db.CourseRules
+            .AsNoTracking()
+            .Where(r => r.TenantId == null)
+            .Select(r => new CourseRuleDefinition
+            {
+                Id = r.Id,
+                TenantId = r.TenantId,
+                CourseName = r.CourseName,
+                MatchRegex = r.MatchRegex,
+                Tag = r.Tag,
+                IssuerOverride = r.IssuerOverride,
+                DefaultValidityMonths = r.DefaultValidityMonths,
+                IsOneTime = r.IsOneTime,
+                IsRenewable = r.IsRenewable
+            })
+            .ToListAsync(token);
+
+        var tenantRules = await db.CourseRules
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId)
+            .Select(r => new CourseRuleDefinition
+            {
+                Id = r.Id,
+                TenantId = r.TenantId,
+                CourseName = r.CourseName,
+                MatchRegex = r.MatchRegex,
+                Tag = r.Tag,
+                IssuerOverride = r.IssuerOverride,
+                DefaultValidityMonths = r.DefaultValidityMonths,
+                IsOneTime = r.IsOneTime,
+                IsRenewable = r.IsRenewable
+            })
+            .ToListAsync(token);
+
+        var engine = new CourseRuleEngine(globalRules);
+        var match = engine.Resolve(courseName, issuer, tags, tenantRules);
+        return match is not null && match.Precedence != RulePrecedence.Fallback;
     }
 }
