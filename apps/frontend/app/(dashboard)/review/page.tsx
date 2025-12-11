@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchJson, patchJson } from "../../../lib/api";
+import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
 
 type RecordDto = {
   id: string;
@@ -117,6 +117,12 @@ export default function ReviewQueuePage() {
       fetchDetail(selectedId);
     }
   }, [fetchDetail, load, selectedId]);
+
+  const handleDeleted = useCallback(() => {
+    setDetail(null);
+    setSelectedId(null);
+    load();
+  }, [load]);
 
   const selectedRecord =
     detail?.record ?? (records.find((record) => record.id === selectedId) ?? null);
@@ -240,7 +246,7 @@ export default function ReviewQueuePage() {
 
           {!detailLoading && detail && (
             <div className="mt-4">
-              <ReviewCard key={detail.record.id} record={detail.record} onUpdated={refreshDetail} />
+              <ReviewCard key={detail.record.id} record={detail.record} onUpdated={refreshDetail} onDeleted={handleDeleted} />
             </div>
           )}
 
@@ -261,7 +267,7 @@ export default function ReviewQueuePage() {
   );
 }
 
-function ReviewCard({ record, onUpdated }: { record: RecordDto; onUpdated: () => void }) {
+function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpdated: () => void; onDeleted: () => void }) {
   const [staffName, setStaffName] = useState(record.staffName ?? "");
   const [courseName, setCourseName] = useState(record.courseName ?? "");
   const [issuer, setIssuer] = useState(record.issuer ?? "");
@@ -270,6 +276,7 @@ function ReviewCard({ record, onUpdated }: { record: RecordDto; onUpdated: () =>
   const [reviewNotes, setReviewNotes] = useState(record.reviewNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const confidenceText = useMemo(() => {
     if (record.extractionConfidence != null) return `${(record.extractionConfidence * 100).toFixed(0)}% AI`;
@@ -296,6 +303,28 @@ function ReviewCard({ record, onUpdated }: { record: RecordDto; onUpdated: () =>
     } finally {
       setSaving(false);
     }
+  };
+
+  const remove = () => {
+    setConfirmingDelete(true);
+  };
+
+  const confirmDelete = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteJson(`/api/records/${record.id}`);
+      onDeleted();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to delete record");
+    } finally {
+      setSaving(false);
+      setConfirmingDelete(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    setConfirmingDelete(false);
   };
 
   return (
@@ -359,8 +388,41 @@ function ReviewCard({ record, onUpdated }: { record: RecordDto; onUpdated: () =>
         >
           Save & keep in queue
         </button>
+        <button
+          onClick={remove}
+          disabled={saving}
+          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+        >
+          Reject & delete
+        </button>
         <p className="text-xs text-slate-500">Created at {formatDate(record.createdAt)}</p>
       </div>
+
+      {confirmingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
+          <div className="w-[360px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">Delete record?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete the record and its document. This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={cancelDelete}
+                className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={saving}
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {saving ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
