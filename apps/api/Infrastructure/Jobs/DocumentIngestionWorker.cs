@@ -315,11 +315,11 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
         foreach (var rule in rules)
         {
-            // Exact or wildcard match on course
+            // Exact match on course
             if (!string.IsNullOrWhiteSpace(rule.CourseName))
             {
                 var ruleCourse = NormalizeKey(rule.CourseName);
-                if (ruleCourse == "*" || ruleCourse == normalizedCourse)
+                if (ruleCourse == normalizedCourse)
                 {
                     return true;
                 }
@@ -352,5 +352,11 @@ public sealed class DocumentIngestionWorker : BackgroundService
     }
 
     private static string? NormalizeKey(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var cleaned = value.Trim().TrimEnd('.', ',', ';', ':', '-').ToLowerInvariant();
+        cleaned = Regex.Replace(cleaned, @"\s{2,}", " ");
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
 }
