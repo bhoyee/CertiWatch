@@ -53,6 +53,9 @@ export default function UploadPage() {
       );
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 409) {
+          throw new Error("This document was already uploaded. Contact support if you need to replace it.");
+        }
         throw new Error(text || "Upload failed");
       }
       setStatus("success");
