@@ -13,8 +13,8 @@ type AnalyticsOverviewDto = {
   statusCounts: Record<string, number>;
   expiringSoonList: Array<{
     id: string;
-    staffName: string;
-    courseName: string;
+    staffName: string | null;
+    courseName: string | null;
     issuer: string | null;
     issueDate: string | null;
     expiryDate: string | null;
@@ -63,11 +63,7 @@ export default function AnalyticsPage() {
       const staff = (r.staffName ?? "").toLowerCase();
       const course = (r.courseName ?? "").toLowerCase();
       const issuer = (r.issuer ?? "").toLowerCase();
-      return (
-        staff.includes(term) ||
-        course.includes(term) ||
-        issuer.includes(term)
-      );
+      return staff.includes(term) || course.includes(term) || issuer.includes(term);
     });
   }, [expiringList, search]);
 
@@ -170,10 +166,10 @@ export default function AnalyticsPage() {
             <tbody className="divide-y divide-slate-200">
               {visibleSoon.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <Cell>{r.staffName}</Cell>
-                  <Cell>{r.courseName}</Cell>
+                  <Cell>{r.staffName ?? "--"}</Cell>
+                  <Cell>{r.courseName ?? "--"}</Cell>
                   <Cell>{r.expiryDate ?? "--"}</Cell>
-                  <Cell className="capitalize">{String(r.processingStatus).toLowerCase()}</Cell>
+                  <Cell className="capitalize">{String(r.processingStatus ?? "").toLowerCase()}</Cell>
                 </tr>
               ))}
               {visibleSoon.length === 0 && (
@@ -188,8 +184,7 @@ export default function AnalyticsPage() {
         </div>
         <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
           <span>
-            Showing {sortedSoon.length === 0 ? 0 : start + 1}–{Math.min(sortedSoon.length, start + pageSize)} of{" "}
-            {sortedSoon.length} records
+            Showing {sortedSoon.length === 0 ? 0 : start + 1}-{Math.min(sortedSoon.length, start + pageSize)} of {sortedSoon.length} records
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -230,7 +225,7 @@ function StatusBars({ entries }: { entries: Array<[string, number]> }) {
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span className="capitalize">{status.toLowerCase()}</span>
                 <span>
-                  {count} • {pct}%
+                  {count} | {pct}%
                 </span>
               </div>
               <div className="mt-1 h-2 rounded-full bg-slate-100">
