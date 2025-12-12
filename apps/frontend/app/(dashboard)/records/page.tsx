@@ -5,6 +5,7 @@ import { fetchJson } from "../../../lib/api";
 
 type RecordDto = {
   id: string;
+  documentId?: string;
   staffName: string;
   courseName: string;
   issuer: string | null;
@@ -36,6 +37,9 @@ export default function RecordsPage() {
   const [status, setStatus] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const toggleSort = (field: string) => {
     setPage(1);
@@ -69,6 +73,30 @@ export default function RecordsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const requestDelete = (rec: RecordDto) => {
+    setConfirmDeleteId(rec.id);
+    setConfirmDeleteName(`${rec.staffName} – ${rec.courseName}`);
+  };
+
+  const performDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/records/${confirmDeleteId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Delete failed (${res.status})`);
+      }
+      setConfirmDeleteId(null);
+      setConfirmDeleteName(null);
+      await load();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to delete record");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (error) {
     return <ErrorCard message={error} />;
@@ -135,7 +163,7 @@ export default function RecordsPage() {
           </button>
           <span className="text-xs text-slate-500">
             Total: {data.total}
-            {lastUpdated && <> · Updated {lastUpdated.toLocaleTimeString()}</>}
+            {lastUpdated && <> • Updated {lastUpdated.toLocaleTimeString()}</>}
           </span>
         </div>
       </div>
@@ -165,6 +193,7 @@ export default function RecordsPage() {
               <Header onClick={() => toggleSort("processingStatus")} sortField={sortField} sortDir={sortDir} field="processingStatus">
                 Status
               </Header>
+              <Header>Actions</Header>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -180,6 +209,22 @@ export default function RecordsPage() {
                 </Cell>
                 <Cell>{formatConfidence(r.extractionConfidence)}</Cell>
                 <Cell>{statusBadge(r.processingStatus, r.id)}</Cell>
+                <Cell>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`/review?recordId=${r.id}`}
+                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      View
+                    </a>
+                    <button
+                      onClick={() => requestDelete(r)}
+                      className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </Cell>
               </tr>
             ))}
           </tbody>
@@ -207,6 +252,39 @@ export default function RecordsPage() {
           </button>
         </div>
       </div>
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Delete record?</h3>
+            <p className="mt-2 text-sm text-slate-700">
+              This will permanently delete the record{confirmDeleteName ? ` “${confirmDeleteName}”` : ""} and its file (if
+              unused elsewhere). This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (!deleting) {
+                    setConfirmDeleteId(null);
+                    setConfirmDeleteName(null);
+                  }
+                }}
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performDelete}
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
