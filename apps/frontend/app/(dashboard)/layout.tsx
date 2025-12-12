@@ -46,6 +46,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <TopBar />
           <PlanBanner />
           <div className="mt-4 space-y-4">{children}</div>
+          <Footer />
         </main>
       </div>
     </div>
@@ -150,5 +151,26 @@ function NavLinks({ onClick }: { onClick?: () => void } = {}) {
         );
       })}
     </nav>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="mt-6 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs text-slate-500 shadow-sm">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <span>© {new Date().getFullYear()} CertiWatch. All rights reserved.</span>
+        <span className="flex items-center gap-3">
+          <a href="/terms" className="hover:text-slate-800">
+            Terms
+          </a>
+          <a href="/privacy" className="hover:text-slate-800">
+            Privacy
+          </a>
+          <a href="/support" className="hover:text-slate-800">
+            Support
+          </a>
+        </span>
+      </div>
+    </footer>
   );
 }
