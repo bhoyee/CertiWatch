@@ -11,6 +11,7 @@ using CertiWatch.Parsing.Models;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Globalization;
+using System.Security.Cryptography;
 
 namespace CertiWatch.Worker.Workers;
 
@@ -76,6 +77,13 @@ public sealed class OcrWorker : BackgroundService
                     continue;
                 }
 
+                var fileHash = ComputeFileHash(file);
+                var hashExists = await _apiClient.FileHashExistsAsync(_options.DeviceId, fileHash, token);
+                if (hashExists)
+                {
+                    _logger.LogInformation("Duplicate file detected for tenant; reprocessing to refresh fields: {File}", file);
+                }
+
                 var text = await ExtractTextAsync(file, token);
                 var needsReviewReasons = new List<string>();
                 if (IsLowQuality(text))
@@ -83,8 +91,6 @@ public sealed class OcrWorker : BackgroundService
                     _logger.LogWarning("Flagging {File} for review due to low-quality OCR/text (length={Length})", file, text?.Length ?? 0);
                     needsReviewReasons.Add("low_quality");
                 }
-                var fileBytes = await File.ReadAllBytesAsync(file, token);
-                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fileBytes)).ToLowerInvariant();
                 var parsed = _pipeline.Parse(text);
                 var vendorHints = parsed.VendorHints?.ToList() ?? new List<string>();
                 var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -184,7 +190,7 @@ public sealed class OcrWorker : BackgroundService
                     _options.DeviceToken,
           Path.GetFileName(file),
                     file,
-                    hash,
+                    fileHash,
                     MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
                     new FileInfo(file).Length,
                     vendorHints,
@@ -789,6 +795,13 @@ public sealed class OcrWorker : BackgroundService
     return titleish >= 2;
   }
 
+  private static string ComputeFileHash(string path)
+  {
+    using var stream = File.OpenRead(path);
+    var hash = SHA256.HashData(stream);
+    return Convert.ToHexString(hash).ToLowerInvariant();
+  }
+
   private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
   {
     ".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff"
@@ -804,4 +817,3 @@ public sealed class OcrWorker : BackgroundService
     [".tiff"] = "image/tiff"
   };
 }
-
