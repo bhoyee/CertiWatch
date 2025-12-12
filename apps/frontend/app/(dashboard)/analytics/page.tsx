@@ -43,12 +43,12 @@ export default function AnalyticsPage() {
   if (!data) return <LoadingCard />;
 
   const cards = [
-    { label: "Total records", value: data.totalRecords },
-    { label: "Expiring soon", value: data.expiringSoon },
-    { label: "Expired", value: data.expired },
-    { label: "Low confidence", value: data.lowConfidence },
-    { label: "Devices", value: data.devices },
-    { label: "Sources", value: data.sources }
+    { label: "Total records", value: data.totalRecords, accent: "from-indigo-500 to-blue-500" },
+    { label: "Expiring soon", value: data.expiringSoon, accent: "from-amber-500 to-orange-400" },
+    { label: "Expired", value: data.expired, accent: "from-rose-500 to-red-500" },
+    { label: "Low confidence", value: data.lowConfidence, accent: "from-slate-500 to-slate-600" },
+    { label: "Devices", value: data.devices, accent: "from-emerald-500 to-green-500" },
+    { label: "Sources", value: data.sources, accent: "from-cyan-500 to-sky-500" }
   ];
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
@@ -101,9 +101,17 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-600">{card.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</p>
+          <div
+            key={card.label}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">{card.label}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</p>
+              </div>
+              <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${card.accent} opacity-80`} />
+            </div>
           </div>
         ))}
       </div>
@@ -211,12 +219,21 @@ export default function AnalyticsPage() {
 function StatusBars({ entries }: { entries: Array<[string, number]> }) {
   const total = entries.reduce((acc, [, v]) => acc + v, 0);
   if (total === 0) return null;
+  const colorFor = (status: string) => {
+    const key = status.toLowerCase();
+    if (key.includes("review")) return "bg-rose-500";
+    if (key.includes("ok")) return "bg-emerald-500";
+    if (key.includes("pending")) return "bg-amber-500";
+    if (key.includes("fail")) return "bg-slate-500";
+    return "bg-blue-500";
+  };
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="mb-3 text-sm font-medium text-slate-900">Processing status</p>
       <div className="space-y-2">
         {entries.map(([status, count]) => {
           const pct = Math.round((count / total) * 100);
+          const bar = colorFor(status);
           return (
             <div key={status}>
               <div className="flex items-center justify-between text-sm text-slate-600">
@@ -226,7 +243,7 @@ function StatusBars({ entries }: { entries: Array<[string, number]> }) {
                 </span>
               </div>
               <div className="mt-1 h-2 rounded-full bg-slate-100">
-                <div className="h-2 rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                <div className={`h-2 rounded-full ${bar}`} style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
