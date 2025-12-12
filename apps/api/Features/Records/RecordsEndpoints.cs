@@ -7,6 +7,7 @@ using CertiWatch.Contracts.Dtos;
 using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
 
