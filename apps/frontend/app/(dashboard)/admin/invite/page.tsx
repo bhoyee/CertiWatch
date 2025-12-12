@@ -32,7 +32,7 @@ export default function InvitePage() {
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="cw-card space-y-4 p-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Invite an admin</h1>
         <p className="text-sm text-slate-600">Send a magic-link invite to a teammate.</p>
