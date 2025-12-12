@@ -49,17 +49,37 @@ public sealed class OcrWorker : BackgroundService
 
   protected override async Task ExecuteAsync(CancellationToken stoppingToken)
   {
-    _logger.LogInformation("CertiWatch worker started. Watching {Paths}", string.Join(",", _options.WatchPaths));
+    var watchPaths = _options.WatchPaths?.ToList() ?? new List<string>();
+    if (!_options.EnableSampleDocuments)
+    {
+      watchPaths = watchPaths.Where(p => !p.Contains("samples", StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    if (!_options.EnableWatcher || watchPaths.Count == 0)
+    {
+      _logger.LogInformation("CertiWatch worker watcher disabled; no paths to scan.");
+      try
+      {
+        await Task.Delay(Timeout.Infinite, stoppingToken);
+      }
+      catch (TaskCanceledException)
+      {
+        // ignore
+      }
+      return;
+    }
+
+    _logger.LogInformation("CertiWatch worker started. Watching {Paths}", string.Join(",", watchPaths));
     while (!stoppingToken.IsCancellationRequested)
     {
-      await ScanOnceAsync(stoppingToken);
+      await ScanOnceAsync(stoppingToken, watchPaths);
       await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
     }
   }
 
-  private async Task ScanOnceAsync(CancellationToken token)
+  private async Task ScanOnceAsync(CancellationToken token, List<string> watchPaths)
   {
-    foreach (var path in _options.WatchPaths)
+    foreach (var path in watchPaths)
     {
       if (!Directory.Exists(path))
       {
@@ -78,10 +98,16 @@ public sealed class OcrWorker : BackgroundService
                 }
 
                 var fileHash = ComputeFileHash(file);
-                var hashExists = await _apiClient.FileHashExistsAsync(_options.DeviceId, fileHash, token);
-                if (hashExists)
+                var forceReprocess = file.Contains("/reprocess/", StringComparison.OrdinalIgnoreCase) || file.Contains("\\reprocess\\", StringComparison.OrdinalIgnoreCase);
+                var hashStatus = await _apiClient.GetFileHashStatusAsync(_options.DeviceId, fileHash, token);
+                if (!forceReprocess && hashStatus is not null && hashStatus.Exists && !hashStatus.ShouldReprocess)
                 {
-                    _logger.LogInformation("Duplicate file detected for tenant; reprocessing to refresh fields: {File}", file);
+                    _logger.LogInformation("Skipping {File} because hash already ingested and record is complete for this tenant", file);
+                    continue;
+                }
+                if (hashStatus is not null && hashStatus.Exists && hashStatus.ShouldReprocess)
+                {
+                    _logger.LogInformation("Duplicate file detected; reprocessing incomplete record: {File}", file);
                 }
 
                 var text = await ExtractTextAsync(file, token);

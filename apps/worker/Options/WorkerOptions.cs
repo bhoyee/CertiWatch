@@ -14,7 +14,9 @@ public sealed class WorkerOptions
     public string DoctrBaseUrl { get; set; } = string.Empty;
     public string DeepSeekApiKey { get; set; } = string.Empty;
     public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com";
-    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { DefaultSamplesPath, UploadsPath };
+    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { UploadsPath };
+    public bool EnableWatcher { get; set; } = true;
+    public bool EnableSampleDocuments { get; set; } = false;
     public string DocumentType { get; set; } = "generic_certificate";
 
     private static string DefaultSamplesPath =>

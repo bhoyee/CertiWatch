@@ -3,6 +3,8 @@ using CertiWatch.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
+using CertiWatch.Api.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace CertiWatch.Api.Features.Documents;
 
@@ -15,6 +17,7 @@ public static class DocumentsEndpoints
         var group = routes.MapGroup("/api/documents").RequireAuthorization();
         group.MapGet("/{id:guid}/preview", PreviewAsync);
         group.MapGet("/{id:guid}/file", StreamAsync);
+        group.MapPost("/{id:guid}/reprocess", ReprocessAsync);
         return group;
     }
 
@@ -81,5 +84,29 @@ public static class DocumentsEndpoints
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
 
         return Results.File(stream, contentType, enableRangeProcessing: true);
+    }
+
+    private static async Task<IResult> ReprocessAsync(
+        Guid id,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IOptions<StorageOptions> storageOptions,
+        CancellationToken token)
+    {
+        var document = await db.Documents.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+
+        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !File.Exists(document.PathOrUrl))
+        {
+            return Results.NotFound();
+        }
+
+        var uploadsRoot = storageOptions.Value.UploadsRoot ?? "/uploads";
+        var reprocessDir = Path.Combine(uploadsRoot, document.TenantId.ToString(), "reprocess", id.ToString("N"));
+        Directory.CreateDirectory(reprocessDir);
+        var destPath = Path.Combine(reprocessDir, Path.GetFileName(document.FileName));
+        File.Copy(document.PathOrUrl, destPath, overwrite: true);
+
+        return Results.Ok(new { queued = true, path = destPath });
     }
 }

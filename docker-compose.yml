@@ -80,6 +80,8 @@ services:
       WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
       WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
       DOTNET_ENVIRONMENT: Development
+      WORKER__EnableWatcher: "true"
+      WORKER__EnableSampleDocuments: "false"
     volumes:
       - ./uploads:/uploads:ro
       - ./samples/documents:/samples/documents:ro

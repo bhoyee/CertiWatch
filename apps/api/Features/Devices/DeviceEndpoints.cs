@@ -120,13 +120,45 @@ public static class DeviceEndpoints
             return Results.NotFound();
         }
 
-        var exists = await db.Documents.AsNoTracking()
-            .AnyAsync(d => d.TenantId == device.TenantId && d.FileHash == request.FileHash, token);
+        var record = await db.Records
+            .AsNoTracking()
+            .Include(r => r.Document)
+            .Where(r => r.TenantId == device.TenantId && r.Document!.FileHash == request.FileHash)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(token);
 
-        return Results.Ok(new FileHashCheckResponse(exists));
+        if (record is null)
+        {
+            return Results.Ok(new FileHashCheckResponse(false, true));
+        }
+
+        var shouldReprocess = HashCheckExtensions.IsIncomplete(record);
+
+        return Results.Ok(new FileHashCheckResponse(true, shouldReprocess));
     }
 }
 
 public sealed record FileHashCheckRequest(Guid DeviceId, string FileHash);
 
-public sealed record FileHashCheckResponse(bool Exists);
+public sealed record FileHashCheckResponse(bool Exists, bool ShouldReprocess);
+
+internal static class HashCheckExtensions
+{
+    private static readonly string[] UnknownTokens = { "Unknown", "Unknown Course", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
+
+    public static bool IsIncomplete(Record record)
+    {
+        bool Missing(string? value) => string.IsNullOrWhiteSpace(value) || UnknownTokens.Any(t => value.Equals(t, StringComparison.OrdinalIgnoreCase));
+
+        var missingRequired =
+            Missing(record.StaffName) ||
+            Missing(record.CourseName) ||
+            Missing(record.Issuer) ||
+            record.IssueDate is null;
+
+        var needsReviewMissing = (record.ReviewReason ?? string.Empty).Contains("missing_required", StringComparison.OrdinalIgnoreCase);
+        var isNeedsReview = record.ProcessingStatus == CertiWatch.Contracts.Enums.ProcessingStatus.NeedsReview;
+
+        return missingRequired || needsReviewMissing || isNeedsReview;
+    }
+}
