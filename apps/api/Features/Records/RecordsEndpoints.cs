@@ -293,19 +293,36 @@ public static class RecordsEndpoints
             }
         }
 
-        Func<Record, object?> selector = sortField switch
+        // Use typed property switches to keep IQueryable and avoid client-side evaluation.
+        return sortField switch
         {
-            "staff" or "staffname" => r => r.StaffName,
-            "course" or "coursename" => r => r.CourseName,
-            "issuer" => r => r.Issuer,
-            "issue" or "issuedate" => r => r.IssueDate,
-            "expiry" or "expirydate" => r => r.ExpiryDate,
-            "confidence" => r => r.Confidence,
-            "status" or "processingstatus" => r => r.ProcessingStatus,
-            "extractionconfidence" => r => r.ExtractionConfidence,
-            _ => r => r.CreatedAt
+            "staff" or "staffname" => sortDir == "asc"
+                ? query.OrderBy(r => r.StaffName)
+                : query.OrderByDescending(r => r.StaffName),
+            "course" or "coursename" => sortDir == "asc"
+                ? query.OrderBy(r => r.CourseName)
+                : query.OrderByDescending(r => r.CourseName),
+            "issuer" => sortDir == "asc"
+                ? query.OrderBy(r => r.Issuer)
+                : query.OrderByDescending(r => r.Issuer),
+            "issue" or "issuedate" => sortDir == "asc"
+                ? query.OrderBy(r => r.IssueDate)
+                : query.OrderByDescending(r => r.IssueDate),
+            "expiry" or "expirydate" => sortDir == "asc"
+                ? query.OrderBy(r => r.ExpiryDate)
+                : query.OrderByDescending(r => r.ExpiryDate),
+            "confidence" => sortDir == "asc"
+                ? query.OrderBy(r => r.Confidence)
+                : query.OrderByDescending(r => r.Confidence),
+            "status" or "processingstatus" => sortDir == "asc"
+                ? query.OrderBy(r => r.ProcessingStatus)
+                : query.OrderByDescending(r => r.ProcessingStatus),
+            "extractionconfidence" => sortDir == "asc"
+                ? query.OrderBy(r => r.ExtractionConfidence)
+                : query.OrderByDescending(r => r.ExtractionConfidence),
+            _ => sortDir == "asc"
+                ? query.OrderBy(r => r.CreatedAt)
+                : query.OrderByDescending(r => r.CreatedAt)
         };
-
-        return sortDir == "asc" ? query.OrderBy(selector) : query.OrderByDescending(selector);
     }
 }
