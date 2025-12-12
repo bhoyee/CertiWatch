@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchJson, postJson } from "../../../lib/api";
 
 type RuleDto = {
@@ -31,6 +31,14 @@ export default function RulesPage() {
   const [rules, setRules] = useState<RuleDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState("");
+  const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "tenant">("all");
+  const [sort, setSort] = useState<{ key: "course" | "issuer" | "validity" | "scope"; dir: "asc" | "desc" }>({
+    key: "course",
+    dir: "asc"
+  });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState<CreateRule>({
     courseName: "",
     matchRegex: "",
@@ -47,39 +55,172 @@ export default function RulesPage() {
       .catch((err) => setError(err.message ?? "Failed to load rules"));
   }, []);
 
+  const filtered = useMemo(() => {
+    if (!rules) return [];
+    const term = search.trim().toLowerCase();
+    return rules.filter((r) => {
+      if (scopeFilter === "global" && !r.isGlobal) return false;
+      if (scopeFilter === "tenant" && r.isGlobal) return false;
+      if (!term) return true;
+      return (
+        r.courseName.toLowerCase().includes(term) ||
+        (r.issuerOverride ?? "").toLowerCase().includes(term) ||
+        (r.tag ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [rules, scopeFilter, search]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      switch (sort.key) {
+        case "course":
+          return a.courseName.localeCompare(b.courseName) * dir;
+        case "issuer":
+          return (a.issuerOverride ?? "Any").localeCompare(b.issuerOverride ?? "Any") * dir;
+        case "validity":
+          return ((a.defaultValidityMonths ?? 0) - (b.defaultValidityMonths ?? 0)) * dir;
+        case "scope":
+          return (a.isGlobal === b.isGlobal ? 0 : a.isGlobal ? -1 : 1) * dir;
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const visible = sorted.slice(start, start + pageSize);
+
+  const setSortKey = (key: typeof sort.key) => {
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  };
+
   if (error) return <ErrorCard message={error} />;
   if (!rules) return <LoadingCard />;
 
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4">
-          <h1 className="text-lg font-semibold text-slate-900">Rules</h1>
-          <p className="text-sm text-slate-600">Tenant and global course rules.</p>
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-900">Rules</h1>
+            <p className="text-sm text-slate-600">Tenant and global course rules.</p>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search course, issuer, tag..."
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
+            />
+            <select
+              value={scopeFilter}
+              onChange={(e) => {
+                setScopeFilter(e.target.value as any);
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="all">All scopes</option>
+              <option value="global">Global</option>
+              <option value="tenant">Tenant</option>
+            </select>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              {[10, 25, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <Header>Course</Header>
-                <Header>Issuer</Header>
-                <Header>Validity (months)</Header>
+                <Header onClick={() => setSortKey("course")} sorted={sort.key === "course"} dir={sort.dir}>
+                  Course
+                </Header>
+                <Header onClick={() => setSortKey("issuer")} sorted={sort.key === "issuer"} dir={sort.dir}>
+                  Issuer
+                </Header>
+                <Header onClick={() => setSortKey("validity")} sorted={sort.key === "validity"} dir={sort.dir}>
+                  Validity (months)
+                </Header>
                 <Header>Renewable</Header>
-                <Header>Scope</Header>
+                <Header>Tag</Header>
+                <Header onClick={() => setSortKey("scope")} sorted={sort.key === "scope"} dir={sort.dir}>
+                  Scope
+                </Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {rules.map((r) => (
+              {visible.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <Cell>{r.courseName}</Cell>
                   <Cell>{r.issuerOverride ?? "Any"}</Cell>
-                  <Cell>{r.defaultValidityMonths ?? "—"}</Cell>
+                  <Cell>{r.defaultValidityMonths ?? "--"}</Cell>
                   <Cell>{r.isRenewable ? "Yes" : "No"}</Cell>
-                  <Cell>{r.tenantId ? "Tenant" : "Global"}</Cell>
+                  <Cell>{r.tag ?? "--"}</Cell>
+                  <Cell>
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        r.isGlobal ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"
+                      }`}
+                    >
+                      {r.isGlobal ? "Global" : "Tenant"}
+                    </span>
+                  </Cell>
                 </tr>
               ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-sm text-slate-500">
+                    No rules match your filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+          <span>
+            Showing {sorted.length === 0 ? 0 : start + 1}–{Math.min(sorted.length, start + pageSize)} of {sorted.length}{" "}
+            rules
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </button>
+            <span className="text-slate-700">
+              Page {currentPage} / {totalPages}
+            </span>
+            <button
+              className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
@@ -170,8 +311,31 @@ export default function RulesPage() {
   );
 }
 
-function Header({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</th>;
+function Header({
+  children,
+  onClick,
+  sorted,
+  dir
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  sorted?: boolean;
+  dir?: "asc" | "desc";
+}) {
+  return (
+    <th
+      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
+        onClick ? "cursor-pointer select-none" : ""
+      }`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+    >
+      <div className="flex items-center gap-1">
+        <span>{children}</span>
+        {sorted && <span className="text-slate-400">{dir === "asc" ? "▲" : "▼"}</span>}
+      </div>
+    </th>
+  );
 }
 
 function Cell({ children }: { children: React.ReactNode }) {
