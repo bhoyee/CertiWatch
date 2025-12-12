@@ -30,10 +30,33 @@ export default function RecordsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (field: string) => {
+    setPage(1);
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
-    fetchJson<PagedResult<RecordDto>>("/api/records?take=10")
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    if (search.trim()) params.set("filter", search.trim());
+    if (status !== "all") params.set("status", status);
+    if (sortField) params.set("sort", `${sortField}:${sortDir}`);
+
+    fetchJson<PagedResult<RecordDto>>(`/api/records?${params.toString()}`)
       .then((res) => {
         setData(res);
         setError(null);
@@ -41,12 +64,10 @@ export default function RecordsPage() {
       })
       .catch((err) => setError(err.message ?? "Failed to load records"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, pageSize, search, status, sortField, sortDir]);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 2000);
-    return () => clearInterval(interval);
   }, [load]);
 
   if (error) {
@@ -57,42 +78,93 @@ export default function RecordsPage() {
     return <LoadingCard />;
   }
 
+  const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Records</h1>
-          <p className="text-sm text-slate-600">Latest 10 records for your tenant.</p>
+          <p className="text-sm text-slate-600">Search, filter, and sort your records.</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <span className="text-sm text-slate-600">
-            Total: {data.total}
-            {lastUpdated && (
-              <span className="ml-2 text-xs text-slate-500">
-                Updated {lastUpdated.toLocaleTimeString()}
-              </span>
-            )}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            placeholder="Search staff, course, issuer"
+            value={search}
+            onChange={(e) => {
+              setPage(1);
+              setSearch(e.target.value);
+            }}
+            className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          />
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="all">All statuses</option>
+            <option value="ok">OK</option>
+            <option value="needs_review">Needs review</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          >
+            {[10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
           <button
             onClick={load}
             disabled={loading}
-            className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
+          <span className="text-xs text-slate-500">
+            Total: {data.total}
+            {lastUpdated && <> · Updated {lastUpdated.toLocaleTimeString()}</>}
+          </span>
         </div>
       </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <Header>Staff</Header>
-              <Header>Course</Header>
-              <Header>Issuer</Header>
-              <Header>Issue</Header>
-              <Header>Expiry</Header>
-              <Header>Confidence</Header>
-              <Header>Status</Header>
+              <Header onClick={() => toggleSort("staffName")} sortField={sortField} sortDir={sortDir} field="staffName">
+                Staff
+              </Header>
+              <Header onClick={() => toggleSort("courseName")} sortField={sortField} sortDir={sortDir} field="courseName">
+                Course
+              </Header>
+              <Header onClick={() => toggleSort("issuer")} sortField={sortField} sortDir={sortDir} field="issuer">
+                Issuer
+              </Header>
+              <Header onClick={() => toggleSort("issueDate")} sortField={sortField} sortDir={sortDir} field="issueDate">
+                Issue
+              </Header>
+              <Header onClick={() => toggleSort("expiryDate")} sortField={sortField} sortDir={sortDir} field="expiryDate">
+                Expiry
+              </Header>
+              <Header onClick={() => toggleSort("extractionConfidence")} sortField={sortField} sortDir={sortDir} field="extractionConfidence">
+                Confidence
+              </Header>
+              <Header onClick={() => toggleSort("processingStatus")} sortField={sortField} sortDir={sortDir} field="processingStatus">
+                Status
+              </Header>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -107,18 +179,65 @@ export default function RecordsPage() {
                   {r.expiryDerived ? " (derived)" : ""}
                 </Cell>
                 <Cell>{formatConfidence(r.extractionConfidence)}</Cell>
-                <Cell className="capitalize">{statusLabel(r.processingStatus)}</Cell>
+                <Cell>{statusBadge(r.processingStatus, r.id)}</Cell>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="text-xs text-slate-600">
+          Page {page} of {totalPages}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= totalPages}
+            className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Header({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</th>;
+function Header({
+  children,
+  onClick,
+  sortField,
+  sortDir,
+  field
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  sortField?: string;
+  sortDir?: "asc" | "desc";
+  field?: string;
+}) {
+  const isActive = field && sortField?.toLowerCase() === field.toLowerCase();
+  return (
+    <th
+      onClick={onClick}
+      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
+        onClick ? "cursor-pointer select-none hover:text-slate-900" : ""
+      }`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {isActive && <span className="text-[10px] text-slate-500">{sortDir === "asc" ? "▲" : "▼"}</span>}
+      </span>
+    </th>
+  );
 }
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -156,4 +275,22 @@ function statusLabel(status: string | number): string {
 function formatConfidence(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
   return `${Math.round(value * 100)}%`;
+}
+
+function statusBadge(status: string | number, id: string) {
+  const label = statusLabel(status);
+  if (label === "needs review") {
+    return (
+      <a
+        href={`/review?recordId=${id}`}
+        className="inline-flex items-center rounded-full bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-500"
+      >
+        Review
+      </a>
+    );
+  }
+  if (label === "ok") {
+    return <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span>;
+  }
+  return <span className="capitalize text-slate-700">{label}</span>;
 }

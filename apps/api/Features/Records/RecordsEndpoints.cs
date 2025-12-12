@@ -18,16 +18,49 @@ public static class RecordsEndpoints
     {
         var group = routes.MapGroup("/api/records").RequireAuthorization();
         group.MapGet(string.Empty, ListAsync);
+        group.MapGet("/review-count", ReviewCountAsync);
         group.MapGet("/{id:guid}", GetAsync);
         group.MapPatch("/{id:guid}", PatchAsync);
         group.MapDelete("/{id:guid}", DeleteAsync);
         return group;
     }
 
-    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, CancellationToken token)
+    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
         var tenantId = tenantAccessor.Current.TenantId;
-        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId).OrderByDescending(r => r.CreatedAt);
+        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+
+        // Filter by status if provided
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var normalized = status.Trim().ToLowerInvariant();
+            var map = new Dictionary<string, ProcessingStatus>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pending"] = ProcessingStatus.Pending,
+                ["ok"] = ProcessingStatus.Ok,
+                ["needs review"] = ProcessingStatus.NeedsReview,
+                ["needs_review"] = ProcessingStatus.NeedsReview,
+                ["review"] = ProcessingStatus.NeedsReview,
+                ["failed"] = ProcessingStatus.Failed
+            };
+            if (map.TryGetValue(normalized, out var mapped))
+            {
+                baseQuery = baseQuery.Where(r => r.ProcessingStatus == mapped);
+            }
+        }
+
+        // Search filter
+        if (!string.IsNullOrWhiteSpace(query.Filter))
+        {
+            var term = query.Filter.Trim().ToLower();
+            baseQuery = baseQuery.Where(r =>
+                (r.StaffName ?? string.Empty).ToLower().Contains(term) ||
+                (r.CourseName ?? string.Empty).ToLower().Contains(term) ||
+                (r.Issuer ?? string.Empty).ToLower().Contains(term));
+        }
+
+        baseQuery = ApplySort(baseQuery, query.Sort);
+
         var total = await baseQuery.CountAsync(token);
         var items = await baseQuery.Skip(query.Offset).Take(query.Take).ToListAsync(token);
         var dtos = items.Select(ToDto).ToList();
@@ -38,6 +71,16 @@ public static class RecordsEndpoints
             PageSize = query.PageSize,
             Total = total
         });
+    }
+
+    private static async Task<IResult> ReviewCountAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
+    {
+        var tenantId = tenantAccessor.Current.TenantId;
+        var count = await db.Records.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.ProcessingStatus == ProcessingStatus.NeedsReview)
+            .CountAsync(token);
+
+        return Results.Ok(new { count });
     }
 
     private static async Task<IResult> GetAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
@@ -233,4 +276,35 @@ public static class RecordsEndpoints
         => string.IsNullOrWhiteSpace(json)
             ? new Dictionary<string, object>()
             : JsonSerializer.Deserialize<Dictionary<string, object>>(json) ?? new Dictionary<string, object>();
+
+    private static IQueryable<Record> ApplySort(IQueryable<Record> query, string? sort)
+    {
+        var sortField = "created_at";
+        var sortDir = "desc";
+
+        if (!string.IsNullOrWhiteSpace(sort) && sort.Contains(':'))
+        {
+            var parts = sort.Split(':', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                sortField = parts[0].ToLowerInvariant();
+                sortDir = parts[1].ToLowerInvariant();
+            }
+        }
+
+        Func<Record, object?> selector = sortField switch
+        {
+            "staff" or "staffname" => r => r.StaffName,
+            "course" or "coursename" => r => r.CourseName,
+            "issuer" => r => r.Issuer,
+            "issue" or "issuedate" => r => r.IssueDate,
+            "expiry" or "expirydate" => r => r.ExpiryDate,
+            "confidence" => r => r.Confidence,
+            "status" or "processingstatus" => r => r.ProcessingStatus,
+            "extractionconfidence" => r => r.ExtractionConfidence,
+            _ => r => r.CreatedAt
+        };
+
+        return sortDir == "asc" ? query.OrderBy(selector) : query.OrderByDescending(selector);
+    }
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { fetchJson } from "../../lib/api";
 import { PlanBanner } from "./PlanBanner";
 
 const navItems = [
@@ -60,18 +61,46 @@ function Logo() {
 }
 
 function NavLinks({ onClick }: { onClick?: () => void } = {}) {
+  const [reviewCount, setReviewCount] = useState<number>(0);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetchJson<{ count: number }>("/api/records/review-count");
+        if (active) setReviewCount(res.count ?? 0);
+      } catch {
+        if (active) setReviewCount(0);
+      }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <nav className="space-y-1">
-      {navItems.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onClick}
-          className="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        >
-          {item.label}
-        </Link>
-      ))}
+      {navItems.map((item) => {
+        const showBadge = item.href === "/review" && reviewCount > 0;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClick}
+            className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            <span>{item.label}</span>
+            {showBadge && (
+              <span className="ml-2 rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">
+                {reviewCount}
+              </span>
+            )}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
