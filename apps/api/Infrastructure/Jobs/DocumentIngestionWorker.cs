@@ -66,17 +66,17 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 var sanitizedFields = SanitizeFields(docEvent.ExtractedFields);
                 var parsed = _pipeline.Parse(string.Join('\n', sanitizedFields.Select(kv => $"{kv.Key}:{kv.Value}")));
                 var staff = sanitizedFields.GetValueOrDefault("staff_name")
-                            ?? NormalizeText(parsed.Result.StaffName, "Unknown")
-                            ?? "Unknown";
+                                ?? NormalizeText(parsed.Result.StaffName, "Unknown")
+                                ?? "Unknown";
                 var course = sanitizedFields.GetValueOrDefault("course_name")
-                             ?? NormalizeText(parsed.Result.CourseName, "Unknown Course")
-                             ?? "Unknown Course";
+                                 ?? NormalizeText(parsed.Result.CourseName, "Unknown Course")
+                                 ?? "Unknown Course";
                 var issuer = sanitizedFields.GetValueOrDefault("issuer")
-                             ?? NormalizeText(parsed.Result.Issuer);
+                                 ?? NormalizeText(parsed.Result.Issuer);
                 var issueDate = TryParse(sanitizedFields.GetValueOrDefault("issue_date"))
-                                ?? parsed.Result.IssueDate;
+                                 ?? parsed.Result.IssueDate;
                 var expiryDate = TryParse(sanitizedFields.GetValueOrDefault("expiry_date"))
-                                 ?? parsed.Result.ExpiryDate;
+                                     ?? parsed.Result.ExpiryDate;
                 var expiryDerived = !parsed.Result.ExpiryDate.HasValue && expiryDate.HasValue;
                 var recordConfidence = extractionConfidence ?? (decimal)parsed.Result.Confidence;
 
@@ -92,9 +92,20 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
                 }
 
-                // Safeguard: if the course doesn't match any global or tenant rule, force review
-                var courseAllowed = await IsCourseAllowedAsync(db, docEvent.TenantId, course, issuer, docEvent.VendorHints, stoppingToken);
-                if (string.IsNullOrWhiteSpace(course) || course.Equals("unknown course", StringComparison.OrdinalIgnoreCase) || !courseAllowed)
+                // --- CRITICAL COURSE VALIDATION LOGIC START ---
+                var isUnknownCourseName = IsUnknown(course);
+                var courseAllowed = false;
+
+                if (!isUnknownCourseName)
+                {
+                    courseAllowed = await IsCourseAllowedAsync(db, docEvent.TenantId, course, issuer, docEvent.VendorHints, stoppingToken);
+                }
+                
+                _logger.LogInformation("Course validation for '{Course}' (Unknown={IsUnknown}, Allowed={IsAllowed})", course, isUnknownCourseName, courseAllowed);
+
+
+                // Safeguard: If the course is truly unknown (null/empty/token) OR not explicitly allowed by a rule, force review.
+                if (isUnknownCourseName || !courseAllowed)
                 {
                     var ruleHint = "needs_review:unknown_course";
                     if (!reviewHints.Contains(ruleHint))
@@ -102,8 +113,39 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         reviewHints.Add(ruleHint);
                     }
                     reviewReason = string.Join(";", reviewHints);
-                    processingStatus = ProcessingStatus.NeedsReview;
+                    processingStatus = ProcessingStatus.NeedsReview; // Force NeedsReview here
                 }
+                // --- CRITICAL COURSE VALIDATION LOGIC END ---
+
+                // Detect duplicates by staff + course + issue date to avoid re-uploaded certs
+                var normalizedStaffKey = NormalizeKey(staff);
+                var normalizedCourseKey = NormalizeKey(course);
+                var duplicateRecord = false;
+                if (issueDate.HasValue && normalizedStaffKey is not null && normalizedCourseKey is not null)
+                {
+                    var candidates = await db.Records
+                        .AsNoTracking()
+                        .Where(r => r.TenantId == docEvent.TenantId && r.IssueDate == issueDate.Value)
+                        .Select(r => new { r.StaffName, r.CourseName })
+                        .ToListAsync(stoppingToken);
+
+                    duplicateRecord = candidates.Any(r =>
+                        NormalizeKey(r.StaffName) == normalizedStaffKey &&
+                        NormalizeKey(r.CourseName) == normalizedCourseKey);
+                }
+
+                if (duplicateRecord)
+                {
+                    var dupHint = "needs_review:duplicate_record";
+                    if (!reviewHints.Contains(dupHint))
+                    {
+                        reviewHints.Add(dupHint);
+                    }
+                    reviewReason = string.Join(";", reviewHints);
+                    processingStatus = ProcessingStatus.NeedsReview;
+                    _logger.LogInformation("Duplicate detected (staff/course/date) for tenant {TenantId}: staff={Staff} course={Course} issue={IssueDate}", docEvent.TenantId, staff, course, issueDate);
+                }
+
 
                 // If we have already seen this file hash for the tenant, update the latest record instead of inserting a duplicate
                 var existingRecord = await db.Records
@@ -165,7 +207,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     document.MimeType = docEvent.MimeType;
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
-                    document.ProcessingStatus = processingStatus;
+                    document.ProcessingStatus = processingStatus; // Use updated status
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
                     existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
@@ -183,14 +225,16 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                     // Auto-clear NeedsReview if a subsequent high-confidence pass succeeds without review hints.
                     var shouldAutoClear = existingRecord.ProcessingStatus == ProcessingStatus.NeedsReview
-                                          && processingStatus != ProcessingStatus.NeedsReview
-                                          && existingRecord.Confidence >= 0.90m;
+                                             && processingStatus != ProcessingStatus.NeedsReview
+                                             && existingRecord.Confidence >= 0.90m;
                     if (shouldAutoClear)
                     {
-                        processingStatus = ProcessingStatus.Ok;
+                        processingStatus = ProcessingStatus.Ok; // <--- The only place status is potentially cleared.
                     }
 
-                    existingRecord.ProcessingStatus = processingStatus;
+                    // Apply the final processing status to the record
+                    existingRecord.ProcessingStatus = processingStatus; 
+                    
                     if (processingStatus == ProcessingStatus.NeedsReview)
                     {
                         existingRecord.ReviewReason = reviewReason;
@@ -200,14 +244,15 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
                     else
                     {
-                        existingRecord.ReviewReason = null;
+                        // Clear review fields if status is OK
+                        existingRecord.ReviewReason = null; 
                         existingRecord.ReviewNotes = null;
                         existingRecord.ReviewedBy = null;
                         existingRecord.ReviewedAt = null;
                     }
                     existingRecord.FieldsJson = JsonSerializer.Serialize(sanitizedFields);
                     existingRecord.UpdatedAt = docEvent.DetectedAt;
-                    _logger.LogInformation("Updated record {RecordId} for hash {FileHash} with staff={Staff} course={Course}", existingRecord.Id, docEvent.FileHash, existingRecord.StaffName, existingRecord.CourseName);
+                    _logger.LogInformation("Updated record {RecordId} for hash {FileHash} with staff={Staff} course={Course}, New Status: {Status}", existingRecord.Id, docEvent.FileHash, existingRecord.StaffName, existingRecord.CourseName, processingStatus);
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
@@ -315,37 +360,53 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
         foreach (var rule in rules)
         {
+            var courseMatched = false;
+
             // Exact match on course
             if (!string.IsNullOrWhiteSpace(rule.CourseName))
             {
                 var ruleCourse = NormalizeKey(rule.CourseName);
                 if (ruleCourse == normalizedCourse)
                 {
-                    return true;
+                    courseMatched = true;
                 }
             }
 
             // Regex match on course
-            if (!string.IsNullOrWhiteSpace(rule.MatchRegex) &&
+            if (!courseMatched &&
+                !string.IsNullOrWhiteSpace(rule.MatchRegex) &&
                 !string.IsNullOrWhiteSpace(courseName) &&
                 Regex.IsMatch(courseName, rule.MatchRegex, RegexOptions.IgnoreCase))
             {
-                return true;
-            }
-
-            // Issuer override match
-            if (!string.IsNullOrWhiteSpace(rule.IssuerOverride) &&
-                NormalizeKey(rule.IssuerOverride) == normalizedIssuer)
-            {
-                return true;
+                courseMatched = true;
             }
 
             // Tag match
-            var ruleTag = NormalizeKey(rule.Tag);
-            if (ruleTag is not null && tagSet.Contains(ruleTag))
+            if (!courseMatched)
             {
-                return true;
+                var ruleTag = NormalizeKey(rule.Tag);
+                if (ruleTag is not null && tagSet.Contains(ruleTag))
+                {
+                    courseMatched = true;
+                }
             }
+
+            if (!courseMatched)
+            {
+                continue;
+            }
+
+            // If the rule scopes to a specific issuer, enforce it; otherwise allow the course match.
+            if (!string.IsNullOrWhiteSpace(rule.IssuerOverride))
+            {
+                if (NormalizeKey(rule.IssuerOverride) == normalizedIssuer)
+                {
+                    return true;
+                }
+                continue;
+            }
+
+            return true;
         }
 
         return false;
