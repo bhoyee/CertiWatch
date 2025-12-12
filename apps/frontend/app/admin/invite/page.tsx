@@ -32,44 +32,54 @@ export default function InvitePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Invite an admin</h1>
-        <p className="mt-2 text-sm text-slate-600">Send a magic-link invite to a teammate.</p>
-        <form className="mt-6 space-y-4" onSubmit={submit}>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Email</label>
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="teammate@example.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="admin">Admin</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
+    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">Invite an admin</h1>
+        <p className="text-sm text-slate-600">Send a magic-link invite to a teammate.</p>
+      </div>
+
+      {status === "sent" && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Invite sent!
+        </div>
+      )}
+      {status === "error" && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+      )}
+
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-slate-700">Email</label>
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="teammate@example.com"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Role</label>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="admin">Admin</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </div>
+        <div className="md:col-span-2 flex items-center gap-2">
           <button
             type="submit"
             disabled={status === "loading"}
-            className="w-full rounded-md bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
           >
             {status === "loading" ? "Sending..." : "Send invite"}
           </button>
-        </form>
-        {status === "sent" && <p className="mt-4 text-sm text-green-600">Invite sent!</p>}
-        {status === "error" && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      </div>
+        </div>
+      </form>
     </div>
   );
 }
