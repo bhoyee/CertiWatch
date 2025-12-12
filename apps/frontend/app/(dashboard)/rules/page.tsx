@@ -39,6 +39,10 @@ export default function RulesPage() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [editing, setEditing] = useState<RuleDto | null>(null);
+  const [editForm, setEditForm] = useState<CreateRule | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<RuleDto | null>(null);
   const [form, setForm] = useState<CreateRule>({
     courseName: "",
     matchRegex: "",
@@ -166,6 +170,7 @@ export default function RulesPage() {
                 <Header onClick={() => setSortKey("scope")} sorted={sort.key === "scope"} dir={sort.dir}>
                   Scope
                 </Header>
+                <Header>Actions</Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -184,6 +189,50 @@ export default function RulesPage() {
                     >
                       {r.isGlobal ? "Global" : "Tenant"}
                     </span>
+                  </Cell>
+                  <Cell>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={r.isGlobal}
+                        onClick={() => {
+                          setEditing(r);
+                          setEditForm({
+                            courseName: r.courseName,
+                            matchRegex: r.matchRegex ?? "",
+                            issuerOverride: r.issuerOverride ?? "",
+                            defaultValidityMonths: r.defaultValidityMonths?.toString() ?? "",
+                            isRenewable: r.isRenewable,
+                            isOneTime: r.isOneTime,
+                            tag: r.tag ?? ""
+                          });
+                        }}
+                        className={`rounded-md border px-2 py-1 text-xs font-semibold ${
+                          r.isGlobal
+                            ? "cursor-not-allowed border-slate-200 text-slate-400"
+                            : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                        title={r.isGlobal ? "Global rules are locked" : "Edit rule"}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        disabled={r.isGlobal}
+                        onClick={() => setConfirmDelete(r)}
+                        className={`rounded-md border px-2 py-1 text-xs font-semibold ${
+                          r.isGlobal
+                            ? "cursor-not-allowed border-slate-200 text-slate-400"
+                            : "border-rose-200 text-rose-700 hover:bg-rose-50"
+                        }`}
+                        title={r.isGlobal ? "Global rules are locked" : "Delete rule"}
+                      >
+                        Delete
+                      </button>
+                      {r.isGlobal && (
+                        <span className="inline-flex items-center text-xs text-slate-500" title="Global rule (locked)">
+                          🔒
+                        </span>
+                      )}
+                    </div>
                   </Cell>
                 </tr>
               ))}
@@ -307,6 +356,141 @@ export default function RulesPage() {
           </div>
         </form>
       </div>
+
+      {editing && editForm && (
+        <Modal onClose={() => (!savingEdit ? setEditing(null) : null)} title="Edit rule">
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!editing) return;
+              setSavingEdit(true);
+              setError(null);
+              try {
+                const body: any = {
+                  courseName: editForm.courseName.trim(),
+                  matchRegex: editForm.matchRegex.trim() || null,
+                  issuerOverride: editForm.issuerOverride.trim() || null,
+                  defaultValidityMonths: editForm.defaultValidityMonths ? Number(editForm.defaultValidityMonths) : null,
+                  isRenewable: editForm.isRenewable,
+                  isOneTime: editForm.isOneTime,
+                  tag: editForm.tag.trim() || null
+                };
+                await fetch(`/api/course-rules/${editing.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(body)
+                }).then((res) => {
+                  if (!res.ok) throw new Error("Failed to update rule");
+                });
+                const refreshed = await fetchJson<RuleDto[]>("/api/course-rules");
+                setRules(refreshed);
+                setEditing(null);
+                setEditForm(null);
+              } catch (err: any) {
+                setError(err.message ?? "Failed to update rule");
+              } finally {
+                setSavingEdit(false);
+              }
+            }}
+          >
+            <Field
+              label="Course name"
+              required
+              value={editForm.courseName}
+              onChange={(v) => setEditForm({ ...editForm, courseName: v })}
+              placeholder="Autism Awareness: Level 2"
+            />
+            <Field
+              label="Match regex"
+              value={editForm.matchRegex}
+              onChange={(v) => setEditForm({ ...editForm, matchRegex: v })}
+              placeholder="Autism\\s+Awareness"
+            />
+            <Field
+              label="Issuer override"
+              value={editForm.issuerOverride}
+              onChange={(v) => setEditForm({ ...editForm, issuerOverride: v })}
+              placeholder="Hull City Council"
+            />
+            <Field
+              label="Validity (months)"
+              value={editForm.defaultValidityMonths}
+              onChange={(v) => setEditForm({ ...editForm, defaultValidityMonths: v })}
+              placeholder="24"
+              type="number"
+            />
+            <Checkbox
+              label="Renewable"
+              checked={editForm.isRenewable}
+              onChange={(v) => setEditForm({ ...editForm, isRenewable: v })}
+            />
+            <Checkbox
+              label="One-time"
+              checked={editForm.isOneTime}
+              onChange={(v) => setEditForm({ ...editForm, isOneTime: v })}
+            />
+            <Field label="Tag" value={editForm.tag} onChange={(v) => setEditForm({ ...editForm, tag: v })} placeholder="training" />
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={savingEdit}
+                onClick={() => {
+                  if (!savingEdit) {
+                    setEditing(null);
+                    setEditForm(null);
+                  }
+                }}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              >
+                {savingEdit ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {confirmDelete && (
+        <Modal onClose={() => setConfirmDelete(null)} title="Delete rule?">
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              This will permanently delete “{confirmDelete.courseName}”. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirmDelete) return;
+                  try {
+                    const res = await fetch(`/api/course-rules/${confirmDelete.id}`, { method: "DELETE" });
+                    if (!res.ok) throw new Error("Failed to delete rule");
+                    const refreshed = await fetchJson<RuleDto[]>("/api/course-rules");
+                    setRules(refreshed);
+                    setConfirmDelete(null);
+                  } catch (err: any) {
+                    setError(err.message ?? "Failed to delete rule");
+                  }
+                }}
+                className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -399,6 +583,22 @@ function ErrorCard({ message }: { message: string }) {
   return (
     <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
       Failed to load rules: {message}
+    </div>
+  );
+}
+
+function Modal({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 px-4">
+      <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-800">
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

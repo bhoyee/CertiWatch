@@ -16,6 +16,7 @@ public static class CourseRuleEndpoints
         group.MapGet(string.Empty, ListAsync);
         group.MapPost(string.Empty, CreateAsync);
         group.MapPatch("/{id:guid}", UpdateAsync);
+        group.MapDelete("/{id:guid}", DeleteAsync);
         return group;
     }
 
@@ -78,6 +79,16 @@ public static class CourseRuleEndpoints
             return Results.NotFound();
         }
 
+        var isSuperAdmin = string.Equals(accessor.Current.Role, "superadmin", StringComparison.OrdinalIgnoreCase);
+        if (entity.TenantId == null && !isSuperAdmin)
+        {
+            return Results.Forbid();
+        }
+        if (entity.TenantId.HasValue && entity.TenantId != accessor.Current.TenantId && !isSuperAdmin)
+        {
+            return Results.Forbid();
+        }
+
         if (!string.IsNullOrWhiteSpace(request.CourseName)) entity.CourseName = request.CourseName;
         if (!string.IsNullOrWhiteSpace(request.MatchRegex)) entity.MatchRegex = request.MatchRegex;
         if (!string.IsNullOrWhiteSpace(request.Tag)) entity.Tag = request.Tag;
@@ -88,6 +99,29 @@ public static class CourseRuleEndpoints
 
         await db.SaveChangesAsync(token);
         return Results.Ok(ToDto(entity));
+    }
+
+    private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        var entity = await db.CourseRules.FirstOrDefaultAsync(r => r.Id == id, token);
+        if (entity is null)
+        {
+            return Results.NotFound();
+        }
+
+        var isSuperAdmin = string.Equals(accessor.Current.Role, "superadmin", StringComparison.OrdinalIgnoreCase);
+        if (entity.TenantId == null && !isSuperAdmin)
+        {
+            return Results.Forbid();
+        }
+        if (entity.TenantId.HasValue && entity.TenantId != accessor.Current.TenantId && !isSuperAdmin)
+        {
+            return Results.Forbid();
+        }
+
+        db.CourseRules.Remove(entity);
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
     }
 
     private static CourseRuleDto ToDto(CourseRule rule)
