@@ -60,10 +60,13 @@ export default function AnalyticsPage() {
     const term = search.trim().toLowerCase();
     return expiringList.filter((r) => {
       if (!term) return true;
+      const staff = (r.staffName ?? "").toLowerCase();
+      const course = (r.courseName ?? "").toLowerCase();
+      const issuer = (r.issuer ?? "").toLowerCase();
       return (
-        r.staffName.toLowerCase().includes(term) ||
-        r.courseName.toLowerCase().includes(term) ||
-        (r.issuer ?? "").toLowerCase().includes(term)
+        staff.includes(term) ||
+        course.includes(term) ||
+        issuer.includes(term)
       );
     });
   }, [expiringList, search]);
@@ -74,9 +77,9 @@ export default function AnalyticsPage() {
     list.sort((a, b) => {
       switch (sort.key) {
         case "staff":
-          return a.staffName.localeCompare(b.staffName) * dir;
+          return (a.staffName ?? "").localeCompare(b.staffName ?? "") * dir;
         case "course":
-          return a.courseName.localeCompare(b.courseName) * dir;
+          return (a.courseName ?? "").localeCompare(b.courseName ?? "") * dir;
         case "status":
           return String(a.processingStatus).localeCompare(String(b.processingStatus)) * dir;
         case "expiry":
