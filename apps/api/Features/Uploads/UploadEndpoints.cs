@@ -31,6 +31,7 @@ public static class UploadEndpoints
         group.MapGet("/history", HistoryAsync).RequireAuthorization();
         group.MapGet("/{token}", ValidateAsync).AllowAnonymous();
         group.MapPost("/{token}/file", UploadFileAsync).AllowAnonymous();
+        group.MapPost("/bulk", BulkUploadAsync).RequireAuthorization();
         return group;
     }
 
@@ -182,6 +183,17 @@ public static class UploadEndpoints
             var fileHash = ComputeHash(destPath);
             var size = new FileInfo(destPath).Length;
 
+            var alreadyExists = await db.Documents.AsNoTracking()
+                .AnyAsync(d => d.TenantId == tenantId && d.FileHash == fileHash, token);
+            if (alreadyExists)
+            {
+                // Cleanup the saved file to avoid clutter, but keep the upload request marked as used
+                TryDeleteFile(destPath);
+                req.UsedAt = clock.UtcNow;
+                await db.SaveChangesAsync(token);
+                return Results.Conflict(new { error = "duplicate", message = "Document already uploaded for this tenant." });
+            }
+
             // Enqueue immediately; deduplication in DocumentIngestionWorker is by tenant + file hash,
             // so the worker's later OCR pass will update the same record instead of creating a new one.
             await queue.EnqueueAsync(new DocumentDetectedEvent(
@@ -206,6 +218,89 @@ public static class UploadEndpoints
         await db.SaveChangesAsync(token);
 
         return Results.Ok(new { success = true });
+    }
+
+    private static async Task<IResult> BulkUploadAsync(
+        [FromForm] UploadFileForm form,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IDateTimeProvider clock,
+        IOptions<StorageOptions> storageOptions,
+        IIngestionQueue queue,
+        HttpContext httpContext,
+        CancellationToken token)
+    {
+        if (!string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+
+        // Model binding to UploadFileForm can fail; fall back to raw form files
+        IReadOnlyCollection<IFormFile>? fileCollection = form?.Files;
+        if (fileCollection is null || fileCollection.Count == 0)
+        {
+            fileCollection = httpContext?.Request?.Form?.Files;
+        }
+
+        if (fileCollection is null || fileCollection.Count == 0)
+        {
+            return Results.BadRequest(new { error = "no_files" });
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
+        var root = GetUploadsRoot(storageOptions.Value);
+        var batchDir = Path.Combine(root, tenantId.ToString(), "bulk", clock.UtcNow.ToString("yyyyMMddHHmmssfff"));
+        Directory.CreateDirectory(batchDir);
+
+        var results = new List<BulkUploadResult>();
+
+        foreach (var file in fileCollection)
+        {
+            var fileName = Path.GetFileName(file.FileName);
+            var destPath = Path.Combine(batchDir, fileName);
+
+            try
+            {
+                await using var stream = File.Create(destPath);
+                await file.CopyToAsync(stream, token);
+            }
+            catch (Exception ex)
+            {
+                results.Add(new BulkUploadResult(fileName, "failed", $"write_error:{ex.Message}"));
+                continue;
+            }
+
+            var fileHash = ComputeHash(destPath);
+            var size = new FileInfo(destPath).Length;
+
+            var exists = await db.Documents.AsNoTracking()
+                .AnyAsync(d => d.TenantId == tenantId && d.FileHash == fileHash, token);
+
+            if (exists)
+            {
+                results.Add(new BulkUploadResult(fileName, "duplicate", "already_uploaded"));
+                continue;
+            }
+
+            await queue.EnqueueAsync(new DocumentDetectedEvent(
+                tenantId,
+                source.Id,
+                UploadDeviceToken,
+                fileName,
+                destPath,
+                fileHash,
+                file.ContentType ?? "application/octet-stream",
+                size,
+                Array.Empty<string>(),
+                new Dictionary<string, string>(),
+                ProcessingStatus.Pending,
+                clock.UtcNow), token);
+
+            results.Add(new BulkUploadResult(fileName, "queued", null));
+        }
+
+        return Results.Ok(new { uploaded = results });
     }
 
     private static async Task<Source> EnsureUploadSourceAsync(AppDbContext db, Guid tenantId, IDateTimeProvider clock, CancellationToken token)
@@ -246,8 +341,25 @@ public static class UploadEndpoints
         var hash = sha.ComputeHash(stream);
         return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
     }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // swallow cleanup errors
+        }
+    }
 }
 
 public sealed record CreateUploadRequest(string? StaffName, string? StaffEmail, string? CourseName, DateOnly? ExpiryDate);
 
 public sealed record UploadFileForm(List<IFormFile> Files);
+
+public sealed record BulkUploadResult(string FileName, string Status, string? Message);
