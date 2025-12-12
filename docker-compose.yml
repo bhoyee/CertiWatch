@@ -62,7 +62,7 @@ services:
       - ./uploads:/uploads
       - ./samples/documents:/samples/documents:ro
 
-  worker:
+  worker-watcher:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
@@ -81,6 +81,30 @@ services:
       WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
       DOTNET_ENVIRONMENT: Development
       WORKER__EnableWatcher: "true"
+      WORKER__EnableSampleDocuments: "false"
+    volumes:
+      - ./uploads:/uploads:ro
+      - ./samples/documents:/samples/documents:ro
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    depends_on:
+      api:
+        condition: service_started
+      paddleocr:
+        condition: service_healthy
+    environment:
+      WORKER__DeepSeekApiKey: ${DEEPSEEK_API_KEY:-}
+      WORKER__DeepSeekBaseUrl: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      WORKER__ApiBaseUrl: http://api:8080
+      WORKER__DeviceId: 479bf42a-3c3a-411f-9dd8-9d598145c26a
+      WORKER__DeviceToken: 5+4wnaTOkHidVCQTQwoOswO6LRjFf/MW+9vgosfrDpM=
+      WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
+      DOTNET_ENVIRONMENT: Development
+      WORKER__EnableWatcher: "false"
       WORKER__EnableSampleDocuments: "false"
     volumes:
       - ./uploads:/uploads:ro

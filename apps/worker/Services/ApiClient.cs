@@ -9,7 +9,7 @@ namespace CertiWatch.Worker.Services;
 public interface IApiClient
 {
     Task PublishDocumentAsync(DocumentDetectedEvent payload, CancellationToken cancellationToken);
-    Task<bool> FileHashExistsAsync(Guid deviceId, string fileHash, CancellationToken cancellationToken);
+    Task<FileHashCheckResponse?> GetFileHashStatusAsync(Guid deviceId, string fileHash, CancellationToken cancellationToken);
 }
 
 public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> options, ILogger<ApiClient> logger) : IApiClient
@@ -37,7 +37,7 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
         }
     }
 
-    public async Task<bool> FileHashExistsAsync(Guid deviceId, string fileHash, CancellationToken cancellationToken)
+    public async Task<FileHashCheckResponse?> GetFileHashStatusAsync(Guid deviceId, string fileHash, CancellationToken cancellationToken)
     {
         try
         {
@@ -47,18 +47,18 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Hash check failed with status {Status}", response.StatusCode);
-                return false;
+                return null;
             }
 
             var result = await response.Content.ReadFromJsonAsync<FileHashCheckResponse>(cancellationToken: cancellationToken);
-            return result?.Exists == true;
+            return result;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to check file hash existence");
-            return false;
+            return null;
         }
     }
 }
 
-public sealed record FileHashCheckResponse(bool Exists);
+public sealed record FileHashCheckResponse(bool Exists, bool ShouldReprocess);

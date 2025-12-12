@@ -57,7 +57,7 @@ public sealed class OcrWorker : BackgroundService
 
     if (!_options.EnableWatcher || watchPaths.Count == 0)
     {
-      _logger.LogInformation("CertiWatch worker watcher disabled; no paths to scan.");
+      _logger.LogInformation("CertiWatch worker watcher disabled; no paths to scan. This instance will idle.");
       try
       {
         await Task.Delay(Timeout.Infinite, stoppingToken);
