@@ -94,7 +94,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                 // Safeguard: if the course doesn't match any global or tenant rule, force review
                 var courseAllowed = await IsCourseAllowedAsync(db, docEvent.TenantId, course, issuer, docEvent.VendorHints, stoppingToken);
-                if (!courseAllowed)
+                if (string.IsNullOrWhiteSpace(course) || course.Equals("unknown course", StringComparison.OrdinalIgnoreCase) || !courseAllowed)
                 {
                     var ruleHint = "needs_review:unknown_course";
                     if (!reviewHints.Contains(ruleHint))
