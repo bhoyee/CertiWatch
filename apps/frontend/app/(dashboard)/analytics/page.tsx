@@ -260,7 +260,7 @@ function Header({
     >
       <div className="flex items-center gap-1">
         <span>{children}</span>
-        {sorted && <span className="text-slate-400">{dir === "asc" ? "▲" : "▼"}</span>}
+        {sorted && <span className="text-slate-400">{dir === "asc" ? "^" : "v"}</span>}
       </div>
     </th>
   );
