@@ -6,6 +6,7 @@ using CertiWatch.Parsing;
 using CertiWatch.Parsing.Rules;
 using CertiWatch.Contracts.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace CertiWatch.Api.Infrastructure.Jobs;
 
@@ -303,9 +304,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
         IEnumerable<string>? tags,
         CancellationToken token)
     {
-        var globalRules = await db.CourseRules
+        var normalizedCourse = NormalizeKey(courseName);
+        var normalizedIssuer = NormalizeKey(issuer);
+        var tagSet = new HashSet<string>((tags ?? Enumerable.Empty<string>()).Select(NormalizeKey).Where(v => v is not null)!);
+
+        var rules = await db.CourseRules
             .AsNoTracking()
-            .Where(r => r.TenantId == null)
+            .Where(r => r.TenantId == null || r.TenantId == tenantId)
             .Select(r => new CourseRuleDefinition
             {
                 Id = r.Id,
@@ -320,25 +325,41 @@ public sealed class DocumentIngestionWorker : BackgroundService
             })
             .ToListAsync(token);
 
-        var tenantRules = await db.CourseRules
-            .AsNoTracking()
-            .Where(r => r.TenantId == tenantId)
-            .Select(r => new CourseRuleDefinition
+        foreach (var rule in rules)
+        {
+            // Exact course match
+            if (!string.IsNullOrWhiteSpace(rule.CourseName) &&
+                (NormalizeKey(rule.CourseName) == normalizedCourse || rule.CourseName.Trim() == "*"))
             {
-                Id = r.Id,
-                TenantId = r.TenantId,
-                CourseName = r.CourseName,
-                MatchRegex = r.MatchRegex,
-                Tag = r.Tag,
-                IssuerOverride = r.IssuerOverride,
-                DefaultValidityMonths = r.DefaultValidityMonths,
-                IsOneTime = r.IsOneTime,
-                IsRenewable = r.IsRenewable
-            })
-            .ToListAsync(token);
+                return true;
+            }
 
-        var engine = new CourseRuleEngine(globalRules);
-        var match = engine.Resolve(courseName, issuer, tags, tenantRules);
-        return match is not null && match.Precedence != RulePrecedence.Fallback;
+            // Regex course match
+            if (!string.IsNullOrWhiteSpace(rule.MatchRegex) &&
+                !string.IsNullOrWhiteSpace(courseName) &&
+                Regex.IsMatch(courseName, rule.MatchRegex, RegexOptions.IgnoreCase))
+            {
+                return true;
+            }
+
+            // Issuer override match
+            if (!string.IsNullOrWhiteSpace(rule.IssuerOverride) &&
+                NormalizeKey(rule.IssuerOverride) == normalizedIssuer)
+            {
+                return true;
+            }
+
+            // Tag match
+            var ruleTag = NormalizeKey(rule.Tag);
+            if (ruleTag is not null && tagSet.Contains(ruleTag))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    private static string? NormalizeKey(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 }
