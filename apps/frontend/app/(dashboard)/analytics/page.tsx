@@ -53,11 +53,12 @@ export default function AnalyticsPage() {
     { label: "Sources", value: data.sources }
   ];
 
-  const statusEntries = Object.entries(data.statusCounts);
+  const statusEntries = Object.entries(data.statusCounts ?? {});
+  const expiringList = data.expiringSoonList ?? [];
 
   const filteredSoon = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return data.expiringSoonList.filter((r) => {
+    return expiringList.filter((r) => {
       if (!term) return true;
       return (
         r.staffName.toLowerCase().includes(term) ||
@@ -65,7 +66,7 @@ export default function AnalyticsPage() {
         (r.issuer ?? "").toLowerCase().includes(term)
       );
     });
-  }, [data, search]);
+  }, [expiringList, search]);
 
   const sortedSoon = useMemo(() => {
     const list = [...filteredSoon];
