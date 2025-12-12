@@ -19,6 +19,7 @@ public static class DeviceEndpoints
         group.MapPost("/enroll", EnrollAsync);
         group.MapPost("/heartbeat", HeartbeatAsync);
         group.MapPost("/events", EventsAsync);
+        group.MapPost("/check-hash", CheckHashAsync);
         return group;
     }
 
@@ -110,4 +111,22 @@ public static class DeviceEndpoints
 
         return Results.Accepted();
     }
+
+    private static async Task<IResult> CheckHashAsync(FileHashCheckRequest request, AppDbContext db, CancellationToken token)
+    {
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == request.DeviceId, token);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        var exists = await db.Documents.AsNoTracking()
+            .AnyAsync(d => d.TenantId == device.TenantId && d.FileHash == request.FileHash, token);
+
+        return Results.Ok(new FileHashCheckResponse(exists));
+    }
 }
+
+public sealed record FileHashCheckRequest(Guid DeviceId, string FileHash);
+
+public sealed record FileHashCheckResponse(bool Exists);
