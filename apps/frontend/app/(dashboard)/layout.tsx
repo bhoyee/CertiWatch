@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Head from "next/head";
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { fetchJson } from "../../lib/api";
@@ -23,6 +24,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
+      <Head>
+        <link
+          rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+          integrity="sha512-DlN2uLmbPtcIwHnL0Pey9iedi/E0Ne+7X3kyM6wc9IU9Yb8fZ8OH4QDtJ2SB0LE4PjGhuZBY0G8zRRLXGxYb7A=="
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
+        />
+      </Head>
       <div className="flex min-h-screen">
         <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
           <Logo />
@@ -179,22 +189,22 @@ function Footer() {
 }
 
 function NavIcon({ name, active }: { name?: string; active?: boolean }) {
-  const wrap = active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700";
-  const emojiMap: Record<string, string> = {
-    chart: "📊",
-    table: "📄",
-    flag: "🚩",
-    shield: "🛡️",
-    cpu: "💻",
-    cloud: "☁️",
-    plug: "🔌",
-    users: "👥",
-    exit: "↩️"
+  const wrap = active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600";
+  const iconMap: Record<string, string> = {
+    chart: "fa-solid fa-chart-line",
+    table: "fa-solid fa-table",
+    flag: "fa-solid fa-flag",
+    shield: "fa-solid fa-shield-halved",
+    cpu: "fa-solid fa-microchip",
+    cloud: "fa-solid fa-cloud-arrow-up",
+    plug: "fa-solid fa-plug",
+    users: "fa-solid fa-users",
+    exit: "fa-solid fa-right-from-bracket"
   };
-  const emoji = emojiMap[name ?? ""] ?? "•";
+  const iconClass = iconMap[name ?? ""] ?? "fa-solid fa-circle";
   return (
     <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-base ${wrap}`} aria-hidden="true">
-      {emoji}
+      <i className={iconClass} aria-hidden="true" />
     </span>
   );
 }
