@@ -179,95 +179,22 @@ function Footer() {
 }
 
 function NavIcon({ name, active }: { name?: string; active?: boolean }) {
-  const base = "h-4 w-4";
-  const wrap = active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600";
-  switch (name) {
-    case "chart":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M4 20h16M6 17V9m6 8V4m6 13v-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    case "table":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <rect x="4" y="5" width="16" height="14" rx="2" />
-            <path d="M4 10h16M9 5v14" strokeLinecap="round" />
-          </svg>
-        </span>
-      );
-    case "flag":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M5 4v16M5 4h10l-2 4 4 4H5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    case "shield":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M12 3 5 6v6c0 3.5 2.6 6.8 7 9 4.4-2.2 7-5.5 7-9V6l-7-3Z" />
-          </svg>
-        </span>
-      );
-    case "cpu":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <rect x="7" y="7" width="10" height="10" rx="2" />
-            <path d="M4 10v4M20 10v4M10 4h4M10 20h4M7 4v2M17 4v2M7 18v2M17 18v2" strokeLinecap="round" />
-          </svg>
-        </span>
-      );
-    case "cloud":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M7 17h9a4 4 0 0 0 0-8 6 6 0 0 0-11 2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M7 17h8" strokeLinecap="round" />
-          </svg>
-        </span>
-      );
-    case "plug":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M7 2v5m10-5v5M6 9h12l-1 6a5 5 0 0 1-5 4 5 5 0 0 1-5-4L6 9Z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    case "users":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <circle cx="9" cy="9" r="3" />
-            <path d="M4 20a5 5 0 0 1 10 0" />
-            <circle cx="17" cy="8" r="2" />
-            <path d="M17 14a4 4 0 0 1 4 4" />
-          </svg>
-        </span>
-      );
-    case "exit":
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M10 6v12M6 6v12" strokeLinecap="round" />
-            <path d="m14 9 3 3-3 3M17 12H9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    default:
-      return (
-        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`}>
-          <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <circle cx="12" cy="12" r="9" />
-          </svg>
-        </span>
-      );
-  }
+  const wrap = active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700";
+  const emojiMap: Record<string, string> = {
+    chart: "📊",
+    table: "📄",
+    flag: "🚩",
+    shield: "🛡️",
+    cpu: "💻",
+    cloud: "☁️",
+    plug: "🔌",
+    users: "👥",
+    exit: "↩️"
+  };
+  const emoji = emojiMap[name ?? ""] ?? "•";
+  return (
+    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-base ${wrap}`} aria-hidden="true">
+      {emoji}
+    </span>
+  );
 }
