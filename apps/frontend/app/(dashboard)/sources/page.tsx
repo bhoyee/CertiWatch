@@ -85,6 +85,7 @@ export default function SourcesPage() {
           <h2 className="text-md font-semibold text-slate-900">Add cloud source</h2>
           <p className="text-sm text-slate-600">
             Connect cloud storage (S3/GCS/Azure/Dropbox/WebDAV/HTTP). Credentials are tenant-scoped and masked in the list.
+            Drive/OneDrive are not supported in this build.
           </p>
           <form
             className="mt-3 grid gap-3 md:grid-cols-2"
