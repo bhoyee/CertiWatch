@@ -376,34 +376,6 @@ function renderProviderFields(form: any, setForm: (f: any) => void) {
           <Field label="Access token" value={form.accessToken} onChange={(v) => setForm({ ...form, accessToken: v })} required type="password" />
         </>
       );
-    case "gdrive":
-      return (
-        <>
-          <Field label="Folder ID" value={form.folderId} onChange={(v) => setForm({ ...form, folderId: v })} required />
-          <Field
-            label="Service account JSON or access token"
-            value={form.serviceAccount || form.accessToken}
-            onChange={(v) => setForm({ ...form, serviceAccount: v })}
-            required
-          />
-        </>
-      );
-    case "onedrive":
-      return (
-        <>
-          <Field label="Drive ID (or Site ID)" value={form.driveId || form.siteId} onChange={(v) => setForm({ ...form, driveId: v })} required />
-          <Field label="Folder path" value={form.path} onChange={(v) => setForm({ ...form, path: v })} />
-          <Field
-            label="Access token (or leave blank to use app creds)"
-            value={form.accessToken}
-            onChange={(v) => setForm({ ...form, accessToken: v })}
-            type="password"
-          />
-          <Field label="Client ID" value={form.clientId} onChange={(v) => setForm({ ...form, clientId: v })} />
-          <Field label="Client secret" value={form.clientSecret} onChange={(v) => setForm({ ...form, clientSecret: v })} type="password" />
-          <Field label="Tenant ID" value={form.tenantId} onChange={(v) => setForm({ ...form, tenantId: v })} />
-        </>
-      );
     case "webdav":
     case "httpdir":
       return (
