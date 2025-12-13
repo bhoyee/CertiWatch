@@ -49,6 +49,7 @@ public static class ReportsEndpoints
         var soon = today.AddDays(30);
 
         var records = await db.Records.AsNoTracking().Where(r => r.TenantId == tenantId).ToListAsync(token);
+        var okRecords = records.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
         var expiringSoon = records.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today && r.ExpiryDate <= soon).ToList();
         var expired = records.Where(r => r.ExpiryDate != null && r.ExpiryDate < today).ToList();
         var lowConfidence = records.Where(r => r.Confidence < 0.6m).ToList();
@@ -58,7 +59,7 @@ public static class ReportsEndpoints
             .ToDictionary(g => g.Key, g => g.Count());
 
         var dto = new AnalyticsOverviewDto(
-            TotalRecords: records.Count,
+            TotalRecords: okRecords.Count,
             ExpiringSoon: expiringSoon.Count,
             Expired: expired.Count,
             LowConfidence: lowConfidence.Count,
