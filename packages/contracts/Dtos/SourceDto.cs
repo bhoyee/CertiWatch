@@ -7,5 +7,8 @@ public sealed record SourceDto(
     SourceType Type,
     string DisplayName,
     IReadOnlyDictionary<string, string> Config,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? LastSync = null,
+    string? SyncStatus = null,
+    string? SyncError = null
 );

@@ -5,5 +5,6 @@ public enum SourceType
     Local,
     GoogleDrive,
     OneDrive,
-    Dropbox
+    Dropbox,
+    CloudImport
 }
