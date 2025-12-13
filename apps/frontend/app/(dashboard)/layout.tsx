@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Head from "next/head";
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { fetchJson } from "../../lib/api";
@@ -24,15 +23,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
-      <Head>
-        <link
-          rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-          integrity="sha512-DlN2uLmbPtcIwHnL0Pey9iedi/E0Ne+7X3kyM6wc9IU9Yb8fZ8OH4QDtJ2SB0LE4PjGhuZBY0G8zRRLXGxYb7A=="
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-        />
-      </Head>
       <div className="flex min-h-screen">
         <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
           <Logo />
@@ -190,21 +180,83 @@ function Footer() {
 
 function NavIcon({ name, active }: { name?: string; active?: boolean }) {
   const wrap = active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600";
-  const iconMap: Record<string, string> = {
-    chart: "fa-solid fa-chart-line",
-    table: "fa-solid fa-table",
-    flag: "fa-solid fa-flag",
-    shield: "fa-solid fa-shield-halved",
-    cpu: "fa-solid fa-microchip",
-    cloud: "fa-solid fa-cloud-arrow-up",
-    plug: "fa-solid fa-plug",
-    users: "fa-solid fa-users",
-    exit: "fa-solid fa-right-from-bracket"
-  };
-  const iconClass = iconMap[name ?? ""] ?? "fa-solid fa-circle";
+  const icon = renderIcon(name ?? "default");
   return (
-    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-base ${wrap}`} aria-hidden="true">
-      <i className={iconClass} aria-hidden="true" />
+    <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${wrap}`} aria-hidden="true">
+      {icon}
     </span>
   );
+}
+
+function renderIcon(name: string) {
+  const base = "h-4 w-4";
+  switch (name) {
+    case "chart":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M4 20h16M6 17V9m6 8V4m6 13v-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "table":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path d="M4 10h16M9 5v14" strokeLinecap="round" />
+        </svg>
+      );
+    case "flag":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M5 4v16M5 4h10l-2 4 4 4H5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "shield":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M12 3 5 6v6c0 3.5 2.6 6.8 7 9 4.4-2.2 7-5.5 7-9V6l-7-3Z" />
+        </svg>
+      );
+    case "cpu":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <rect x="7" y="7" width="10" height="10" rx="2" />
+          <path d="M4 10v4M20 10v4M10 4h4M10 20h4M7 4v2M17 4v2M7 18v2M17 18v2" strokeLinecap="round" />
+        </svg>
+      );
+    case "cloud":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M7 17h9a4 4 0 0 0 0-8 6 6 0 0 0-11 2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 17h8" strokeLinecap="round" />
+        </svg>
+      );
+    case "plug":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M7 2v5m10-5v5M6 9h12l-1 6a5 5 0 0 1-5 4 5 5 0 0 1-5-4L6 9Z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "users":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <circle cx="9" cy="9" r="3" />
+          <path d="M4 20a5 5 0 0 1 10 0" />
+          <circle cx="17" cy="8" r="2" />
+          <path d="M17 14a4 4 0 0 1 4 4" />
+        </svg>
+      );
+    case "exit":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M10 6v12M6 6v12" strokeLinecap="round" />
+          <path d="m14 9 3 3-3 3M17 12H9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      );
+  }
 }
