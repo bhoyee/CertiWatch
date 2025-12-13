@@ -14,6 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="3.7.300.6" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.22.1" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\packages\contracts\CertiWatch.Contracts.csproj" />
     <ProjectReference Include="..\..\packages\parsing\CertiWatch.Parsing.csproj" />
   </ItemGroup>
