@@ -20,6 +20,8 @@ public static class DeviceEndpoints
         group.MapPost("/heartbeat", HeartbeatAsync);
         group.MapPost("/events", EventsAsync);
         group.MapPost("/check-hash", CheckHashAsync);
+        group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync);
+        group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync);
         return group;
     }
 
@@ -135,6 +137,70 @@ public static class DeviceEndpoints
         var shouldReprocess = HashCheckExtensions.IsIncomplete(record);
 
         return Results.Ok(new FileHashCheckResponse(true, shouldReprocess));
+    }
+
+    private static async Task<IResult> ListSourcesForDeviceAsync(Guid deviceId, string? deviceToken, AppDbContext db, CancellationToken token)
+    {
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deviceId, token);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!string.Equals(device.DeviceToken, deviceToken, StringComparison.Ordinal))
+        {
+            return Results.Unauthorized();
+        }
+
+        var sources = await db.Sources.AsNoTracking()
+            .Where(s => s.TenantId == device.TenantId)
+            .ToListAsync(token);
+
+        return Results.Ok(sources.Select(s => new CertiWatch.Contracts.Dtos.SourceDto(
+            s.Id,
+            s.Type,
+            s.DisplayName,
+            System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(s.ConfigJson) ?? new Dictionary<string, string>(),
+            s.CreatedAt
+        )));
+    }
+
+    private sealed record SyncStatusRequest(string Status, string? Message);
+
+    private static async Task<IResult> UpdateSourceSyncStatusAsync(Guid deviceId, Guid sourceId, string? deviceToken, SyncStatusRequest request, AppDbContext db, CancellationToken token)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, token);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!string.Equals(device.DeviceToken, deviceToken, StringComparison.Ordinal))
+        {
+            return Results.Unauthorized();
+        }
+
+        var source = await db.Sources.FirstOrDefaultAsync(s => s.Id == sourceId && s.TenantId == device.TenantId, token);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var cfg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(source.ConfigJson) ?? new Dictionary<string, string>();
+        cfg["sync_status"] = request.Status;
+        cfg["last_sync"] = DateTime.UtcNow.ToString("o");
+        if (!string.IsNullOrWhiteSpace(request.Message))
+        {
+            cfg["sync_error"] = request.Message;
+        }
+        else
+        {
+            cfg.Remove("sync_error");
+        }
+
+        source.ConfigJson = System.Text.Json.JsonSerializer.Serialize(cfg);
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
     }
 }
 
