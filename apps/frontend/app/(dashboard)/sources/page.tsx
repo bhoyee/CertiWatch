@@ -303,20 +303,6 @@ function buildConfig(form: any): Record<string, string> {
       assignIf(cfg, "path", form.path);
       assignIf(cfg, "accessToken", form.accessToken);
       break;
-    case "gdrive":
-      assignIf(cfg, "folderId", form.folderId);
-      assignIf(cfg, "serviceAccount", form.serviceAccount);
-      assignIf(cfg, "accessToken", form.accessToken);
-      break;
-    case "onedrive":
-      assignIf(cfg, "driveId", form.driveId);
-      assignIf(cfg, "siteId", form.siteId);
-      assignIf(cfg, "folderPath", form.path);
-      assignIf(cfg, "accessToken", form.accessToken);
-      assignIf(cfg, "clientId", form.clientId);
-      assignIf(cfg, "clientSecret", form.clientSecret);
-      assignIf(cfg, "tenantId", form.tenantId);
-      break;
     case "webdav":
     case "httpdir":
       assignIf(cfg, "baseUrl", form.baseUrl);
