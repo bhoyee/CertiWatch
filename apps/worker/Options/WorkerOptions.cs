@@ -14,14 +14,19 @@ public sealed class WorkerOptions
     public string DoctrBaseUrl { get; set; } = string.Empty;
     public string DeepSeekApiKey { get; set; } = string.Empty;
     public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com";
-    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { UploadsPath };
+    public IReadOnlyList<string> WatchPaths { get; set; } = new[] { UploadsPath, DefaultCloudImportPath };
     public bool EnableWatcher { get; set; } = true;
     public bool EnableSampleDocuments { get; set; } = false;
     public string DocumentType { get; set; } = "generic_certificate";
+    public int CloudImportPollMinutes { get; set; } = 5;
+    public string CloudImportDownloadPath { get; set; } = DefaultCloudImportPath;
 
     private static string DefaultSamplesPath =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "documents"));
 
     private static string UploadsPath =>
         "/uploads";
+
+    private static string DefaultCloudImportPath =>
+        "/tmp/cloud-import";
 }

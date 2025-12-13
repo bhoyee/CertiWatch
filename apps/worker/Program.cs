@@ -21,6 +21,8 @@ builder.Services.AddSingleton<ITesseractClient, TesseractClient>();
 builder.Services.AddHttpClient<IDoctrClient, DoctrClient>();
 builder.Services.AddHttpClient<IDeepSeekClient, DeepSeekClient>();
 builder.Services.AddHostedService<OcrWorker>();
+builder.Services.AddHttpClient("cloud-sync");
+builder.Services.AddHostedService<CloudImportWorker>();
 
 builder.Services.AddLogging(logging =>
 {
