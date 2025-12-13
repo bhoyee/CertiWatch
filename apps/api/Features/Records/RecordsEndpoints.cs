@@ -10,6 +10,7 @@ using CertiWatch.Contracts.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
+using System.Text;
 
 namespace CertiWatch.Api.Features.Records;
 
@@ -19,6 +20,8 @@ public static class RecordsEndpoints
     {
         var group = routes.MapGroup("/api/records").RequireAuthorization();
         group.MapGet(string.Empty, ListAsync);
+        group.MapGet("/export.csv", ExportCsvAsync);
+        group.MapGet("/export.pdf", ExportPdfAsync);
         group.MapGet("/review-count", ReviewCountAsync);
         group.MapGet("/{id:guid}", GetAsync);
         group.MapPatch("/{id:guid}", PatchAsync);
@@ -28,38 +31,7 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
-        var tenantId = tenantAccessor.Current.TenantId;
-        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
-
-        // Filter by status if provided
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            var normalized = status.Trim().ToLowerInvariant();
-            var map = new Dictionary<string, ProcessingStatus>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["pending"] = ProcessingStatus.Pending,
-                ["ok"] = ProcessingStatus.Ok,
-                ["needs review"] = ProcessingStatus.NeedsReview,
-                ["needs_review"] = ProcessingStatus.NeedsReview,
-                ["review"] = ProcessingStatus.NeedsReview,
-                ["failed"] = ProcessingStatus.Failed
-            };
-            if (map.TryGetValue(normalized, out var mapped))
-            {
-                baseQuery = baseQuery.Where(r => r.ProcessingStatus == mapped);
-            }
-        }
-
-        // Search filter
-        if (!string.IsNullOrWhiteSpace(query.Filter))
-        {
-            var term = query.Filter.Trim().ToLower();
-            baseQuery = baseQuery.Where(r =>
-                (r.StaffName ?? string.Empty).ToLower().Contains(term) ||
-                (r.CourseName ?? string.Empty).ToLower().Contains(term) ||
-                (r.Issuer ?? string.Empty).ToLower().Contains(term));
-        }
-
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
         baseQuery = ApplySort(baseQuery, query.Sort);
 
         var total = await baseQuery.CountAsync(token);
@@ -208,6 +180,143 @@ public static class RecordsEndpoints
 
         await db.SaveChangesAsync(token);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> ExportCsvAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    {
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
+        var rows = await baseQuery
+            .OrderBy(r => r.CreatedAt)
+            .Select(r => new
+            {
+                r.StaffName,
+                r.CourseName,
+                r.Issuer,
+                r.IssueDate,
+                r.ExpiryDate,
+                r.ProcessingStatus,
+                r.Confidence
+            })
+            .ToListAsync(token);
+
+        var csv = new StringBuilder();
+        csv.AppendLine("Staff,Course,Issuer,Issue,Expiry,Status,Confidence");
+        foreach (var row in rows)
+        {
+            var staff = Escape(row.StaffName);
+            var course = Escape(row.CourseName);
+            var issuer = Escape(row.Issuer);
+            var issue = row.IssueDate?.ToString("yyyy-MM-dd") ?? string.Empty;
+            var expiry = row.ExpiryDate?.ToString("yyyy-MM-dd") ?? string.Empty;
+            var statusLabel = StatusLabelFromEnum(row.ProcessingStatus);
+            var confidence = row.Confidence != 0 ? $"{Math.Round(row.Confidence * 100, 0):0}%" : string.Empty;
+            csv.AppendLine($"{staff},{course},{issuer},{issue},{expiry},{statusLabel},{confidence}");
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+        return Results.File(bytes, "text/csv", "records-export.csv");
+    }
+
+    private static async Task<IResult> ExportPdfAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    {
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
+        var rows = await baseQuery
+            .OrderBy(r => r.CreatedAt)
+            .Take(500)
+            .ToListAsync(token);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("CertiWatch Records Export");
+        sb.AppendLine($"Generated: {DateTime.UtcNow:O}");
+        sb.AppendLine();
+        foreach (var r in rows)
+        {
+            sb.AppendLine($"{r.StaffName} | {r.CourseName} | {r.Issuer ?? "--"} | Issue: {r.IssueDate:yyyy-MM-dd} | Expiry: {r.ExpiryDate:yyyy-MM-dd} | Status: {StatusLabelFromEnum(r.ProcessingStatus)} | Confidence: {FormatPercent(r.Confidence)}");
+        }
+
+        var pdfBytes = BuildMinimalPdf(sb.ToString());
+        return Results.File(pdfBytes, "application/pdf", "records-export.pdf");
+    }
+
+    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status)
+    {
+        var tenantId = tenantAccessor.Current.TenantId;
+        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var normalized = status.Trim().ToLowerInvariant();
+            var map = new Dictionary<string, ProcessingStatus>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pending"] = ProcessingStatus.Pending,
+                ["ok"] = ProcessingStatus.Ok,
+                ["needs review"] = ProcessingStatus.NeedsReview,
+                ["needs_review"] = ProcessingStatus.NeedsReview,
+                ["review"] = ProcessingStatus.NeedsReview,
+                ["failed"] = ProcessingStatus.Failed
+            };
+            if (map.TryGetValue(normalized, out var mapped))
+            {
+                baseQuery = baseQuery.Where(r => r.ProcessingStatus == mapped);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            var term = filter.Trim().ToLower();
+            baseQuery = baseQuery.Where(r =>
+                (r.StaffName ?? string.Empty).ToLower().Contains(term) ||
+                (r.CourseName ?? string.Empty).ToLower().Contains(term) ||
+                (r.Issuer ?? string.Empty).ToLower().Contains(term));
+        }
+
+        return baseQuery;
+    }
+
+    private static string Escape(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var cleaned = value.Replace("\"", "\"\"");
+        return cleaned.Contains(',') ? $"\"{cleaned}\"" : cleaned;
+    }
+
+    private static string StatusLabelFromEnum(ProcessingStatus status) => status switch
+    {
+        ProcessingStatus.Pending => "pending",
+        ProcessingStatus.Ok => "ok",
+        ProcessingStatus.NeedsReview => "needs review",
+        ProcessingStatus.Failed => "failed",
+        _ => status.ToString()
+    };
+
+    private static string FormatPercent(decimal? value)
+    {
+        if (value is null) return "n/a";
+        return $"{Math.Round(value.Value * 100, 0):0}%";
+    }
+
+    private static byte[] BuildMinimalPdf(string textContent)
+    {
+        // Minimal PDF: single page with the text content.
+        var content = textContent.Replace("(", "\\(").Replace(")", "\\(").Replace("\\", "\\\\");
+        var sb = new StringBuilder();
+        sb.AppendLine("%PDF-1.4");
+        sb.AppendLine("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj");
+        sb.AppendLine("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj");
+        sb.AppendLine("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >> endobj");
+        var stream = $"BT /F1 12 Tf 50 750 Td ({content}) Tj ET";
+        sb.AppendLine($"4 0 obj << /Length {stream.Length} >> stream");
+        sb.AppendLine(stream);
+        sb.AppendLine("endstream endobj");
+        sb.AppendLine("5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj");
+        sb.AppendLine("xref");
+        sb.AppendLine("0 6");
+        sb.AppendLine("0000000000 65535 f ");
+        sb.AppendLine("trailer << /Root 1 0 R /Size 6 >>");
+        sb.AppendLine("startxref");
+        sb.AppendLine("0");
+        sb.AppendLine("%%EOF");
+        return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
     internal static RecordDto ToDtoForReport(Record record) => ToDto(record);

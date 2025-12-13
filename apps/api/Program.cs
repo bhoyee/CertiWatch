@@ -10,6 +10,7 @@ using CertiWatch.Api.Features.Rules;
 using CertiWatch.Api.Features.Rules.Validators;
 using CertiWatch.Api.Features.Uploads;
 using CertiWatch.Api.Features.Sources;
+using CertiWatch.Api.Features.Review;
 using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Jobs;
 using CertiWatch.Api.Infrastructure.Persistence;
@@ -55,6 +56,7 @@ builder.Services.AddSingleton<ParsingPipeline>();
 
 builder.Services.AddHostedService<DocumentIngestionWorker>();
 builder.Services.AddHostedService<ReminderScheduler>();
+builder.Services.AddHostedService<ReminderSender>();
 builder.Services.AddHostedService<WeeklyDigestJob>();
 
 builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("MagicLinks"));
@@ -147,6 +149,7 @@ app.MapCourseRuleEndpoints();
 app.MapReportEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
+app.MapReviewEndpoints();
 app.MapBillingEndpoints();
 app.MapTenantEndpoints();
 app.MapUploadEndpoints();

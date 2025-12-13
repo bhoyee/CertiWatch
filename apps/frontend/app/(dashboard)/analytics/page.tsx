@@ -24,9 +24,18 @@ type AnalyticsOverviewDto = {
   }>;
 };
 
+type ReminderPreviewDto = {
+  expiringIn7: number;
+  expiringIn30: number;
+  needsReview: number;
+  upcoming: Array<{ id: string; staffName: string; courseName: string; expiryDate: string }>;
+};
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsOverviewDto | null>(null);
+  const [reminders, setReminders] = useState<ReminderPreviewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reminderError, setReminderError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<"staff" | "course" | "expiry" | "status">("expiry");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -37,6 +46,10 @@ export default function AnalyticsPage() {
     fetchJson<AnalyticsOverviewDto>("/api/reports/analytics")
       .then(setData)
       .catch((err) => setError(err.message ?? "Failed to load analytics"));
+
+    fetchJson<ReminderPreviewDto>("/api/notifications/reminders/preview")
+      .then(setReminders)
+      .catch((err) => setReminderError(err.message ?? "Failed to load reminders"));
   }, []);
 
   if (error) return <ErrorCard message={error} />;
@@ -117,6 +130,50 @@ export default function AnalyticsPage() {
       </div>
 
       {statusEntries.length > 0 && <StatusBars entries={statusEntries} />}
+
+      {reminders && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-600">Reminder preview</p>
+              <p className="text-lg font-semibold text-slate-900">Upcoming expiries</p>
+            </div>
+            <div className="flex gap-2 text-xs">
+              <Badge color="bg-amber-100 text-amber-800">30 days: {reminders.expiringIn30}</Badge>
+              <Badge color="bg-rose-100 text-rose-700">7 days: {reminders.expiringIn7}</Badge>
+              <Badge color="bg-indigo-100 text-indigo-700">Needs review: {reminders.needsReview}</Badge>
+            </div>
+          </div>
+          {reminderError && <p className="text-xs text-rose-600">Reminder preview unavailable: {reminderError}</p>}
+          <div className="-mx-3 overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <Header>Staff</Header>
+                  <Header>Course</Header>
+                  <Header>Expiry</Header>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {reminders.upcoming?.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50">
+                    <Cell>{u.staffName}</Cell>
+                    <Cell>{u.courseName}</Cell>
+                    <Cell>{u.expiryDate}</Cell>
+                  </tr>
+                ))}
+                {(!reminders.upcoming || reminders.upcoming.length === 0) && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-3 text-center text-sm text-slate-500">
+                      No upcoming expiries in the next 30 days.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -282,6 +339,10 @@ function Header({
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
+}
+
+function Badge({ children, color }: { children: React.ReactNode; color: string }) {
+  return <span className={`inline-flex items-center rounded-full px-2 py-1 font-semibold ${color}`}>{children}</span>;
 }
 
 function LoadingCard() {

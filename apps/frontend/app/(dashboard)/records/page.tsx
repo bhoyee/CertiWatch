@@ -40,6 +40,7 @@ export default function RecordsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
 
   const toggleSort = (field: string) => {
     setPage(1);
@@ -53,12 +54,7 @@ export default function RecordsPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    params.set("page", String(page));
-    params.set("pageSize", String(pageSize));
-    if (search.trim()) params.set("filter", search.trim());
-    if (status !== "all") params.set("status", status);
-    if (sortField) params.set("sort", `${sortField}:${sortDir}`);
+    const params = buildParams();
 
     fetchJson<PagedResult<RecordDto>>(`/api/records?${params.toString()}`)
       .then((res) => {
@@ -69,6 +65,42 @@ export default function RecordsPage() {
       .catch((err) => setError(err.message ?? "Failed to load records"))
       .finally(() => setLoading(false));
   }, [page, pageSize, search, status, sortField, sortDir]);
+
+  const buildParams = () => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    if (search.trim()) params.set("filter", search.trim());
+    if (status !== "all") params.set("status", status);
+    if (sortField) params.set("sort", `${sortField}:${sortDir}`);
+    return params;
+  };
+
+  const exportFile = async (kind: "csv" | "pdf") => {
+    setExporting(kind);
+    try {
+      const params = buildParams();
+      const res = await fetch(`/api/records/export.${kind}?${params.toString()}`, {
+        credentials: "include"
+      });
+      if (!res.ok) {
+        throw new Error(`Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = kind === "csv" ? "records-export.csv" : "records-export.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message ?? "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -160,6 +192,19 @@ export default function RecordsPage() {
             className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
+          </button>          <button
+            onClick={() => exportFile("csv")}
+            disabled={exporting !== null}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {exporting === "csv" ? "Exporting..." : "Export CSV"}
+          </button>
+          <button
+            onClick={() => exportFile("pdf")}
+            disabled={exporting !== null}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {exporting === "pdf" ? "Exporting..." : "Export PDF"}
           </button>
           <span className="text-xs text-slate-500">
             Total: {data.total}
@@ -372,3 +417,4 @@ function statusBadge(status: string | number, id: string) {
   }
   return <span className="capitalize text-slate-700">{label}</span>;
 }
+

@@ -11,6 +11,7 @@ type SourceDto = {
   createdAt: string;
   lastSync?: string;
   syncStatus?: string;
+  syncError?: string;
 };
 
 type Provider =
@@ -25,6 +26,7 @@ export default function SourcesPage() {
   const [sources, setSources] = useState<SourceDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     displayName: "",
     provider: "s3" as Provider,
@@ -64,6 +66,18 @@ export default function SourcesPage() {
     fetchJson<SourceDto[]>("/api/sources")
       .then(setSources)
       .catch((err) => setError(err.message ?? "Failed to load sources"));
+  };
+
+  const syncNow = async (id: string) => {
+    setSyncing((s) => ({ ...s, [id]: true }));
+    try {
+      await postJson(`/api/sources/${id}/sync-now`, {});
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to trigger sync");
+    } finally {
+      setSyncing((s) => ({ ...s, [id]: false }));
+    }
   };
 
   useEffect(() => {
@@ -188,19 +202,26 @@ export default function SourcesPage() {
                 <Header>Type</Header>
                 <Header>Status</Header>
                 <Header>Last sync</Header>
+                <Header>Error</Header>
                 <Header>Created</Header>
                 <Header>Config</Header>
+                <Header>Actions</Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {sources.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
-              <Cell>{s.displayName}</Cell>
+                <Cell>{s.displayName}</Cell>
                   <Cell className="capitalize">
                     {isUnsupportedProvider(s.config) ? "unsupported" : String(s.type ?? "").toLowerCase() || "--"}
                   </Cell>
-                  <Cell>{isUnsupportedProvider(s.config) ? "unsupported" : getSyncStatus(s.config)}</Cell>
+                  <Cell>
+                    <StatusPill value={isUnsupportedProvider(s.config) ? "unsupported" : getSyncStatus(s.config)} />
+                  </Cell>
                   <Cell>{isUnsupportedProvider(s.config) ? "--" : formatDate(getSyncDate(s.config))}</Cell>
+                  <Cell className="text-xs text-rose-600">
+                    {!isUnsupportedProvider(s.config) && getSyncError(s.config) ? getSyncError(s.config) : "--"}
+                  </Cell>
                   <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
                   <Cell>
                     {s.config && Object.keys(s.config).length > 0 ? (
@@ -214,6 +235,15 @@ export default function SourcesPage() {
                     ) : (
                       <span className="text-slate-500">--</span>
                     )}
+                  </Cell>
+                  <Cell>
+                    <button
+                      onClick={() => syncNow(s.id)}
+                      disabled={syncing[s.id]}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {syncing[s.id] ? "Syncing..." : "Sync now"}
+                    </button>
                   </Cell>
                 </tr>
               ))}
@@ -231,6 +261,21 @@ function Header({ children }: { children: React.ReactNode }) {
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
+}
+
+function StatusPill({ value }: { value: string }) {
+  const normalized = (value ?? "").toLowerCase();
+  const styles =
+    normalized === "ok" || normalized === "success"
+      ? "bg-emerald-100 text-emerald-700"
+      : normalized === "queued"
+        ? "bg-amber-100 text-amber-700"
+        : normalized === "error" || normalized === "failed"
+          ? "bg-rose-100 text-rose-700"
+          : normalized === "unsupported"
+            ? "bg-slate-200 text-slate-700"
+            : "bg-slate-100 text-slate-700";
+  return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${styles}`}>{value || "--"}</span>;
 }
 
 function LoadingCard() {
@@ -383,12 +428,17 @@ function assignIf(target: Record<string, string>, key: string, value?: string) {
 
 function getSyncStatus(cfg?: Record<string, string>) {
   if (!cfg) return "--";
-  return cfg.sync_status ?? "--";
+  return cfg.sync_status ?? cfg.syncStatus ?? "--";
 }
 
 function getSyncDate(cfg?: Record<string, string>) {
   if (!cfg) return "";
   return cfg.last_sync ?? "";
+}
+
+function getSyncError(cfg?: Record<string, string>) {
+  if (!cfg) return "";
+  return cfg.sync_error ?? "";
 }
 
 function formatDate(value?: string) {
