@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
   ];
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
-  const expiringList = data.expiringSoonList ?? [];
+  const expiringList = reminders?.upcoming ?? data.expiringSoonList ?? [];
 
   const filteredSoon = expiringList.filter((r) => {
     const term = search.trim().toLowerCase();
@@ -83,8 +83,6 @@ export default function AnalyticsPage() {
         return (a.staffName ?? "").localeCompare(b.staffName ?? "") * dir;
       case "course":
         return (a.courseName ?? "").localeCompare(b.courseName ?? "") * dir;
-      case "status":
-        return String(a.processingStatus).localeCompare(String(b.processingStatus)) * dir;
       case "expiry":
       default: {
         const aDate = a.expiryDate ?? "";
@@ -208,41 +206,37 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <div className="-mx-3 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <Header onClick={() => toggleSort("staff")} sorted={sortKey === "staff"} dir={sortDir}>
-                  Staff
-                </Header>
-                <Header onClick={() => toggleSort("course")} sorted={sortKey === "course"} dir={sortDir}>
-                  Course
-                </Header>
-                <Header onClick={() => toggleSort("expiry")} sorted={sortKey === "expiry"} dir={sortDir}>
-                  Expiry
-                </Header>
-                <Header onClick={() => toggleSort("status")} sorted={sortKey === "status"} dir={sortDir}>
-                  Status
-                </Header>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {visibleSoon.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50">
-                  <Cell>{r.staffName ?? "--"}</Cell>
-                  <Cell>{r.courseName ?? "--"}</Cell>
-                  <Cell>{r.expiryDate ?? "--"}</Cell>
-                  <Cell className="capitalize">{String(r.processingStatus ?? "").toLowerCase()}</Cell>
-                </tr>
-              ))}
-              {visibleSoon.length === 0 && (
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
                 <tr>
-                  <td colSpan={4} className="px-3 py-4 text-center text-sm text-slate-500">
-                    No records match your filters.
-                  </td>
+                  <Header onClick={() => toggleSort("staff")} sorted={sortKey === "staff"} dir={sortDir}>
+                    Staff
+                  </Header>
+                  <Header onClick={() => toggleSort("course")} sorted={sortKey === "course"} dir={sortDir}>
+                    Course
+                  </Header>
+                  <Header onClick={() => toggleSort("expiry")} sorted={sortKey === "expiry"} dir={sortDir}>
+                    Expiry
+                  </Header>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {visibleSoon.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50">
+                    <Cell>{r.staffName ?? "--"}</Cell>
+                    <Cell>{r.courseName ?? "--"}</Cell>
+                    <Cell>{r.expiryDate ?? "--"}</Cell>
+                  </tr>
+                ))}
+                {visibleSoon.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-4 text-center text-sm text-slate-500">
+                      No records match your filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
         </div>
         <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
           <span>
