@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchJson, patchJson, deleteJson, postJson } from "../../../lib/api";
+import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
 
 type RecordDto = {
   id: string;
@@ -277,8 +277,6 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [magicStatus, setMagicStatus] = useState<string | null>(null);
-  const [magicEmail, setMagicEmail] = useState("");
 
   const confidenceText = useMemo(() => {
     if (record.extractionConfidence != null) return `${(record.extractionConfidence * 100).toFixed(0)}% AI`;
@@ -329,29 +327,6 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
     setConfirmingDelete(false);
   };
 
-  const copyMagicLink = async (action: "approve" | "ignore" | "fix") => {
-    setMagicStatus(`Generating ${action} link...`);
-    try {
-      const res = await postJson<{ link: string }, { action: string }>(`/api/review/${record.id}/magic-link`, { action });
-      await navigator.clipboard.writeText(res.link);
-      setMagicStatus(`Magic link copied (${action})`);
-    } catch (err: any) {
-      setMagicStatus(err?.message ?? "Failed to copy link");
-    }
-  };
-
-  const emailMagicLink = async (action: "approve" | "ignore" | "fix") => {
-    setMagicStatus(`Emailing ${action} link...`);
-    try {
-      const res = await postJson<{ link: string; emailed: boolean; to?: string }, { action: string; sendEmail: boolean; email?: string }>(
-        `/api/review/${record.id}/magic-link`,
-        { action, sendEmail: true, email: magicEmail || undefined }
-      );
-      setMagicStatus(res.emailed ? `Magic link emailed to ${res.to}` : "Link created");
-    } catch (err: any) {
-      setMagicStatus(err?.message ?? "Failed to email link");
-    }
-  };
 
   return (
     <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -421,40 +396,8 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
         >
           Reject & delete
         </button>
-        <button
-          onClick={() => copyMagicLink("approve")}
-          disabled={saving}
-          className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          Copy magic link (approve)
-        </button>
-        <button
-          onClick={() => copyMagicLink("fix")}
-          disabled={saving}
-          className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          Copy magic link (fix)
-        </button>
-        <div className="flex items-center gap-2">
-          <input
-            type="email"
-            placeholder="Email (optional)"
-            value={magicEmail}
-            onChange={(e) => setMagicEmail(e.target.value)}
-            className="w-48 rounded-md border border-slate-300 px-2 py-1 text-xs"
-          />
-          <button
-            onClick={() => emailMagicLink("approve")}
-            disabled={saving}
-            className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            Email link
-          </button>
-        </div>
         <p className="text-xs text-slate-500">Created at {formatDate(record.createdAt)}</p>
       </div>
-
-      {magicStatus && <p className="mt-2 text-xs text-slate-600">{magicStatus}</p>}
 
       {confirmingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
