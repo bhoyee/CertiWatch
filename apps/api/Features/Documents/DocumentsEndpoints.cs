@@ -90,23 +90,30 @@ public static class DocumentsEndpoints
         Guid id,
         AppDbContext db,
         ITenantContextAccessor accessor,
-        IOptions<StorageOptions> storageOptions,
         CancellationToken token)
     {
-        var document = await db.Documents.AsNoTracking()
+        var document = await db.Documents
+            .Include(d => d.Records)
             .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
 
-        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !File.Exists(document.PathOrUrl))
+        if (document is null)
         {
             return Results.NotFound();
         }
 
-        var uploadsRoot = storageOptions.Value.UploadsRoot ?? "/uploads";
-        var reprocessDir = Path.Combine(uploadsRoot, document.TenantId.ToString(), "reprocess", id.ToString("N"));
-        Directory.CreateDirectory(reprocessDir);
-        var destPath = Path.Combine(reprocessDir, Path.GetFileName(document.FileName));
-        File.Copy(document.PathOrUrl, destPath, overwrite: true);
+        foreach (var record in document.Records)
+        {
+            record.ProcessingStatus = Contracts.Enums.ProcessingStatus.NeedsReview;
+            record.ReviewReason = "force_reprocess";
+            record.ReviewNotes = null;
+            record.ReviewedAt = null;
+            record.ReviewedBy = null;
+        }
 
-        return Results.Ok(new { queued = true, path = destPath });
+        document.ProcessedAt = null;
+        document.ProcessingStatus = Contracts.Enums.ProcessingStatus.Pending;
+
+        await db.SaveChangesAsync(token);
+        return Results.Ok(new { queued = true, message = "Marked for reprocess; re-upload will be processed again." });
     }
 }
