@@ -11,24 +11,26 @@ type AnalyticsOverviewDto = {
   devices: number;
   sources: number;
   statusCounts: Record<string, number>;
-  expiringSoonList: Array<{
-    id: string;
-    staffName: string | null;
-    courseName: string | null;
-    issuer: string | null;
-    issueDate: string | null;
-    expiryDate: string | null;
-    expiryDerived: boolean;
-    confidence: number;
-    processingStatus: string | number;
-  }>;
+  expiringSoonList: ExpiringRow[];
 };
 
 type ReminderPreviewDto = {
   expiringIn7: number;
   expiringIn30: number;
   needsReview: number;
-  upcoming: Array<{ id: string; staffName: string; courseName: string; expiryDate: string }>;
+  upcoming: Array<{ id: string; staffName: string; courseName: string; expiryDate: string; issuer?: string | null }>;
+};
+
+type ExpiringRow = {
+  id: string;
+  staffName: string | null;
+  courseName: string | null;
+  issuer?: string | null;
+  issueDate?: string | null;
+  expiryDate: string | null;
+  expiryDerived?: boolean;
+  confidence?: number;
+  processingStatus?: string | number;
 };
 
 export default function AnalyticsPage() {
@@ -65,7 +67,7 @@ export default function AnalyticsPage() {
   ];
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
-  const expiringList = reminders?.upcoming ?? data.expiringSoonList ?? [];
+  const expiringList: ExpiringRow[] = reminders?.upcoming ?? data.expiringSoonList ?? [];
 
   const filteredSoon = expiringList.filter((r) => {
     const term = search.trim().toLowerCase();
@@ -129,57 +131,21 @@ export default function AnalyticsPage() {
 
       {statusEntries.length > 0 && <StatusBars entries={statusEntries} />}
 
-      {reminders && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600">Reminder preview</p>
-              <p className="text-lg font-semibold text-slate-900">Upcoming expiries</p>
-            </div>
-            <div className="flex gap-2 text-xs">
-              <Badge color="bg-amber-100 text-amber-800">30 days: {reminders.expiringIn30}</Badge>
-              <Badge color="bg-rose-100 text-rose-700">7 days: {reminders.expiringIn7}</Badge>
-              <Badge color="bg-indigo-100 text-indigo-700">Needs review: {reminders.needsReview}</Badge>
-            </div>
-          </div>
-          {reminderError && <p className="text-xs text-rose-600">Reminder preview unavailable: {reminderError}</p>}
-          <div className="-mx-3 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <Header>Staff</Header>
-                  <Header>Course</Header>
-                  <Header>Expiry</Header>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {reminders.upcoming?.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50">
-                    <Cell>{u.staffName}</Cell>
-                    <Cell>{u.courseName}</Cell>
-                    <Cell>{u.expiryDate}</Cell>
-                  </tr>
-                ))}
-                {(!reminders.upcoming || reminders.upcoming.length === 0) && (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-3 text-center text-sm text-slate-500">
-                      No upcoming expiries in the next 30 days.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-slate-600">Expiring soon (next 30 days)</p>
             <p className="text-lg font-semibold text-slate-900">{data.expiringSoon} records</p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+            {reminderError && <p className="text-xs text-rose-600">Reminder preview unavailable</p>}
+            {reminders && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge color="bg-amber-100 text-amber-800">30 days: {reminders.expiringIn30}</Badge>
+                <Badge color="bg-rose-100 text-rose-700">7 days: {reminders.expiringIn7}</Badge>
+                <Badge color="bg-indigo-100 text-indigo-700">Needs review: {reminders.needsReview}</Badge>
+              </div>
+            )}
             <input
               value={search}
               onChange={(e) => {
