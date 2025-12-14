@@ -156,13 +156,28 @@ public static class DeviceEndpoints
             .Where(s => s.TenantId == device.TenantId)
             .ToListAsync(token);
 
-        return Results.Ok(sources.Select(s => new CertiWatch.Contracts.Dtos.SourceDto(
-            s.Id,
-            s.Type,
-            s.DisplayName,
-            System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(s.ConfigJson) ?? new Dictionary<string, string>(),
-            s.CreatedAt
-        )));
+        var sourceIds = sources.Select(s => s.Id).ToList();
+        var secrets = await db.SourceSecrets.AsNoTracking()
+            .Where(sec => sec.TenantId == device.TenantId && sourceIds.Contains(sec.SourceId))
+            .ToListAsync(token);
+
+        var merged = sources.Select(s =>
+        {
+            var cfg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(s.ConfigJson) ?? new Dictionary<string, string>();
+            foreach (var sec in secrets.Where(sec => sec.SourceId == s.Id))
+            {
+                cfg[sec.Key] = sec.Value;
+            }
+            return new CertiWatch.Contracts.Dtos.SourceDto(
+                s.Id,
+                s.Type,
+                s.DisplayName,
+                cfg,
+                s.CreatedAt
+            );
+        });
+
+        return Results.Ok(merged);
     }
 
     private sealed record SyncStatusRequest(string Status, string? Message);

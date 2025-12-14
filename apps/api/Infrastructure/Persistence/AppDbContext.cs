@@ -9,6 +9,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<User> Users => Set<User>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<Source> Sources => Set<Source>();
+    public DbSet<SourceSecret> SourceSecrets => Set<SourceSecret>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Record> Records => Set<Record>();
     public DbSet<CourseRule> CourseRules => Set<CourseRule>();
@@ -61,6 +62,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Source>(entity =>
         {
             entity.Property(s => s.ConfigJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<SourceSecret>(entity =>
+        {
+            entity.HasIndex(s => new { s.TenantId, s.SourceId, s.Key }).IsUnique();
         });
 
         modelBuilder.Entity<UploadRequest>(entity =>
