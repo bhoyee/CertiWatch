@@ -237,13 +237,17 @@ export default function SourcesPage() {
                     )}
                   </Cell>
                   <Cell>
-                    <button
-                      onClick={() => syncNow(s.id)}
-                      disabled={syncing[s.id]}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      {syncing[s.id] ? "Syncing..." : "Sync now"}
-                    </button>
+                    {String(s.type).toLowerCase() === "cloudimport" ? (
+                      <button
+                        onClick={() => syncNow(s.id)}
+                        disabled={syncing[s.id]}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {syncing[s.id] ? "Syncing..." : "Sync now"}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">—</span>
+                    )}
                   </Cell>
                 </tr>
               ))}
