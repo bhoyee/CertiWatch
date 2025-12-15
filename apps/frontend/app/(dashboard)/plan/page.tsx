@@ -12,6 +12,8 @@ type TenantPlanDto = {
   recordCount: number;
   deviceCount: number;
   sourceCount: number;
+  subscriptionStatus?: string | null;
+  currentPeriodEndUtc?: string | null;
 };
 
 type Invoice = {
@@ -49,16 +51,20 @@ const catalog = [
   }
 ];
 
-const invoices: Invoice[] = [];
-
 export default function PlanPage() {
   const [plan, setPlan] = useState<TenantPlanDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     fetchJson<TenantPlanDto>("/api/tenant/me")
       .then(setPlan)
       .catch((err) => setError(err.message ?? "Failed to load plan"));
+
+    fetchJson<Invoice[]>("/api/billing/invoices")
+      .then(setInvoices)
+      .catch(() => setInvoices([]));
   }, []);
 
   const usage = useMemo(() => {
@@ -92,18 +98,13 @@ export default function PlanPage() {
           <p className="text-sm text-slate-600">See usage, change plans, and download invoices.</p>
         </div>
         <div className="flex gap-2">
-          <Link
-            href="#"
-            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          <button
+            onClick={openPortal}
+            disabled={portalLoading}
+            className="rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
           >
-            View invoices
-          </Link>
-          <Link
-            href="#"
-            className="rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95"
-          >
-            Manage plan
-          </Link>
+            {portalLoading ? "Opening portal..." : "Open billing portal"}
+          </button>
         </div>
       </div>
 
@@ -125,18 +126,21 @@ export default function PlanPage() {
                 <div>
                   <p className="text-sm text-slate-600">Current plan</p>
                   <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
-                  <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
-                  <p className="text-sm text-slate-600">
-                    {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
-                  </p>
-                </div>
-                <StatusPill status="active" />
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <UsageCard
-                  label="Records"
-                  used={plan.recordCount}
-                  limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
+              <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
+              <p className="text-sm text-slate-600">
+                {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+              </p>
+            </div>
+            <StatusPill status={(plan.subscriptionStatus as any) ?? "active"} />
+          </div>
+          <p className="text-xs text-slate-500">
+            {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} • Status: {subscriptionLabel}
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <UsageCard
+              label="Records"
+              used={plan.recordCount}
+              limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
                   percent={usage.recordPct}
                 />
                 <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
@@ -191,9 +195,7 @@ export default function PlanPage() {
                 <p className="text-sm text-slate-600">Billing history</p>
                 <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
               </div>
-              <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                Download CSV
-              </Link>
+              <button className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">Download CSV</button>
             </div>
             <div className="-mx-3 overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -254,14 +256,16 @@ function UsageCard({ label, used, limit, percent }: { label: string; used: numbe
   );
 }
 
-function StatusPill({ status }: { status: "active" | "trial" | "grace" }) {
+function StatusPill({ status }: { status: string }) {
   const map = {
     active: "bg-emerald-100 text-emerald-700",
     trial: "bg-amber-100 text-amber-700",
     grace: "bg-rose-100 text-rose-700"
   };
-  const label = status === "grace" ? "Grace period" : status === "trial" ? "Trial" : "Active";
-  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${map[status]}`}>{label}</span>;
+  const lowered = (status ?? "active").toLowerCase();
+  const label = lowered == "grace" ? "Grace period" : lowered == "trial" ? "Trial" : lowered == "past_due" ? "Past due" : "Active";
+  const color = map[(lowered as keyof typeof map)] ?? map.active;
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{label}</span>;
 }
 
 function StatusBadge({ status }: { status: Invoice["status"] }) {
@@ -287,3 +291,25 @@ function formatDate(value: string) {
   if (isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString();
 }
+  const subscriptionLabel = useMemo(() => {
+    if (!plan?.subscriptionStatus) return "Unknown";
+    return plan.subscriptionStatus.replace("_", " ");
+  }, [plan]);
+
+  const renewDate = plan?.currentPeriodEndUtc ? new Date(plan.currentPeriodEndUtc).toLocaleDateString() : null;
+
+  const openPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      if (!res.ok) throw new Error("Unable to create billing portal session");
+      const data = (await res.json()) as { url?: string };
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      setError((err as any).message ?? "Unable to open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  };

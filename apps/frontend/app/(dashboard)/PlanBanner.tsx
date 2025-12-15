@@ -11,6 +11,8 @@ type TenantPlanDto = {
   recordCount: number;
   deviceCount: number;
   sourceCount: number;
+  subscriptionStatus?: string | null;
+  currentPeriodEndUtc?: string | null;
 };
 
 export function PlanBanner() {
@@ -54,6 +56,12 @@ export function PlanBanner() {
             {plan.recordLimit > 0 ? ` / ${plan.recordLimit} limit` : " (no limit)"} · Devices: {plan.deviceCount} · Sources:{" "}
             {plan.sourceCount}
           </p>
+          {plan.subscriptionStatus && (
+            <p className="text-xs text-slate-500">
+              Status: {plan.subscriptionStatus.replace("-", " ")}{" "}
+              {plan.currentPeriodEndUtc && `· Renews ${new Date(plan.currentPeriodEndUtc).toLocaleDateString()}`}
+            </p>
+          )}
         </div>
         <a
           className="inline-flex items-center justify-center rounded-md border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
