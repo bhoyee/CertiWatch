@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CourseRule> CourseRules => Set<CourseRule>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<Reminder> Reminders => Set<Reminder>();
+    public DbSet<BillingInvoice> BillingInvoices => Set<BillingInvoice>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<UploadRequest> UploadRequests => Set<UploadRequest>();
 
@@ -47,6 +48,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Reminder>(entity =>
         {
             entity.HasOne(r => r.Record).WithMany(r => r.Reminders).HasForeignKey(r => r.RecordId);
+        });
+
+        modelBuilder.Entity<BillingInvoice>(entity =>
+        {
+            entity.HasIndex(i => new { i.TenantId, i.StripeInvoiceId }).IsUnique();
         });
 
         modelBuilder.Entity<CourseRule>(entity =>

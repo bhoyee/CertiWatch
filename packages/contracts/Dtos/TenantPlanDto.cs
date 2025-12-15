@@ -7,4 +7,6 @@ public sealed record TenantPlanDto(
     int RecordLimit,
     int RecordCount,
     int DeviceCount,
-    int SourceCount);
+    int SourceCount,
+    string? SubscriptionStatus,
+    DateTime? CurrentPeriodEndUtc);

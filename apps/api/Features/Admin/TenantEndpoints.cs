@@ -33,7 +33,16 @@ public static class TenantEndpoints
         var planDisplay = plan?.DisplayName ?? tenant.Plan;
         var recordLimit = plan?.RecordLimit ?? 0;
 
-        var dto = new TenantPlanDto(tenant.Name, tenant.Plan, planDisplay, recordLimit, recordCount, deviceCount, sourceCount);
+        var dto = new TenantPlanDto(
+            tenant.Name,
+            tenant.Plan,
+            planDisplay,
+            recordLimit,
+            recordCount,
+            deviceCount,
+            sourceCount,
+            tenant.SubscriptionStatus,
+            tenant.CurrentPeriodEndUtc);
         return Results.Ok(dto);
     }
 }
