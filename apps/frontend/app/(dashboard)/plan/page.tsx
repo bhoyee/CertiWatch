@@ -75,6 +75,8 @@ export default function PlanPage() {
     return "custom";
   }, [plan]);
 
+  const currentCatalogPlan = useMemo(() => catalog.find((c) => c.id === tier), [tier]);
+
   const nextOptions = useMemo(() => {
     if (tier === "starter") return catalog.filter((c) => c.id !== "starter");
     if (tier === "growth") return catalog.filter((c) => c.id === "pro");
@@ -123,6 +125,9 @@ export default function PlanPage() {
               <p className="text-sm text-slate-600">Current plan</p>
               <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
               <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
+              <p className="text-sm text-slate-600">
+                {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+              </p>
             </div>
             <StatusPill status="active" />
           </div>

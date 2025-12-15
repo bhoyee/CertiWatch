@@ -57,7 +57,7 @@ export function PlanBanner() {
         </div>
         <a
           className="inline-flex items-center justify-center rounded-md border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-          href="/billing"
+          href="/plan"
         >
           {nearLimit ? "Upgrade plan" : "Manage plan"}
         </a>
