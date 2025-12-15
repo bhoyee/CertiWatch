@@ -15,6 +15,7 @@ const navItems = [
   { href: "/uploads", label: "Uploads", icon: "cloud" },
   { href: "/sources", label: "Sources", icon: "plug" },
   { href: "/plan", label: "Manage plan", icon: "credit" },
+  { href: "/profile", label: "Profile", icon: "user" },
   { href: "/admin/invite", label: "Invite", icon: "users" },
   { href: "/logout", label: "Logout", icon: "exit" }
 ];
@@ -258,6 +259,13 @@ function renderIcon(name: string) {
         <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <path d="M10 6v12M6 6v12" strokeLinecap="round" />
           <path d="m14 9 3 3-3 3M17 12H9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "user":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <circle cx="12" cy="8" r="3" />
+          <path d="M6 20a6 6 0 0 1 12 0" />
         </svg>
       );
     default:
