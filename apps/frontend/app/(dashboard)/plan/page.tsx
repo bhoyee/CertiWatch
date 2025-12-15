@@ -118,116 +118,118 @@ export default function PlanPage() {
       )}
 
       {plan && (
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600">Current plan</p>
-              <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
-              <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
-              <p className="text-sm text-slate-600">
-                {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
-              </p>
-            </div>
-            <StatusPill status="active" />
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <UsageCard
-              label="Records"
-              used={plan.recordCount}
-              limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
-              percent={usage.recordPct}
-            />
-            <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
-            <UsageCard label="Sources" used={plan.sourceCount} limit={"Included"} percent={0} />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600">Need more?</p>
-              <h2 className="text-lg font-semibold text-slate-900">Upgrade options</h2>
-            </div>
-            <span className="text-xs text-slate-500">
-              {nextOptions.length === 0 ? "You’re on the top tier" : "Choose a higher plan"}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {nextOptions.map((p) => (
-              <div key={p.id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{p.name}</p>
-                    <p className="text-sm text-slate-600">{p.price}</p>
-                  </div>
-                  <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                    {p.price.toLowerCase().includes("contact") ? "Talk to sales" : "Upgrade"}
-                  </Link>
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">Current plan</p>
+                  <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
+                  <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
+                  <p className="text-sm text-slate-600">
+                    {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-600">
-                  <li className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    {p.limits}
-                  </li>
-                  {p.extras.map((f) => (
-                    <li key={f} className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+                <StatusPill status="active" />
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <UsageCard
+                  label="Records"
+                  used={plan.recordCount}
+                  limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
+                  percent={usage.recordPct}
+                />
+                <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
+                <UsageCard label="Sources" used={plan.sourceCount} limit={"Included"} percent={0} />
+              </div>
+            </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm text-slate-600">Billing history</p>
-            <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">Need more?</p>
+                  <h2 className="text-lg font-semibold text-slate-900">Upgrade options</h2>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {nextOptions.length === 0 ? "You’re on the top tier" : "Choose a higher plan"}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {nextOptions.map((p) => (
+                  <div key={p.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{p.name}</p>
+                        <p className="text-sm text-slate-600">{p.price}</p>
+                      </div>
+                      <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                        {p.price.toLowerCase().includes("contact") ? "Talk to sales" : "Upgrade"}
+                      </Link>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
+                    <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                      <li className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        {p.limits}
+                      </li>
+                      {p.extras.map((f) => (
+                        <li key={f} className="flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-            Download CSV
-          </Link>
-        </div>
-        <div className="-mx-3 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <Th>ID</Th>
-                <Th>Date</Th>
-                <Th>Amount</Th>
-                <Th>Status</Th>
-                <Th>Action</Th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50">
-                  <Td>{inv.id}</Td>
-                  <Td>{formatDate(inv.date)}</Td>
-                  <Td>{inv.amount}</Td>
-                  <Td>
-                    <StatusBadge status={inv.status} />
-                  </Td>
-                  <Td>
-                    <Link href={inv.downloadUrl ?? "#"} className="text-indigo-600 hover:text-indigo-700">
-                      Download
-                    </Link>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {invoices.length === 0 && (
-            <div className="px-3 py-4 text-sm text-slate-500">No invoices yet.</div>
-          )}
-        </div>
-      </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Billing history</p>
+                <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
+              </div>
+              <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                Download CSV
+              </Link>
+            </div>
+            <div className="-mx-3 overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <Th>ID</Th>
+                    <Th>Date</Th>
+                    <Th>Amount</Th>
+                    <Th>Status</Th>
+                    <Th>Action</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {invoices.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-slate-50">
+                      <Td>{inv.id}</Td>
+                      <Td>{formatDate(inv.date)}</Td>
+                      <Td>{inv.amount}</Td>
+                      <Td>
+                        <StatusBadge status={inv.status} />
+                      </Td>
+                      <Td>
+                        <Link href={inv.downloadUrl ?? "#"} className="text-indigo-600 hover:text-indigo-700">
+                          Download
+                        </Link>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {invoices.length === 0 && (
+                <div className="px-3 py-4 text-sm text-slate-500">No invoices yet.</div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
