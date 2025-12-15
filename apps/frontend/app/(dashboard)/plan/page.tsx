@@ -1,20 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { fetchJson } from "../../../lib/api";
 
-type Plan = {
-  name: string;
-  price: string;
-  cycle: string;
-  status: "active" | "trial" | "grace";
-  renewsOn: string;
-  seatsUsed: number;
-  seatsLimit: number;
-  recordsUsed: number;
-  recordsLimit: number;
-  storageUsedGb: number;
-  storageLimitGb: number;
+type TenantPlanDto = {
+  tenantName: string;
+  planId: string;
+  planName: string;
+  recordLimit: number;
+  recordCount: number;
+  deviceCount: number;
+  sourceCount: number;
 };
 
 type Invoice = {
@@ -25,38 +22,64 @@ type Invoice = {
   downloadUrl?: string;
 };
 
-const currentPlan: Plan = {
-  name: "Growth",
-  price: "$249",
-  cycle: "/month",
-  status: "active",
-  renewsOn: "2026-01-15",
-  seatsUsed: 8,
-  seatsLimit: 10,
-  recordsUsed: 820,
-  recordsLimit: 1200,
-  storageUsedGb: 28,
-  storageLimitGb: 50
-};
-
-const invoices: Invoice[] = [
-  { id: "INV-2041", date: "2025-12-01", amount: "$249.00", status: "paid" },
-  { id: "INV-2030", date: "2025-11-01", amount: "$249.00", status: "paid" },
-  { id: "INV-2019", date: "2025-10-01", amount: "$249.00", status: "paid" }
+const catalog = [
+  {
+    id: "starter",
+    name: "Starter",
+    price: "$99/mo",
+    summary: "For small teams getting off spreadsheets.",
+    limits: "50 records/month",
+    extras: ["Local folders", "30-day retention"]
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    price: "$249/mo",
+    summary: "For growing orgs with cloud connectors.",
+    limits: "500 records/month",
+    extras: ["Google/OneDrive/Dropbox", "1-year retention"]
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "$499/mo",
+    summary: "For ops teams that need everything.",
+    limits: "Unlimited records",
+    extras: ["Webhooks/API", "Priority support"]
+  }
 ];
 
-const nextPlans = [
-  { name: "Scale", price: "$499 / mo", features: ["Up to 3,000 records / mo", "Priority support", "SAML/SSO"] },
-  { name: "Enterprise", price: "Contact us", features: ["Custom limits", "Dedicated CSM", "On-prem / VPC"] }
-];
+const invoices: Invoice[] = [];
 
 export default function PlanPage() {
-  const usage = useMemo(() => {
-    const seatPct = Math.min(100, Math.round((currentPlan.seatsUsed / currentPlan.seatsLimit) * 100));
-    const recordPct = Math.min(100, Math.round((currentPlan.recordsUsed / currentPlan.recordsLimit) * 100));
-    const storagePct = Math.min(100, Math.round((currentPlan.storageUsedGb / currentPlan.storageLimitGb) * 100));
-    return { seatPct, recordPct, storagePct };
+  const [plan, setPlan] = useState<TenantPlanDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchJson<TenantPlanDto>("/api/tenant/me")
+      .then(setPlan)
+      .catch((err) => setError(err.message ?? "Failed to load plan"));
   }, []);
+
+  const usage = useMemo(() => {
+    if (!plan) return { recordPct: 0 };
+    if (!plan.recordLimit || plan.recordLimit <= 0) return { recordPct: 0 };
+    return { recordPct: Math.min(100, Math.round((plan.recordCount / plan.recordLimit) * 100)) };
+  }, [plan]);
+
+  const tier = useMemo(() => {
+    const name = plan?.planName.toLowerCase() ?? "";
+    if (name.includes("starter")) return "starter";
+    if (name.includes("growth")) return "growth";
+    if (name.includes("pro")) return "pro";
+    return "custom";
+  }, [plan]);
+
+  const nextOptions = useMemo(() => {
+    if (tier === "starter") return catalog.filter((c) => c.id !== "starter");
+    if (tier === "growth") return catalog.filter((c) => c.id === "pro");
+    return [];
+  }, [tier]);
 
   return (
     <div className="space-y-6">
@@ -82,22 +105,36 @@ export default function PlanPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {!plan && !error && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Loading plan...</div>
+      )}
+
+      {plan && (
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600">Current plan</p>
-              <h2 className="text-lg font-semibold text-slate-900">{currentPlan.name}</h2>
-              <p className="text-sm text-slate-600">
-                {currentPlan.price} {currentPlan.cycle} • Renews {formatDate(currentPlan.renewsOn)}
-              </p>
+              <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
+              <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
             </div>
-            <StatusPill status={currentPlan.status} />
+            <StatusPill status="active" />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <UsageCard label="Records" used={currentPlan.recordsUsed} limit={currentPlan.recordsLimit} percent={usage.recordPct} />
-            <UsageCard label="Seats" used={currentPlan.seatsUsed} limit={currentPlan.seatsLimit} percent={usage.seatPct} />
-            <UsageCard label="Storage" used={`${currentPlan.storageUsedGb} GB`} limit={`${currentPlan.storageLimitGb} GB`} percent={usage.storagePct} />
+            <UsageCard
+              label="Records"
+              used={plan.recordCount}
+              limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
+              percent={usage.recordPct}
+            />
+            <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
+            <UsageCard label="Sources" used={plan.sourceCount} limit={"Included"} percent={0} />
           </div>
         </div>
 
@@ -107,22 +144,29 @@ export default function PlanPage() {
               <p className="text-sm text-slate-600">Need more?</p>
               <h2 className="text-lg font-semibold text-slate-900">Upgrade options</h2>
             </div>
-            <span className="text-xs text-slate-500">No downgrade available from Growth</span>
+            <span className="text-xs text-slate-500">
+              {nextOptions.length === 0 ? "You’re on the top tier" : "Choose a higher plan"}
+            </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {nextPlans.map((plan) => (
-              <div key={plan.name} className="rounded-xl border border-slate-200 p-3">
+            {nextOptions.map((p) => (
+              <div key={p.id} className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
-                    <p className="text-sm text-slate-600">{plan.price}</p>
+                    <p className="text-sm font-semibold text-slate-900">{p.name}</p>
+                    <p className="text-sm text-slate-600">{p.price}</p>
                   </div>
                   <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                    {plan.price === "Contact us" ? "Talk to sales" : "Upgrade"}
+                    {p.price.toLowerCase().includes("contact") ? "Talk to sales" : "Upgrade"}
                   </Link>
                 </div>
+                <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
                 <ul className="mt-2 space-y-1 text-sm text-slate-600">
-                  {plan.features.map((f) => (
+                  <li className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {p.limits}
+                  </li>
+                  {p.extras.map((f) => (
                     <li key={f} className="flex items-center gap-2">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       {f}
@@ -179,6 +223,7 @@ export default function PlanPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -202,7 +247,7 @@ function UsageCard({ label, used, limit, percent }: { label: string; used: numbe
   );
 }
 
-function StatusPill({ status }: { status: Plan["status"] }) {
+function StatusPill({ status }: { status: "active" | "trial" | "grace" }) {
   const map = {
     active: "bg-emerald-100 text-emerald-700",
     trial: "bg-amber-100 text-amber-700",
