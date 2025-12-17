@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { fetchJson } from "../../../lib/api";
+import { fetchJson, postJson } from "../../../lib/api";
 
 type TenantPlanDto = {
   tenantName: string;
@@ -56,6 +56,7 @@ export default function PlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetchJson<TenantPlanDto>("/api/tenant/me")
@@ -88,6 +89,39 @@ export default function PlanPage() {
     if (tier === "growth") return catalog.filter((c) => c.id === "pro");
     return [];
   }, [tier]);
+
+  const subscriptionLabel = useMemo(() => {
+    if (!plan?.subscriptionStatus) return "Unknown";
+    return plan.subscriptionStatus.replace("_", " ");
+  }, [plan]);
+
+  const renewDate = plan?.currentPeriodEndUtc ? new Date(plan.currentPeriodEndUtc).toLocaleDateString() : null;
+
+  const openPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const data = await postJson<{ url?: string }, Record<string, never>>("/api/billing/portal", {});
+      if (data.url) window.location.href = data.url;
+    } catch (err) {
+      setError((err as any).message ?? "Unable to open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const startUpgrade = async (targetPlanId: string) => {
+    setUpgradeLoading(targetPlanId);
+    setError(null);
+    try {
+      const data = await postJson<{ checkoutUrl?: string }, { planId: string }>("/api/billing/checkout", { planId: targetPlanId });
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+      else throw new Error("Checkout URL missing");
+    } catch (err) {
+      setError((err as any).message ?? "Unable to upgrade");
+    } finally {
+      setUpgradeLoading(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -126,23 +160,18 @@ export default function PlanPage() {
                 <div>
                   <p className="text-sm text-slate-600">Current plan</p>
                   <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
-              <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
-              <p className="text-sm text-slate-600">
-                {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+                  <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
+                  <p className="text-sm text-slate-600">
+                    {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+                  </p>
+                </div>
+                <StatusPill status={(plan.subscriptionStatus as any) ?? "active"} />
+              </div>
+              <p className="text-xs text-slate-500">
+                {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} • Status: {subscriptionLabel}
               </p>
-            </div>
-            <StatusPill status={(plan.subscriptionStatus as any) ?? "active"} />
-          </div>
-          <p className="text-xs text-slate-500">
-            {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} • Status: {subscriptionLabel}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <UsageCard
-              label="Records"
-              used={plan.recordCount}
-              limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"}
-                  percent={usage.recordPct}
-                />
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <UsageCard label="Records" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
                 <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
                 <UsageCard label="Sources" used={plan.sourceCount} limit={"Included"} percent={0} />
               </div>
@@ -166,9 +195,19 @@ export default function PlanPage() {
                         <p className="text-sm font-semibold text-slate-900">{p.name}</p>
                         <p className="text-sm text-slate-600">{p.price}</p>
                       </div>
-                      <Link href="#" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                        {p.price.toLowerCase().includes("contact") ? "Talk to sales" : "Upgrade"}
-                      </Link>
+                      {p.price.toLowerCase().includes("contact") ? (
+                        <Link href="mailto:sales@certiwatch.app" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                          Talk to sales
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={() => startUpgrade(p.id)}
+                          disabled={upgradeLoading === p.id}
+                          className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-60"
+                        >
+                          {upgradeLoading === p.id ? "Starting..." : "Upgrade"}
+                        </button>
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
                     <ul className="mt-2 space-y-1 text-sm text-slate-600">
@@ -226,9 +265,7 @@ export default function PlanPage() {
                   ))}
                 </tbody>
               </table>
-              {invoices.length === 0 && (
-                <div className="px-3 py-4 text-sm text-slate-500">No invoices yet.</div>
-              )}
+              {invoices.length === 0 && <div className="px-3 py-4 text-sm text-slate-500">No invoices yet.</div>}
             </div>
           </div>
         </>
@@ -260,10 +297,11 @@ function StatusPill({ status }: { status: string }) {
   const map = {
     active: "bg-emerald-100 text-emerald-700",
     trial: "bg-amber-100 text-amber-700",
-    grace: "bg-rose-100 text-rose-700"
+    grace: "bg-rose-100 text-rose-700",
+    past_due: "bg-rose-100 text-rose-700"
   };
   const lowered = (status ?? "active").toLowerCase();
-  const label = lowered == "grace" ? "Grace period" : lowered == "trial" ? "Trial" : lowered == "past_due" ? "Past due" : "Active";
+  const label = lowered === "grace" ? "Grace period" : lowered === "trial" ? "Trial" : lowered === "past_due" ? "Past due" : "Active";
   const color = map[(lowered as keyof typeof map)] ?? map.active;
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{label}</span>;
 }
@@ -291,25 +329,3 @@ function formatDate(value: string) {
   if (isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString();
 }
-  const subscriptionLabel = useMemo(() => {
-    if (!plan?.subscriptionStatus) return "Unknown";
-    return plan.subscriptionStatus.replace("_", " ");
-  }, [plan]);
-
-  const renewDate = plan?.currentPeriodEndUtc ? new Date(plan.currentPeriodEndUtc).toLocaleDateString() : null;
-
-  const openPortal = async () => {
-    setPortalLoading(true);
-    try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
-      if (!res.ok) throw new Error("Unable to create billing portal session");
-      const data = (await res.json()) as { url?: string };
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      setError((err as any).message ?? "Unable to open billing portal");
-    } finally {
-      setPortalLoading(false);
-    }
-  };
