@@ -73,6 +73,8 @@ public static class BillingEndpoints
 
     private static async Task<IResult> CreateCheckoutSessionAsync(
         CreateCheckoutSessionRequest request,
+        ITenantContextAccessor accessor,
+        AppDbContext db,
         IOptions<StripeOptions> stripeOptions,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
@@ -85,19 +87,39 @@ public static class BillingEndpoints
             return Results.BadRequest(new { error = "unknown_plan" });
         }
 
-        var customerService = new CustomerService();
-        Customer? existingCustomer = null;
-        var searchOptions = new CustomerSearchOptions
-        {
-            Query = $"email:'{request.AdminEmail}'",
-            Limit = 1
-        };
+        // If authenticated, allow missing fields and hydrate from current tenant/user
+        var adminEmail = request.AdminEmail?.Trim();
+        var adminName = request.AdminName?.Trim();
+        var companyName = request.CompanyName?.Trim();
 
-        await foreach (var customer in customerService.SearchAutoPagingAsync(searchOptions, cancellationToken: cancellationToken))
+        var ctx = accessor.Current;
+        if (ctx.TenantId != Guid.Empty)
         {
-            existingCustomer = customer;
-            break;
+            var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == ctx.TenantId, cancellationToken);
+            companyName ??= tenant?.Name;
+            adminEmail ??= ctx.Email;
+            adminName ??= ctx.Email;
         }
+
+        if (string.IsNullOrWhiteSpace(adminEmail))
+        {
+            return Results.BadRequest(new { error = "missing_admin_email", friendlyError = "Please provide an admin email." });
+        }
+
+        adminEmail = adminEmail.Trim();
+
+        if (string.IsNullOrWhiteSpace(companyName))
+        {
+            companyName = "Tenant";
+        }
+
+        if (string.IsNullOrWhiteSpace(adminName))
+        {
+            adminName = adminEmail;
+        }
+
+        // Avoid reusing existing customers to sidestep currency conflicts; Stripe will create one from CustomerEmail.
+        Customer? existingCustomer = null;
 
         var trialEligible = true;
         if (existingCustomer?.Metadata != null &&
@@ -116,8 +138,8 @@ public static class BillingEndpoints
                 SuccessUrl = options.SuccessUrl,
                 CancelUrl = options.CancelUrl,
                 Mode = "subscription",
-                CustomerEmail = existingCustomer is null ? request.AdminEmail : null,
-                Customer = existingCustomer?.Id,
+                CustomerEmail = adminEmail,
+                Customer = null,
                 PaymentMethodCollection = "always",
                 SubscriptionData = new SessionSubscriptionDataOptions
                 {
@@ -134,9 +156,9 @@ public static class BillingEndpoints
                 Metadata = new Dictionary<string, string>
                 {
                     ["planId"] = plan.PlanId,
-                    ["companyName"] = request.CompanyName,
-                    ["adminEmail"] = request.AdminEmail,
-                    ["adminName"] = request.AdminName
+                    ["companyName"] = companyName,
+                    ["adminEmail"] = adminEmail,
+                    ["adminName"] = adminName
                 }
             };
 
@@ -146,7 +168,7 @@ public static class BillingEndpoints
         }
         catch (StripeException ex)
         {
-            logger.LogError(ex, "Stripe checkout failed for {Email}", request.AdminEmail);
+            logger.LogError(ex, "Stripe checkout failed for {Email}", adminEmail);
             return Results.BadRequest(new { friendlyError = "We could not start checkout. Please use a different email or contact support." });
         }
     }
