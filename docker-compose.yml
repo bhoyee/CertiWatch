@@ -31,6 +31,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__postgres: Host=postgres;Username=postgres;Password=postgres;Database=certiwatch
+      MagicLinks__BaseUrl: http://localhost:3300
       Stripe__SecretKey: ${Stripe__SecretKey:-sk_test_xxx}
       Stripe__WebhookSecret: ${Stripe__WebhookSecret:-whsec_xxx}
       Stripe__SuccessUrl: http://localhost:3300/signup/success
