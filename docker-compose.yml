@@ -34,6 +34,7 @@ services:
       MagicLinks__BaseUrl: http://localhost:3300
       Stripe__SecretKey: ${Stripe__SecretKey:-sk_test_xxx}
       Stripe__WebhookSecret: ${Stripe__WebhookSecret:-whsec_xxx}
+      Stripe__MagicLinks__BaseUrl: ${Stripe__MagicLinks__BaseUrl:-http://localhost:3300}
       Stripe__SuccessUrl: http://localhost:3300/signup/success
       Stripe__CancelUrl: http://localhost:3300/signup
       Stripe__TrialDays: 7

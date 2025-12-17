@@ -176,6 +176,7 @@ public static class BillingEndpoints
     private static async Task<IResult> HandleWebhookAsync(
         HttpContext context,
         IOptions<StripeOptions> stripeOptions,
+        IOptions<MagicLinkOptions> magicOptions,
         ITenantProvisioningService provisioningService,
         IEmailTemplateRenderer renderer,
         IEmailService emailService,
@@ -199,7 +200,7 @@ public static class BillingEndpoints
         switch (stripeEvent.Type)
         {
             case Events.CheckoutSessionCompleted:
-                await HandleCheckoutCompleted(stripeEvent, options, provisioningService, renderer, emailService, db, cancellationToken);
+                await HandleCheckoutCompleted(stripeEvent, options, magicOptions.Value, provisioningService, renderer, emailService, db, cancellationToken);
                 break;
             case Events.CustomerSubscriptionCreated:
             case Events.CustomerSubscriptionUpdated:
@@ -216,7 +217,7 @@ public static class BillingEndpoints
         return Results.Ok();
     }
 
-    private static async Task HandleCheckoutCompleted(Event stripeEvent, StripeOptions options, ITenantProvisioningService provisioningService, IEmailTemplateRenderer renderer, IEmailService emailService, AppDbContext db, CancellationToken token)
+    private static async Task HandleCheckoutCompleted(Event stripeEvent, StripeOptions options, MagicLinkOptions magicOptions, ITenantProvisioningService provisioningService, IEmailTemplateRenderer renderer, IEmailService emailService, AppDbContext db, CancellationToken token)
     {
         if (stripeEvent.Data.Object is not Session session || session.Metadata is null)
         {
@@ -239,11 +240,11 @@ public static class BillingEndpoints
         var magicLink = MagicLinkTokenService.CreateToken(
             adminEmail,
             tenant.Id,
-            options.MagicLinks.Secret,
-            TimeSpan.FromMinutes(options.MagicLinks.ExpiryMinutes),
+            magicOptions.Secret,
+            TimeSpan.FromMinutes(magicOptions.ExpiryMinutes),
             purpose: "magic",
             rememberDevice: true);
-        var link = $"{options.MagicLinks.BaseUrl.TrimEnd('/')}/magic?token={magicLink}";
+        var link = $"{magicOptions.BaseUrl.TrimEnd('/')}/magic?token={magicLink}";
         var html = renderer.RenderWelcome(companyName, planDisplay, adminName, adminEmail, link);
         await emailService.SendAsync(adminEmail, $"Welcome to CertiWatch ({planDisplay})", html, token);
     }
