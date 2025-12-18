@@ -25,6 +25,11 @@ public static class SourcesEndpoints
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = tenantAccessor.Current.TenantId;
         var sources = await db.Sources.AsNoTracking().Where(s => s.TenantId == tenantId).ToListAsync(token);
         return Results.Ok(sources.Select(ToDtoMasked));
@@ -32,6 +37,11 @@ public static class SourcesEndpoints
 
     private static async Task<IResult> CreateAsync(SourceRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var validateResult = Validate(request);
         if (!validateResult.IsValid)
         {
@@ -72,6 +82,11 @@ public static class SourcesEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var entity = await db.Sources.FirstOrDefaultAsync(s => s.Id == id && s.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {
@@ -87,6 +102,11 @@ public static class SourcesEndpoints
 
     private static async Task<IResult> RequestSyncAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var entity = await db.Sources.FirstOrDefaultAsync(s => s.Id == id && s.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {

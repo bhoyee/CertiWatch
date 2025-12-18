@@ -30,6 +30,11 @@ public static class BillingEndpoints
 
     private static async Task<IResult> CreatePortalSessionAsync(AppDbContext db, ITenantContextAccessor accessor, IOptions<StripeOptions> stripeOptions, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
         if (tenant is null || string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
@@ -50,6 +55,11 @@ public static class BillingEndpoints
 
     private static async Task<IResult> ListInvoicesAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = accessor.Current.TenantId;
         var invoices = await db.BillingInvoices
             .AsNoTracking()
@@ -81,6 +91,11 @@ public static class BillingEndpoints
     {
         var logger = loggerFactory.CreateLogger("Billing");
         var options = stripeOptions.Value;
+        if (accessor.Current.TenantId != Guid.Empty && RecordVisibility.IsViewer(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var plan = options.Plans.FirstOrDefault(p => string.Equals(p.PlanId, request.PlanId, StringComparison.OrdinalIgnoreCase));
         if (plan is null)
         {

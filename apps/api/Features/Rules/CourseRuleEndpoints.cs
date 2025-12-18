@@ -22,6 +22,11 @@ public static class CourseRuleEndpoints
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = accessor.Current.TenantId;
         var rules = await db.CourseRules.AsNoTracking().Where(r => r.TenantId == null || r.TenantId == tenantId).ToListAsync(token);
         return Results.Ok(rules.Select(ToDto));
@@ -34,6 +39,11 @@ public static class CourseRuleEndpoints
         IValidator<CreateCourseRuleRequest> validator,
         CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var validation = await validator.ValidateAsync(request, token);
         if (!validation.IsValid)
         {
@@ -67,6 +77,11 @@ public static class CourseRuleEndpoints
         IValidator<UpdateCourseRuleRequest> validator,
         CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var validation = await validator.ValidateAsync(request, token);
         if (!validation.IsValid)
         {
@@ -103,6 +118,11 @@ public static class CourseRuleEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var entity = await db.CourseRules.FirstOrDefaultAsync(r => r.Id == id, token);
         if (entity is null)
         {

@@ -27,6 +27,11 @@ public static class DeviceEndpoints
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = tenantAccessor.Current.TenantId;
         var devices = await db.Devices.AsNoTracking().Where(d => d.TenantId == tenantId).ToListAsync(token);
         return Results.Ok(devices.Select(d => new

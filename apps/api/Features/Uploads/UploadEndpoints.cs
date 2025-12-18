@@ -88,6 +88,11 @@ public static class UploadEndpoints
 
     private static async Task<IResult> HistoryAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var tenantId = accessor.Current.TenantId;
         var items = await db.UploadRequests.AsNoTracking()
             .Where(u => u.TenantId == tenantId)
@@ -163,6 +168,7 @@ public static class UploadEndpoints
         Directory.CreateDirectory(uploadDir);
         var fields = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(req.StaffName)) fields["staff_name"] = req.StaffName!;
+        if (!string.IsNullOrWhiteSpace(req.StaffEmail)) fields["staff_email"] = req.StaffEmail!;
         if (req.ExpiryHint.HasValue) fields["expiry_date"] = req.ExpiryHint.Value.ToString("yyyy-MM-dd");
 
         string? lastDestPath = null;
@@ -230,7 +236,7 @@ public static class UploadEndpoints
         HttpContext httpContext,
         CancellationToken token)
     {
-        if (!string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsViewer(accessor))
         {
             return Results.Forbid();
         }
@@ -252,6 +258,7 @@ public static class UploadEndpoints
         var root = GetUploadsRoot(storageOptions.Value);
         var batchDir = Path.Combine(root, tenantId.ToString(), "bulk", clock.UtcNow.ToString("yyyyMMddHHmmssfff"));
         Directory.CreateDirectory(batchDir);
+        var viewerEmail = RecordVisibility.IsViewer(accessor) ? accessor.Current.Email : null;
 
         var results = new List<BulkUploadResult>();
 
@@ -283,6 +290,12 @@ public static class UploadEndpoints
                 continue;
             }
 
+            var fields = new Dictionary<string, string>();
+            if (!string.IsNullOrWhiteSpace(viewerEmail))
+            {
+                fields["staff_email"] = viewerEmail!;
+            }
+
             await queue.EnqueueAsync(new DocumentDetectedEvent(
                 tenantId,
                 source.Id,
@@ -293,7 +306,7 @@ public static class UploadEndpoints
                 file.ContentType ?? "application/octet-stream",
                 size,
                 Array.Empty<string>(),
-                new Dictionary<string, string>(),
+                fields,
                 ProcessingStatus.Pending,
                 clock.UtcNow), token);
 
