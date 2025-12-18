@@ -67,7 +67,16 @@ export default function AnalyticsPage() {
   ];
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
-  const expiringList: ExpiringRow[] = reminders?.upcoming ?? data.expiringSoonList ?? [];
+  const expiringList: ExpiringRow[] =
+    reminders?.upcoming?.map((row) => ({
+      id: row.id,
+      staffName: row.staffName ?? null,
+      courseName: row.courseName ?? null,
+      issuer: row.issuer ?? null,
+      expiryDate: row.expiryDate ?? null
+    })) ??
+    data.expiringSoonList ??
+    [];
 
   const filteredSoon = expiringList.filter((r) => {
     const term = search.trim().toLowerCase();
