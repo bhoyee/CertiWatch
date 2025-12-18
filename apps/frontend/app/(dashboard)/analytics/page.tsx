@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchJson } from "../../../lib/api";
+import { useRole } from "../RoleContext";
 
 type AnalyticsOverviewDto = {
   totalRecords: number;
@@ -34,6 +35,8 @@ type ExpiringRow = {
 };
 
 export default function AnalyticsPage() {
+  const { role } = useRole();
+  const isViewer = role?.toLowerCase() === "viewer";
   const [data, setData] = useState<AnalyticsOverviewDto | null>(null);
   const [reminders, setReminders] = useState<ReminderPreviewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export default function AnalyticsPage() {
   if (error) return <ErrorCard message={error} />;
   if (!data) return <LoadingCard />;
 
-  const cards = [
+  const baseCards = [
     { label: "Total records", value: data.totalRecords, accent: "from-indigo-500 to-blue-500" },
     { label: "Expiring soon", value: data.expiringSoon, accent: "from-amber-500 to-orange-400" },
     { label: "Expired", value: data.expired, accent: "from-rose-500 to-red-500" },
@@ -65,6 +68,7 @@ export default function AnalyticsPage() {
     { label: "Devices", value: data.devices, accent: "from-emerald-500 to-green-500" },
     { label: "Sources", value: data.sources, accent: "from-cyan-500 to-sky-500" }
   ];
+  const cards = isViewer ? baseCards.filter((card) => card.label !== "Devices" && card.label !== "Sources") : baseCards;
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
   const expiringList: ExpiringRow[] =
