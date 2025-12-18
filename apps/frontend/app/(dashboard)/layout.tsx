@@ -1,10 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { fetchJson } from "../../lib/api";
+import { fetchJson, postJson } from "../../lib/api";
 import { PlanBanner } from "./PlanBanner";
+
+type TenantPlanDto = {
+  tenantName: string;
+  planId: string;
+  planName: string;
+  recordLimit: number;
+  recordCount: number;
+  deviceCount: number;
+  sourceCount: number;
+  subscriptionStatus?: string | null;
+  currentPeriodEndUtc?: string | null;
+};
 
 const navItems = [
   { href: "/analytics", label: "Analytics", icon: "chart" },
@@ -22,13 +34,70 @@ const navItems = [
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [plan, setPlan] = useState<TenantPlanDto | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetchJson<TenantPlanDto>("/api/tenant/me");
+        if (active) setPlan(res);
+      } catch (err) {
+        if (active) setPlanError((err as any).message ?? "Failed to load plan");
+      } finally {
+        if (active) setPlanLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isBlocked = useMemo(
+    () => !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
+    [plan]
+  );
+
+  const handlePayNow = async () => {
+    if (!plan) {
+      setPlanError("Plan details are not available yet.");
+      return;
+    }
+
+    setPlanError(null);
+    try {
+      const portal = await postJson<{ url?: string }, Record<string, never>>("/api/billing/portal", {});
+      if (portal.url) {
+        window.location.href = portal.url;
+        return;
+      }
+    } catch {
+      // Fall back to checkout when no portal is available.
+    }
+
+    try {
+      const checkout = await postJson<{ checkoutUrl?: string }, { planId: string }>("/api/billing/checkout", {
+        planId: plan.planId
+      });
+      if (checkout.checkoutUrl) {
+        window.location.href = checkout.checkoutUrl;
+        return;
+      }
+      throw new Error("Checkout URL missing");
+    } catch (err) {
+      setPlanError((err as any).message ?? "Unable to start checkout.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
       <div className="flex min-h-screen">
         <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
           <Logo />
-          <NavLinks />
+          <NavLinks isBlocked={isBlocked} />
         </aside>
         <main className="flex-1 px-4 py-6 md:px-10">
           <div className="mb-4 flex items-center justify-between md:hidden">
@@ -42,12 +111,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
           {open && (
             <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
-              <NavLinks onClick={() => setOpen(false)} />
+              <NavLinks isBlocked={isBlocked} onClick={() => setOpen(false)} />
             </div>
           )}
-          <TopBar />
-          <PlanBanner />
-          <div className="mt-4 space-y-4">{children}</div>
+          <TopBar isBlocked={isBlocked} />
+          <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
+          <div className={`mt-4 space-y-4 ${isBlocked ? "pointer-events-none opacity-60" : ""}`}>{children}</div>
           <Footer />
         </main>
       </div>
@@ -71,7 +140,7 @@ function Logo() {
   );
 }
 
-function TopBar() {
+function TopBar({ isBlocked }: { isBlocked: boolean }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
@@ -81,22 +150,42 @@ function TopBar() {
       </div>
       <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:justify-end">
         <div className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-inner md:w-80">
-          <span className="text-slate-400">🔍</span>
+          <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+          </svg>
           <input
             className="w-full border-0 bg-transparent text-sm focus:outline-none"
             placeholder="Search staff, course, issuer..."
             aria-label="Search"
+            disabled={isBlocked}
           />
         </div>
         <Link
           href="/uploads"
-          className="flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95"
+          className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm ${
+            isBlocked ? "bg-slate-300 cursor-not-allowed" : "bg-gradient-to-r from-indigo-500 to-blue-500 hover:opacity-95"
+          }`}
+          aria-disabled={isBlocked}
+          tabIndex={isBlocked ? -1 : 0}
+          onClick={(event) => {
+            if (isBlocked) event.preventDefault();
+          }}
         >
           New upload
         </Link>
         <Link
           href="/review"
-          className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm ${
+            isBlocked
+              ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+          }`}
+          aria-disabled={isBlocked}
+          tabIndex={isBlocked ? -1 : 0}
+          onClick={(event) => {
+            if (isBlocked) event.preventDefault();
+          }}
         >
           Review queue
         </Link>
@@ -105,9 +194,10 @@ function TopBar() {
   );
 }
 
-function NavLinks({ onClick }: { onClick?: () => void } = {}) {
+function NavLinks({ isBlocked, onClick }: { isBlocked: boolean; onClick?: () => void }) {
   const [reviewCount, setReviewCount] = useState<number>(0);
   const pathname = usePathname();
+  const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
 
   useEffect(() => {
     let active = true;
@@ -132,16 +222,24 @@ function NavLinks({ onClick }: { onClick?: () => void } = {}) {
       {navItems.map((item) => {
         const showBadge = item.href === "/review" && reviewCount > 0;
         const active = pathname?.startsWith(item.href);
+        const disabled = isBlocked && !allowedWhenBlocked.has(item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={onClick}
             className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
-              active
+              disabled
+                ? "cursor-not-allowed text-slate-400"
+                : active
                 ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 border border-indigo-100"
                 : "text-slate-700 hover:bg-slate-100"
             }`}
+            aria-disabled={disabled}
+            tabIndex={disabled ? -1 : 0}
+            onClickCapture={(event) => {
+              if (disabled) event.preventDefault();
+            }}
           >
             <span className="flex items-center gap-2">
               <NavIcon name={item.icon} active={active} />
@@ -163,7 +261,7 @@ function Footer() {
   return (
     <footer className="mt-6 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs text-slate-500 shadow-sm">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <span>© {new Date().getFullYear()} CertiWatch. All rights reserved.</span>
+        <span>(c) {new Date().getFullYear()} CertiWatch. All rights reserved.</span>
         <span className="flex items-center gap-3">
           <a href="/terms" className="hover:text-slate-800">
             Terms
@@ -275,4 +373,15 @@ function renderIcon(name: string) {
         </svg>
       );
   }
+}
+
+function isSubscriptionActive(status?: string | null, currentPeriodEndUtc?: string | null) {
+  if (!status) return true;
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "active" || normalized === "trialing") return true;
+  if (normalized === "canceled" && currentPeriodEndUtc) {
+    const end = new Date(currentPeriodEndUtc);
+    return !isNaN(end.getTime()) && end > new Date();
+  }
+  return false;
 }
