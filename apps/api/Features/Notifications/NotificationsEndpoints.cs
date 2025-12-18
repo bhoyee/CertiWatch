@@ -19,8 +19,20 @@ public static class NotificationsEndpoints
 
     private static async Task<IResult> RemindersAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        var reminders = await db.Reminders.AsNoTracking()
-            .Where(r => r.TenantId == accessor.Current.TenantId)
+        var tenantId = accessor.Current.TenantId;
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var remindersQuery = db.Reminders.AsNoTracking()
+            .Where(r => r.TenantId == tenantId);
+
+        if (viewerScope is not null)
+        {
+            var recordQuery = RecordVisibility.ApplyViewerScope(
+                db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
+                viewerScope);
+            remindersQuery = remindersQuery.Where(r => recordQuery.Select(rr => rr.Id).Contains(r.RecordId));
+        }
+
+        var reminders = await remindersQuery
             .OrderBy(r => r.ScheduledFor)
             .ToListAsync(token);
 
@@ -34,8 +46,12 @@ public static class NotificationsEndpoints
         var horizon7 = now.AddDays(7);
         var horizon30 = now.AddDays(30);
 
-        var records = await db.Records.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.ExpiryDate != null)
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var recordQuery = db.Records.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.ExpiryDate != null);
+        recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
+
+        var records = await recordQuery
             .Select(r => new { r.Id, r.StaffName, r.CourseName, r.ExpiryDate, r.ProcessingStatus })
             .ToListAsync(token);
 

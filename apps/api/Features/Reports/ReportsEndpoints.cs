@@ -23,7 +23,10 @@ public static class ReportsEndpoints
     {
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var records = await db.Records.AsNoTracking().Where(r => r.TenantId == tenantId).ToListAsync(token);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+        recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
+        var records = await recordQuery.ToListAsync(token);
         var digest = new TenantDigestDto(
             tenantId,
             tenant?.Name ?? "Tenant",
@@ -48,7 +51,10 @@ public static class ReportsEndpoints
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var soon = today.AddDays(30);
 
-        var records = await db.Records.AsNoTracking().Where(r => r.TenantId == tenantId).ToListAsync(token);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+        recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
+        var records = await recordQuery.ToListAsync(token);
         var okRecords = records.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
         var expiringSoon = records.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today && r.ExpiryDate <= soon).ToList();
         var expired = records.Where(r => r.ExpiryDate != null && r.ExpiryDate < today).ToList();
@@ -58,13 +64,14 @@ public static class ReportsEndpoints
             .GroupBy(r => r.ProcessingStatus.ToString())
             .ToDictionary(g => g.Key, g => g.Count());
 
+        var isViewer = RecordVisibility.IsViewer(accessor);
         var dto = new AnalyticsOverviewDto(
             TotalRecords: okRecords.Count,
             ExpiringSoon: expiringSoon.Count,
             Expired: expired.Count,
             LowConfidence: lowConfidence.Count,
-            Devices: await db.Devices.CountAsync(d => d.TenantId == tenantId, token),
-            Sources: await db.Sources.CountAsync(s => s.TenantId == tenantId, token),
+            Devices: isViewer ? 0 : await db.Devices.CountAsync(d => d.TenantId == tenantId, token),
+            Sources: isViewer ? 0 : await db.Sources.CountAsync(s => s.TenantId == tenantId, token),
             StatusCounts: statusCounts,
             ExpiringSoonList: expiringSoon.OrderBy(r => r.ExpiryDate).Take(10).Select(Records.RecordsEndpoints.ToDtoForReport).ToList());
 
