@@ -118,6 +118,18 @@ public static class BillingEndpoints
             adminName = adminEmail;
         }
 
+        var isSignupRequest = !string.IsNullOrWhiteSpace(request.AdminEmail) && !string.IsNullOrWhiteSpace(request.CompanyName);
+        if (isSignupRequest)
+        {
+            var normalizedEmail = adminEmail.ToLowerInvariant();
+            var emailExists = await db.Users.AsNoTracking()
+                .AnyAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
+            if (emailExists)
+            {
+                return Results.Conflict(new { error = "email_exists", friendlyError = "An account with this email already exists. Please log in." });
+            }
+        }
+
         // Avoid reusing existing customers to sidestep currency conflicts; Stripe will create one from CustomerEmail.
         Customer? existingCustomer = null;
 
