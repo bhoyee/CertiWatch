@@ -3,7 +3,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002"
 export async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { cache: "no-store", credentials: "include" });
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await parseError(response));
   }
   return (await response.json()) as T;
 }
@@ -23,8 +23,7 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(await parseError(response));
   }
 
   return (await response.json()) as TResponse;
@@ -45,8 +44,7 @@ export async function patchJson<TResponse, TBody extends Record<string, unknown>
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(await parseError(response));
   }
 
   return (await response.json()) as TResponse;
@@ -60,7 +58,17 @@ export async function deleteJson(path: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(await parseError(response));
+  }
+}
+
+async function parseError(response: Response): Promise<string> {
+  const text = await response.text();
+  if (!text) return `Request failed: ${response.status}`;
+  try {
+    const data = JSON.parse(text) as { friendlyError?: string; message?: string; error?: string };
+    return data.friendlyError || data.message || data.error || text;
+  } catch {
+    return text;
   }
 }
