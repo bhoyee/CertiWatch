@@ -31,7 +31,8 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, tenantAccessor, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, viewerScope);
         baseQuery = ApplySort(baseQuery, query.Sort);
 
         var total = await baseQuery.CountAsync(token);
@@ -49,16 +50,20 @@ public static class RecordsEndpoints
     private static async Task<IResult> ReviewCountAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
         var tenantId = tenantAccessor.Current.TenantId;
-        var count = await db.Records.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.ProcessingStatus == ProcessingStatus.NeedsReview)
-            .CountAsync(token);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, tenantAccessor, token);
+        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+        baseQuery = RecordVisibility.ApplyViewerScope(baseQuery, viewerScope);
+        var count = await baseQuery.Where(r => r.ProcessingStatus == ProcessingStatus.NeedsReview).CountAsync(token);
 
         return Results.Ok(new { count });
     }
 
     private static async Task<IResult> GetAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
-        var entity = await db.Records.AsNoTracking().Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, tenantAccessor, token);
+        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantAccessor.Current.TenantId);
+        baseQuery = RecordVisibility.ApplyViewerScope(baseQuery, viewerScope);
+        var entity = await baseQuery.Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id, token);
         if (entity is null)
         {
             return Results.NotFound();
@@ -80,6 +85,11 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> PatchAsync(Guid id, PatchRecordRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var entity = await db.Records.FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {
@@ -141,6 +151,11 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
         var entity = await db.Records.Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {
@@ -184,7 +199,8 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> ExportCsvAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, tenantAccessor, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, viewerScope);
         var rows = await baseQuery
             .OrderBy(r => r.CreatedAt)
             .Select(r => new
@@ -219,7 +235,8 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> ExportPdfAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status);
+        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, tenantAccessor, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, viewerScope);
         var rows = await baseQuery
             .OrderBy(r => r.CreatedAt)
             .Take(500)
@@ -238,7 +255,7 @@ public static class RecordsEndpoints
         return Results.File(pdfBytes, "application/pdf", "records-export.pdf");
     }
 
-    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status)
+    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status, RecordVisibility.ViewerScope? viewerScope)
     {
         var tenantId = tenantAccessor.Current.TenantId;
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
@@ -270,7 +287,7 @@ public static class RecordsEndpoints
                 (r.Issuer ?? string.Empty).ToLower().Contains(term));
         }
 
-        return baseQuery;
+        return RecordVisibility.ApplyViewerScope(baseQuery, viewerScope);
     }
 
     private static string Escape(string? value)
