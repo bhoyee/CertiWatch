@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { fetchJson, postJson } from "../../lib/api";
 import { PlanBanner } from "./PlanBanner";
+import { RoleProvider } from "./RoleContext";
 
 type TenantPlanDto = {
   tenantName: string;
@@ -18,25 +19,36 @@ type TenantPlanDto = {
   currentPeriodEndUtc?: string | null;
 };
 
+type ProfileDto = {
+  email: string;
+  role: string;
+  name?: string | null;
+  tenantName: string;
+};
+
 const navItems = [
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
-  { href: "/review", label: "Review", icon: "flag" },
-  { href: "/rules", label: "Rules", icon: "shield" },
-  { href: "/devices", label: "Devices", icon: "cpu" },
+  { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
+  { href: "/rules", label: "Rules", icon: "shield", viewerHidden: true },
+  { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true },
   { href: "/uploads", label: "Uploads", icon: "cloud" },
-  { href: "/sources", label: "Sources", icon: "plug" },
-  { href: "/plan", label: "Manage plan", icon: "credit" },
+  { href: "/sources", label: "Sources", icon: "plug", viewerHidden: true },
+  { href: "/plan", label: "Manage plan", icon: "credit", viewerHidden: true },
   { href: "/profile", label: "Profile", icon: "user" },
-  { href: "/admin/invite", label: "Invite", icon: "users" },
+  { href: "/admin/invite", label: "Invite", icon: "users", viewerHidden: true },
   { href: "/logout", label: "Logout", icon: "exit" }
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState<TenantPlanDto | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+  const isViewer = role?.toLowerCase() === "viewer";
 
   useEffect(() => {
     let active = true;
@@ -56,10 +68,33 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadProfile = async () => {
+      try {
+        const res = await fetchJson<ProfileDto>("/api/profile");
+        if (active) setRole(res.role);
+      } catch {
+        if (active) setRole(null);
+      } finally {
+        if (active) setRoleLoading(false);
+      }
+    };
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const isBlocked = useMemo(
     () => !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
     [plan]
   );
+  const viewerRestrictedRoutes = useMemo(
+    () => ["/review", "/rules", "/devices", "/sources", "/plan", "/admin/invite"],
+    []
+  );
+  const isViewerRestricted = isViewer && viewerRestrictedRoutes.some((route) => pathname?.startsWith(route));
 
   const handlePayNow = async () => {
     if (!plan) {
@@ -93,34 +128,44 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
-          <Logo />
-          <NavLinks isBlocked={isBlocked} />
-        </aside>
-        <main className="flex-1 px-4 py-6 md:px-10">
-          <div className="mb-4 flex items-center justify-between md:hidden">
+    <RoleProvider role={role}>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
+        <div className="flex min-h-screen">
+          <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
             <Logo />
-            <button
-              onClick={() => setOpen((v) => !v)}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm"
-            >
-              Menu
-            </button>
-          </div>
-          {open && (
-            <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
-              <NavLinks isBlocked={isBlocked} onClick={() => setOpen(false)} />
+            <NavLinks isBlocked={isBlocked} isViewer={isViewer} roleLoading={roleLoading} />
+          </aside>
+          <main className="flex-1 px-4 py-6 md:px-10">
+            <div className="mb-4 flex items-center justify-between md:hidden">
+              <Logo />
+              <button
+                onClick={() => setOpen((v) => !v)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm"
+              >
+                Menu
+              </button>
             </div>
-          )}
-          <TopBar isBlocked={isBlocked} />
-          <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
-          <div className={`mt-4 space-y-4 ${isBlocked ? "pointer-events-none opacity-60" : ""}`}>{children}</div>
-          <Footer />
-        </main>
+            {open && (
+              <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
+                <NavLinks isBlocked={isBlocked} isViewer={isViewer} roleLoading={roleLoading} onClick={() => setOpen(false)} />
+              </div>
+            )}
+            <TopBar isBlocked={isBlocked} isViewer={isViewer} />
+            {!isViewer && (
+              <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
+            )}
+            <div
+              className={`mt-4 space-y-4 ${
+                isViewerRestricted || !isBlocked ? "" : "pointer-events-none opacity-60"
+              }`}
+            >
+              {isViewerRestricted ? <AdminOnlyNotice /> : children}
+            </div>
+            <Footer />
+          </main>
+        </div>
       </div>
-    </div>
+    </RoleProvider>
   );
 }
 
@@ -140,7 +185,7 @@ function Logo() {
   );
 }
 
-function TopBar({ isBlocked }: { isBlocked: boolean }) {
+function TopBar({ isBlocked, isViewer }: { isBlocked: boolean; isViewer: boolean }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
@@ -174,32 +219,53 @@ function TopBar({ isBlocked }: { isBlocked: boolean }) {
         >
           New upload
         </Link>
-        <Link
-          href="/review"
-          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm ${
-            isBlocked
-              ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-          }`}
-          aria-disabled={isBlocked}
-          tabIndex={isBlocked ? -1 : 0}
-          onClick={(event) => {
-            if (isBlocked) event.preventDefault();
-          }}
-        >
-          Review queue
-        </Link>
+        {!isViewer && (
+          <Link
+            href="/review"
+            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm ${
+              isBlocked
+                ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+            }`}
+            aria-disabled={isBlocked}
+            tabIndex={isBlocked ? -1 : 0}
+            onClick={(event) => {
+              if (isBlocked) event.preventDefault();
+            }}
+          >
+            Review queue
+          </Link>
+        )}
       </div>
     </div>
   );
 }
 
-function NavLinks({ isBlocked, onClick }: { isBlocked: boolean; onClick?: () => void }) {
+function NavLinks({
+  isBlocked,
+  isViewer,
+  roleLoading,
+  onClick
+}: {
+  isBlocked: boolean;
+  isViewer: boolean;
+  roleLoading: boolean;
+  onClick?: () => void;
+}) {
   const [reviewCount, setReviewCount] = useState<number>(0);
   const pathname = usePathname();
   const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
+  const filteredItems = useMemo(
+    () => navItems.filter((item) => !(isViewer && item.viewerHidden)),
+    [isViewer]
+  );
 
   useEffect(() => {
+    if (isViewer || roleLoading) {
+      setReviewCount(0);
+      return;
+    }
+
     let active = true;
     const load = async () => {
       try {
@@ -215,11 +281,11 @@ function NavLinks({ isBlocked, onClick }: { isBlocked: boolean; onClick?: () => 
       active = false;
       clearInterval(id);
     };
-  }, []);
+  }, [isViewer, roleLoading]);
 
   return (
     <nav className="space-y-1">
-      {navItems.map((item) => {
+      {filteredItems.map((item) => {
         const showBadge = item.href === "/review" && reviewCount > 0;
         const active = pathname?.startsWith(item.href);
         const disabled = isBlocked && !allowedWhenBlocked.has(item.href);
@@ -254,6 +320,14 @@ function NavLinks({ isBlocked, onClick }: { isBlocked: boolean; onClick?: () => 
         );
       })}
     </nav>
+  );
+}
+
+function AdminOnlyNotice() {
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      This area is available to admins only. If you need access, ask your admin to update your role.
+    </div>
   );
 }
 
