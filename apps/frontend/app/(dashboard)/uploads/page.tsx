@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson, postJson } from "../../../lib/api";
+import { useRole } from "../RoleContext";
 
 type UploadHistoryItem = {
   id: string;
@@ -23,6 +24,9 @@ type FormState = {
 type BulkResult = { fileName: string; status: string; message?: string | null };
 
 export default function UploadsPage() {
+  const { role } = useRole();
+  const isViewer = role?.toLowerCase() === "viewer";
+  const roleReady = role !== null;
   const [history, setHistory] = useState<UploadHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -53,8 +57,13 @@ export default function UploadsPage() {
   };
 
   useEffect(() => {
+    if (!roleReady) return;
+    if (isViewer) {
+      setHistory([]);
+      return;
+    }
     loadHistory();
-  }, []);
+  }, [isViewer, roleReady]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -356,172 +365,180 @@ export default function UploadsPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
-        <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Expiry is optional.</p>
-        <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Staff email</label>
-            <input
-              type="email"
-              value={form.staffEmail}
-              onChange={(e) => setForm({ ...form, staffEmail: e.target.value })}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="jane@example.com"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Expiry hint (optional)</label>
-            <input
-              type="date"
-              value={form.expiryDate}
-              onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-          <div className="md:col-span-2 flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={creating}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-            >
-              {creating ? "Creating..." : "Create link"}
-            </button>
-            {lastLink && (
-              <div className="text-xs text-slate-700">
-                Link:{" "}
-                <a className="text-blue-600 underline" href={lastLink.link}>
-                  {lastLink.link}
-                </a>{" "}
-                (expires {new Date(lastLink.expiresAt).toLocaleString()})
+      {roleReady && !isViewer ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
+          <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Expiry is optional.</p>
+          <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Staff email</label>
+              <input
+                type="email"
+                value={form.staffEmail}
+                onChange={(e) => setForm({ ...form, staffEmail: e.target.value })}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="jane@example.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Expiry hint (optional)</label>
+              <input
+                type="date"
+                value={form.expiryDate}
+                onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <div className="md:col-span-2 flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              >
+                {creating ? "Creating..." : "Create link"}
+              </button>
+              {lastLink && (
+                <div className="text-xs text-slate-700">
+                  Link:{" "}
+                  <a className="text-blue-600 underline" href={lastLink.link}>
+                    {lastLink.link}
+                  </a>{" "}
+                  (expires {new Date(lastLink.expiresAt).toLocaleString()})
+                </div>
+              )}
+            </div>
+            {error && (
+              <div className="md:col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {error}
               </div>
             )}
-          </div>
-          {error && (
-            <div className="md:col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
+          </form>
+        </div>
+      ) : roleReady ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+          Upload links are admin-only. You can still submit files using bulk upload above.
+        </div>
+      ) : null}
+
+      {roleReady && !isViewer && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Recent uploads</h2>
+              <p className="text-sm text-slate-600">Search, sort, and paginate recent upload links.</p>
             </div>
-          )}
-        </form>
-      </div>
-
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Recent uploads</h2>
-            <p className="text-sm text-slate-600">Search, sort, and paginate recent upload links.</p>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <input
+                value={historySearch}
+                onChange={(e) => {
+                  setHistorySearch(e.target.value);
+                  setHistoryPage(1);
+                }}
+                placeholder="Search staff, email, status..."
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
+              />
+              <select
+                value={historyPageSize}
+                onChange={(e) => {
+                  setHistoryPageSize(Number(e.target.value));
+                  setHistoryPage(1);
+                }}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              >
+                {[10, 25, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={loadHistory}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <input
-              value={historySearch}
-              onChange={(e) => {
-                setHistorySearch(e.target.value);
-                setHistoryPage(1);
-              }}
-              placeholder="Search staff, email, status..."
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
-            />
-            <select
-              value={historyPageSize}
-              onChange={(e) => {
-                setHistoryPageSize(Number(e.target.value));
-                setHistoryPage(1);
-              }}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              {[10, 25, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={loadHistory}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-        <div className="-mx-3 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <Header onClick={() => setHistorySortKey("staff")} sorted={historySort.key === "staff"} dir={historySort.dir}>
-                  Staff
-                </Header>
-                <Header onClick={() => setHistorySortKey("email")} sorted={historySort.key === "email"} dir={historySort.dir}>
-                  Email
-                </Header>
-                <Header onClick={() => setHistorySortKey("status")} sorted={historySort.key === "status"} dir={historySort.dir}>
-                  Status
-                </Header>
-                <Header onClick={() => setHistorySortKey("created")} sorted={historySort.key === "created"} dir={historySort.dir}>
-                  Created
-                </Header>
-                <Header>Used</Header>
-                <Header onClick={() => setHistorySortKey("expires")} sorted={historySort.key === "expires"} dir={historySort.dir}>
-                  Expires
-                </Header>
-                <Header>Actions</Header>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {historyVisible.map((h) => (
-                <tr key={h.id} className="hover:bg-slate-50">
-                  <Cell>{h.staffName ?? "?"}</Cell>
-                  <Cell>{h.staffEmail ?? "?"}</Cell>
-                  <Cell className="capitalize">{String(h.status ?? "").toLowerCase()}</Cell>
-                  <Cell>{new Date(h.createdAt).toLocaleString()}</Cell>
-                  <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "?"}</Cell>
-                  <Cell>{new Date(h.expiresAt).toLocaleString()}</Cell>
-                  <Cell>
-                    <button
-                      onClick={() => setConfirmDelete(h)}
-                      className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                    >
-                      Delete
-                    </button>
-                  </Cell>
-                </tr>
-              ))}
-              {historyVisible.length === 0 && (
+          <div className="-mx-3 overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center text-sm text-slate-500">
-                    No uploads match your filters.
-                  </td>
+                  <Header onClick={() => setHistorySortKey("staff")} sorted={historySort.key === "staff"} dir={historySort.dir}>
+                    Staff
+                  </Header>
+                  <Header onClick={() => setHistorySortKey("email")} sorted={historySort.key === "email"} dir={historySort.dir}>
+                    Email
+                  </Header>
+                  <Header onClick={() => setHistorySortKey("status")} sorted={historySort.key === "status"} dir={historySort.dir}>
+                    Status
+                  </Header>
+                  <Header onClick={() => setHistorySortKey("created")} sorted={historySort.key === "created"} dir={historySort.dir}>
+                    Created
+                  </Header>
+                  <Header>Used</Header>
+                  <Header onClick={() => setHistorySortKey("expires")} sorted={historySort.key === "expires"} dir={historySort.dir}>
+                    Expires
+                  </Header>
+                  <Header>Actions</Header>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-          <span>
-            Showing {sortedHistory.length === 0 ? 0 : historyStart + 1}-{Math.min(sortedHistory.length, historyStart + historyPageSize)} of {sortedHistory.length} links
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
-              disabled={historyCurrentPage <= 1}
-              onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-            >
-              Prev
-            </button>
-            <span className="text-slate-700">
-              Page {historyCurrentPage} / {historyTotalPages}
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {historyVisible.map((h) => (
+                  <tr key={h.id} className="hover:bg-slate-50">
+                    <Cell>{h.staffName ?? "?"}</Cell>
+                    <Cell>{h.staffEmail ?? "?"}</Cell>
+                    <Cell className="capitalize">{String(h.status ?? "").toLowerCase()}</Cell>
+                    <Cell>{new Date(h.createdAt).toLocaleString()}</Cell>
+                    <Cell>{h.usedAt ? new Date(h.usedAt).toLocaleString() : "?"}</Cell>
+                    <Cell>{new Date(h.expiresAt).toLocaleString()}</Cell>
+                    <Cell>
+                      <button
+                        onClick={() => setConfirmDelete(h)}
+                        className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                      >
+                        Delete
+                      </button>
+                    </Cell>
+                  </tr>
+                ))}
+                {historyVisible.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-4 text-center text-sm text-slate-500">
+                      No uploads match your filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+            <span>
+              Showing {sortedHistory.length === 0 ? 0 : historyStart + 1}-{Math.min(sortedHistory.length, historyStart + historyPageSize)} of {sortedHistory.length} links
             </span>
-            <button
-              className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
-              disabled={historyCurrentPage >= historyTotalPages}
-              onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-            >
-              Next
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                disabled={historyCurrentPage <= 1}
+                onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span className="text-slate-700">
+                Page {historyCurrentPage} / {historyTotalPages}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                disabled={historyCurrentPage >= historyTotalPages}
+                onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {confirmDelete && (
+      {confirmDelete && !isViewer && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 px-4">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900">Delete upload link?</h3>
