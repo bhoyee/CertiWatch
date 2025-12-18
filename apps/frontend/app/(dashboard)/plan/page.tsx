@@ -63,8 +63,21 @@ export default function PlanPage() {
       .then(setPlan)
       .catch((err) => setError(err.message ?? "Failed to load plan"));
 
-    fetchJson<Invoice[]>("/api/billing/invoices")
-      .then(setInvoices)
+    fetchJson<any[]>("/api/billing/invoices")
+      .then((items) => {
+        const mapped = (items ?? []).map((inv) => {
+          const status = String(inv.status ?? "").toLowerCase();
+          const normalized = status === "paid" ? "paid" : status === "open" ? "due" : "failed";
+          return {
+            id: inv.stripeInvoiceId ?? "",
+            date: inv.invoiceDateUtc ?? "",
+            amount: formatAmount(inv.amountPaid ?? inv.amountDue, inv.currency),
+            status: normalized,
+            downloadUrl: inv.pdfUrl ?? inv.hostedInvoiceUrl
+          } as Invoice;
+        });
+        setInvoices(mapped.filter((inv) => inv.id));
+      })
       .catch(() => setInvoices([]));
   }, []);
 
@@ -162,18 +175,18 @@ export default function PlanPage() {
                   <h2 className="text-lg font-semibold text-slate-900">{plan.planName}</h2>
                   <p className="text-sm text-slate-600">Tenant: {plan.tenantName}</p>
                   <p className="text-sm text-slate-600">
-                    {currentCatalogPlan ? `${currentCatalogPlan.price} • ${currentCatalogPlan.summary}` : "Custom pricing"}
+                    {currentCatalogPlan ? `${currentCatalogPlan.price} - ${currentCatalogPlan.summary}` : "Custom pricing"}
                   </p>
                 </div>
                 <StatusPill status={(plan.subscriptionStatus as any) ?? "active"} />
               </div>
               <p className="text-xs text-slate-500">
-                {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} • Status: {subscriptionLabel}
+                {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} - Status: {subscriptionLabel}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <UsageCard label="Records" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
-                <UsageCard label="Devices" used={plan.deviceCount} limit={"Included"} percent={0} />
-                <UsageCard label="Sources" used={plan.sourceCount} limit={"Included"} percent={0} />
+                <UsageCard label="Devices" used={plan.deviceCount} limit="Included" percent={0} />
+                <UsageCard label="Sources" used={plan.sourceCount} limit="Included" percent={0} />
               </div>
             </div>
 
@@ -184,7 +197,7 @@ export default function PlanPage() {
                   <h2 className="text-lg font-semibold text-slate-900">Upgrade options</h2>
                 </div>
                 <span className="text-xs text-slate-500">
-                  {nextOptions.length === 0 ? "You’re on the top tier" : "Choose a higher plan"}
+                  {nextOptions.length === 0 ? "You're on the top tier" : "Choose a higher plan"}
                 </span>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -257,9 +270,13 @@ export default function PlanPage() {
                         <StatusBadge status={inv.status} />
                       </Td>
                       <Td>
-                        <Link href={inv.downloadUrl ?? "#"} className="text-indigo-600 hover:text-indigo-700">
-                          Download
-                        </Link>
+                        {inv.downloadUrl ? (
+                          <Link href={inv.downloadUrl} className="text-indigo-600 hover:text-indigo-700">
+                            Download
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </Td>
                     </tr>
                   ))}
@@ -325,7 +342,15 @@ function Td({ children }: { children: ReactNode }) {
 }
 
 function formatDate(value: string) {
+  if (!value) return "-";
   const dt = new Date(value);
   if (isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString();
+}
+
+function formatAmount(amount: number | null | undefined, currency: string | null | undefined) {
+  if (amount === null || amount === undefined) return "-";
+  const cents = Number(amount) / 100;
+  const code = (currency ?? "usd").toUpperCase();
+  return `${code} ${cents.toFixed(2)}`;
 }
