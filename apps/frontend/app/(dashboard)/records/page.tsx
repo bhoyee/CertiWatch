@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { fetchJson } from "../../../lib/api";
+import { useRole } from "../RoleContext";
 
 type RecordDto = {
   id: string;
@@ -27,6 +28,10 @@ type PagedResult<T> = {
 };
 
 export default function RecordsPage() {
+  const { role } = useRole();
+  const isViewer = role?.toLowerCase() === "viewer";
+  const roleReady = role !== null;
+  const canManage = roleReady && !isViewer;
   const [data, setData] = useState<PagedResult<RecordDto> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -108,7 +113,7 @@ export default function RecordsPage() {
 
   const requestDelete = (rec: RecordDto) => {
     setConfirmDeleteId(rec.id);
-    setConfirmDeleteName(`${rec.staffName} – ${rec.courseName}`);
+    setConfirmDeleteName(`${rec.staffName} - ${rec.courseName}`);
   };
 
   const performDelete = async () => {
@@ -192,7 +197,8 @@ export default function RecordsPage() {
             className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
-          </button>          <button
+          </button>
+          <button
             onClick={() => exportFile("csv")}
             disabled={exporting !== null}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
@@ -208,7 +214,7 @@ export default function RecordsPage() {
           </button>
           <span className="text-xs text-slate-500">
             Total: {data.total}
-            {lastUpdated && <> • Updated {lastUpdated.toLocaleTimeString()}</>}
+            {lastUpdated && <> | Updated {lastUpdated.toLocaleTimeString()}</>}
           </span>
         </div>
       </div>
@@ -238,7 +244,7 @@ export default function RecordsPage() {
               <Header onClick={() => toggleSort("processingStatus")} sortField={sortField} sortDir={sortDir} field="processingStatus">
                 Status
               </Header>
-              <Header>Actions</Header>
+              {canManage && <Header>Actions</Header>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -253,23 +259,25 @@ export default function RecordsPage() {
                   {r.expiryDerived ? " (derived)" : ""}
                 </Cell>
                 <Cell>{formatConfidence(r.extractionConfidence)}</Cell>
-                <Cell>{statusBadge(r.processingStatus, r.id)}</Cell>
-                <Cell>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/review?recordId=${r.id}`}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      View
-                    </a>
-                    <button
-                      onClick={() => requestDelete(r)}
-                      className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </Cell>
+                <Cell>{statusBadge(r.processingStatus, r.id, !canManage)}</Cell>
+                {canManage && (
+                  <Cell>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/review?recordId=${r.id}`}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        View
+                      </a>
+                      <button
+                        onClick={() => requestDelete(r)}
+                        className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </Cell>
+                )}
               </tr>
             ))}
           </tbody>
@@ -303,7 +311,7 @@ export default function RecordsPage() {
           <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900">Delete record?</h3>
             <p className="mt-2 text-sm text-slate-700">
-              This will permanently delete the record{confirmDeleteName ? ` “${confirmDeleteName}”` : ""} and its file (if
+              This will permanently delete the record{confirmDeleteName ? ` "${confirmDeleteName}"` : ""} and its file (if
               unused elsewhere). This cannot be undone.
             </p>
             <div className="mt-4 flex justify-end gap-2">
@@ -357,7 +365,7 @@ function Header({
     >
       <span className="inline-flex items-center gap-1">
         {children}
-        {isActive && <span className="text-[10px] text-slate-500">{sortDir === "asc" ? "▲" : "▼"}</span>}
+        {isActive && <span className="text-[10px] text-slate-500">{sortDir === "asc" ? "^" : "v"}</span>}
       </span>
     </th>
   );
@@ -400,9 +408,16 @@ function formatConfidence(value?: number | null): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function statusBadge(status: string | number, id: string) {
+function statusBadge(status: string | number, id: string, isViewer: boolean) {
   const label = statusLabel(status);
   if (label === "needs review") {
+    if (isViewer) {
+      return (
+        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-1 text-xs font-semibold text-white">
+          Needs review
+        </span>
+      );
+    }
     return (
       <a
         href={`/review?recordId=${id}`}
@@ -417,4 +432,3 @@ function statusBadge(status: string | number, id: string) {
   }
   return <span className="capitalize text-slate-700">{label}</span>;
 }
-
