@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using CertiWatch.Contracts.Events;
 using CertiWatch.Contracts.Enums;
@@ -46,6 +47,12 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
         {
             var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/check-hash",
                 new { DeviceId = deviceId, FileHash = fileHash }, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.PaymentRequired)
+            {
+                logger.LogWarning("Tenant subscription inactive; skipping hash check for device {Device}", deviceId);
+                return new FileHashCheckResponse(true, false);
+            }
 
             if (!response.IsSuccessStatusCode)
             {

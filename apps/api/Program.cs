@@ -138,6 +138,7 @@ if (app.Environment.IsDevelopment())
 }
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<SubscriptionGateMiddleware>();
 
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();

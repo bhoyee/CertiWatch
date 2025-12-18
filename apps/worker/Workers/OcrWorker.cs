@@ -102,7 +102,7 @@ public sealed class OcrWorker : BackgroundService
                 var hashStatus = await _apiClient.GetFileHashStatusAsync(_options.DeviceId, fileHash, token);
                 if (!forceReprocess && hashStatus is not null && hashStatus.Exists && !hashStatus.ShouldReprocess)
                 {
-                    _logger.LogInformation("Skipping {File} because hash already ingested and record is complete for this tenant", file);
+                    _logger.LogInformation("Skipping {File} because hash already ingested or tenant subscription is inactive", file);
                     continue;
                 }
                 if (hashStatus is not null && hashStatus.Exists && hashStatus.ShouldReprocess)
