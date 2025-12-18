@@ -27,9 +27,23 @@ public static class DocumentsEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
+        var tenantId = accessor.Current.TenantId;
+        if (RecordVisibility.IsViewer(accessor))
+        {
+            var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+            var recordQuery = RecordVisibility.ApplyViewerScope(
+                db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
+                viewerScope);
+            var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
+            if (!allowed)
+            {
+                return Results.NotFound();
+            }
+        }
+
         var document = await db.Documents
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, token);
 
         if (document is null)
         {
@@ -53,9 +67,23 @@ public static class DocumentsEndpoints
         HttpContext httpContext,
         CancellationToken token)
     {
+        var tenantId = accessor.Current.TenantId;
+        if (RecordVisibility.IsViewer(accessor))
+        {
+            var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+            var recordQuery = RecordVisibility.ApplyViewerScope(
+                db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
+                viewerScope);
+            var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
+            if (!allowed)
+            {
+                return Results.NotFound();
+            }
+        }
+
         var document = await db.Documents
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, token);
 
         if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !File.Exists(document.PathOrUrl))
         {
@@ -92,6 +120,11 @@ public static class DocumentsEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
         var document = await db.Documents
             .Include(d => d.Records)
             .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == accessor.Current.TenantId, token);
