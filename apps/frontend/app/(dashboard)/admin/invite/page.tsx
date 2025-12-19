@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type UserRow = {
   id: string;
@@ -19,6 +19,13 @@ export default function InvitePage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [tableError, setTableError] = useState("");
   const [tableLoading, setTableLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<keyof UserRow>("email");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
@@ -68,6 +75,7 @@ export default function InvitePage() {
   };
 
   const updateUser = async (user: UserRow) => {
+    setSavingId(user.id);
     try {
       const res = await fetch(`${apiBase}/api/users/${user.id}`, {
         method: "PATCH",
@@ -80,17 +88,51 @@ export default function InvitePage() {
       loadUsers();
     } catch (err: any) {
       setTableError(err.message ?? "Failed to update user");
+    } finally {
+      setSavingId(null);
     }
   };
 
   const deleteUser = async (id: string) => {
-    if (!confirm("Remove this user from the workspace?")) return;
+    setConfirmDeleteId(null);
+    setSavingId(id);
     try {
       const res = await fetch(`${apiBase}/api/users/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
       setUsers((prev) => prev.filter((u) => u.id !== id));
     } catch (err: any) {
       setTableError(err.message ?? "Failed to delete user");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase();
+    const base = term
+      ? users.filter((u) => (u.name ?? "").toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || u.role.toLowerCase().includes(term))
+      : users;
+    const sorted = [...base].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const av = (a[sortKey] ?? "").toString().toLowerCase();
+      const bv = (b[sortKey] ?? "").toString().toLowerCase();
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+    return sorted;
+  }, [users, search, sortDir, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const toggleSort = (key: keyof UserRow) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
     }
   };
 
@@ -155,38 +197,74 @@ export default function InvitePage() {
       </form>
 
       <div className="pt-4">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-slate-800">People & invites</h2>
-          <button
-            type="button"
-            onClick={loadUsers}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-500"
-            disabled={tableLoading}
-          >
-            {tableLoading ? "Refreshing..." : "Refresh"}
-          </button>
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-slate-800">People & invites</h2>
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search name, email, role"
+              className="rounded-md border border-slate-200 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-600">Rows</label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+            >
+              {[5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={loadUsers}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-500"
+              disabled={tableLoading}
+            >
+              {tableLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
         {tableError && <div className="mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{tableError}</div>}
         <div className="overflow-auto rounded-md border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Role</th>
-                <th className="px-3 py-2">Created</th>
+                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("name")}>
+                  Name
+                </th>
+                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("email")}>
+                  Email
+                </th>
+                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("role")}>
+                  Role
+                </th>
+                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("createdAt")}>
+                  Created
+                </th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {users.length === 0 && (
+              {pageItems.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-3 text-center text-slate-500">
                     No invites yet.
                   </td>
                 </tr>
               )}
-              {users.map((u) => (
+              {pageItems.map((u) => (
                 <tr key={u.id}>
                   <td className="px-3 py-2">
                     <input
@@ -207,15 +285,16 @@ export default function InvitePage() {
                     </select>
                   </td>
                   <td className="px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
-                  <td className="px-3 py-2 text-right space-x-2">
+                  <td className="px-3 py-2 space-x-2 text-right">
                     <button
                       onClick={() => updateUser(u)}
-                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
+                      disabled={savingId === u.id}
+                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-50"
                     >
-                      Save
+                      {savingId === u.id ? "Saving..." : "Save"}
                     </button>
                     <button
-                      onClick={() => deleteUser(u.id)}
+                      onClick={() => setConfirmDeleteId(u.id)}
                       className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                     >
                       Delete
@@ -226,7 +305,54 @@ export default function InvitePage() {
             </tbody>
           </table>
         </div>
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+          <div>
+            Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border border-slate-200 px-2 py-1 hover:border-slate-300 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Prev
+            </button>
+            <span className="font-semibold text-slate-800">
+              Page {currentPage} / {totalPages}
+            </span>
+            <button
+              className="rounded-md border border-slate-200 px-2 py-1 hover:border-slate-300 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">Remove user?</h3>
+            <p className="mt-2 text-sm text-slate-600">This will revoke access for this user. Continue?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500"
+                onClick={() => deleteUser(confirmDeleteId)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
