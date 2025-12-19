@@ -55,9 +55,16 @@ internal static class RecordVisibility
             return query.Where(_ => false);
         }
 
-        var namePattern = $"%{name}%";
+        // Token-based match: require every token from the viewer's name to appear in staff name (order agnostic).
+        var tokens = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var token in tokens)
+        {
+            var tokenPattern = $"%{token}%";
+            query = query.Where(r => EF.Functions.ILike(r.StaffName ?? string.Empty, tokenPattern));
+        }
+
         // Limit to staff name only to avoid casting jsonb, which can fail on legacy malformed data.
-        return query.Where(r => EF.Functions.ILike(r.StaffName ?? string.Empty, namePattern));
+        return query;
     }
 
     private static string? DeriveNameFromEmail(string email)
