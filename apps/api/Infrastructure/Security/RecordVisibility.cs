@@ -50,30 +50,14 @@ internal static class RecordVisibility
         var name = scope.StaffName?.Trim();
         var email = scope.Email?.Trim();
         var hasName = !string.IsNullOrWhiteSpace(name);
-        var hasEmail = !string.IsNullOrWhiteSpace(email);
-
-        if (!hasName && !hasEmail)
+        if (!hasName)
         {
             return query.Where(_ => false);
         }
 
-        if (hasName && hasEmail)
-        {
-            var namePattern = $"%{name}%";
-            var emailPattern = $"%{email}%";
-            return query.Where(r =>
-                EF.Functions.ILike(r.StaffName ?? string.Empty, namePattern) ||
-                EF.Functions.ILike(r.FieldsJson ?? string.Empty, emailPattern));
-        }
-
-        if (hasName)
-        {
-            var namePattern = $"%{name}%";
-            return query.Where(r => EF.Functions.ILike(r.StaffName ?? string.Empty, namePattern));
-        }
-
-        var emailOnlyPattern = $"%{email}%";
-        return query.Where(r => EF.Functions.ILike(r.FieldsJson ?? string.Empty, emailOnlyPattern));
+        var namePattern = $"%{name}%";
+        // Limit to staff name only to avoid casting jsonb, which can fail on legacy malformed data.
+        return query.Where(r => EF.Functions.ILike(r.StaffName ?? string.Empty, namePattern));
     }
 
     private static string? DeriveNameFromEmail(string email)
