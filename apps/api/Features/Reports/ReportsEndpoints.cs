@@ -26,14 +26,36 @@ public static class ReportsEndpoints
         var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
         recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
-        var records = await recordQuery.ToListAsync(token);
+        var records = await recordQuery
+            .Select(r => new SimpleRecord(
+                r.Id,
+                r.TenantId,
+                r.DocumentId,
+                r.StaffName,
+                r.CourseName,
+                r.Issuer,
+                r.IssueDate,
+                r.ExpiryDate,
+                r.ExpiryDerived,
+                r.Confidence,
+                r.ExtractionConfidence,
+                r.ProcessingStatus,
+                r.ReviewReason,
+                r.ReviewNotes,
+                r.ReviewedBy,
+                r.ReviewedAt,
+                r.CreatedAt,
+                r.UpdatedAt,
+                r.DocumentType))
+            .ToListAsync(token);
+        var recordDtos = records.Select(ToLightDto).ToList();
         var digest = new TenantDigestDto(
             tenantId,
             tenant?.Name ?? "Tenant",
-            records.Take(5).Select(Records.RecordsEndpoints.ToDtoForReport).ToList(),
-            records.Where(r => r.ExpiryDate != null && r.ExpiryDate <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))).Select(Records.RecordsEndpoints.ToDtoForReport).ToList(),
-            records.Where(r => r.ExpiryDate != null && r.ExpiryDate < DateOnly.FromDateTime(DateTime.UtcNow)).Select(Records.RecordsEndpoints.ToDtoForReport).ToList(),
-            records.Where(r => r.Confidence < 0.6m).Select(Records.RecordsEndpoints.ToDtoForReport).ToList());
+            recordDtos.Take(5).ToList(),
+            recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))).ToList(),
+            recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate < DateOnly.FromDateTime(DateTime.UtcNow)).ToList(),
+            recordDtos.Where(r => r.Confidence < 0.6m).ToList());
 
         var html = renderer.RenderDigest(digest);
         return Results.Ok(new DigestPreviewResponse(digest, html));
@@ -54,13 +76,35 @@ public static class ReportsEndpoints
         var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
         recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
-        var records = await recordQuery.ToListAsync(token);
-        var okRecords = records.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
-        var expiringSoon = records.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today && r.ExpiryDate <= soon).ToList();
-        var expired = records.Where(r => r.ExpiryDate != null && r.ExpiryDate < today).ToList();
-        var lowConfidence = records.Where(r => r.Confidence < 0.6m).ToList();
+        var records = await recordQuery
+            .Select(r => new SimpleRecord(
+                r.Id,
+                r.TenantId,
+                r.DocumentId,
+                r.StaffName,
+                r.CourseName,
+                r.Issuer,
+                r.IssueDate,
+                r.ExpiryDate,
+                r.ExpiryDerived,
+                r.Confidence,
+                r.ExtractionConfidence,
+                r.ProcessingStatus,
+                r.ReviewReason,
+                r.ReviewNotes,
+                r.ReviewedBy,
+                r.ReviewedAt,
+                r.CreatedAt,
+                r.UpdatedAt,
+                r.DocumentType))
+            .ToListAsync(token);
+        var recordDtos = records.Select(ToLightDto).ToList();
+        var okRecords = recordDtos.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
+        var expiringSoon = recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today && r.ExpiryDate <= soon).ToList();
+        var expired = recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate < today).ToList();
+        var lowConfidence = recordDtos.Where(r => r.Confidence < 0.6m).ToList();
 
-        var statusCounts = records
+        var statusCounts = recordDtos
             .GroupBy(r => r.ProcessingStatus.ToString())
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -73,8 +117,70 @@ public static class ReportsEndpoints
             Devices: isViewer ? 0 : await db.Devices.CountAsync(d => d.TenantId == tenantId, token),
             Sources: isViewer ? 0 : await db.Sources.CountAsync(s => s.TenantId == tenantId, token),
             StatusCounts: statusCounts,
-            ExpiringSoonList: expiringSoon.OrderBy(r => r.ExpiryDate).Take(10).Select(Records.RecordsEndpoints.ToDtoForReport).ToList());
+            ExpiringSoonList: expiringSoon.OrderBy(r => r.ExpiryDate).Take(10).ToList());
 
         return Results.Ok(dto);
+    }
+
+    private sealed record SimpleRecord(
+        Guid Id,
+        Guid TenantId,
+        Guid DocumentId,
+        string StaffName,
+        string CourseName,
+        string? Issuer,
+        DateOnly? IssueDate,
+        DateOnly? ExpiryDate,
+        bool ExpiryDerived,
+        decimal Confidence,
+        decimal? ExtractionConfidence,
+        ProcessingStatus ProcessingStatus,
+        string? ReviewReason,
+        string? ReviewNotes,
+        Guid? ReviewedBy,
+        DateTime? ReviewedAt,
+        DateTime CreatedAt,
+        DateTime UpdatedAt,
+        string? DocumentType);
+
+    private static RecordDto ToLightDto(SimpleRecord r)
+    {
+        string? Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var cleaned = value.Trim().Trim('"', '\'', ',', ';').Trim();
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        }
+
+        var band = r.Confidence switch
+        {
+            >= 0.85m => CertiWatch.Contracts.Enums.RecordConfidenceBand.High,
+            >= 0.65m => CertiWatch.Contracts.Enums.RecordConfidenceBand.Medium,
+            >= 0.4m => CertiWatch.Contracts.Enums.RecordConfidenceBand.Low,
+            _ => CertiWatch.Contracts.Enums.RecordConfidenceBand.Unknown
+        };
+
+        return new RecordDto(
+            r.Id,
+            r.TenantId,
+            r.DocumentId,
+            Normalize(r.StaffName) ?? "Unknown",
+            Normalize(r.CourseName) ?? "Unknown Course",
+            Normalize(r.Issuer),
+            r.IssueDate,
+            r.ExpiryDate,
+            r.ExpiryDerived,
+            r.Confidence,
+            band,
+            r.ProcessingStatus,
+            r.ReviewReason,
+            r.ReviewNotes,
+            r.ReviewedBy,
+            r.ReviewedAt,
+            new Dictionary<string, string>(),
+            r.CreatedAt,
+            r.UpdatedAt,
+            r.DocumentType,
+            r.ExtractionConfidence);
     }
 }
