@@ -152,6 +152,7 @@ app.MapNotificationEndpoints();
 app.MapBillingEndpoints();
 app.MapTenantEndpoints();
 app.MapProfileEndpoints();
+app.MapUserManagementEndpoints();
 app.MapUploadEndpoints();
 
 if (app.Environment.IsDevelopment())

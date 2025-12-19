@@ -112,10 +112,20 @@ public static class AuthEndpoints
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 Email = request.Email,
-                Name = request.Email,
+                Name = string.IsNullOrWhiteSpace(request.Name) ? request.Email : request.Name.Trim(),
                 Role = string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role
             };
             db.Users.Add(user);
+            await db.SaveChangesAsync(token);
+        }
+        else
+        {
+            // Refresh the name/role if a new invite is sent with updated details.
+            user.Name = string.IsNullOrWhiteSpace(request.Name) ? user.Name ?? request.Email : request.Name.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Role))
+            {
+                user.Role = request.Role;
+            }
             await db.SaveChangesAsync(token);
         }
 
@@ -138,4 +148,4 @@ public static class AuthEndpoints
 
 public sealed record MagicLinkRequest(string Email, string? FallbackEmail, bool RememberDevice, string? DeviceId);
 
-public sealed record InviteUserRequest(string Email, string Role);
+public sealed record InviteUserRequest(string Email, string? Name, string Role);
