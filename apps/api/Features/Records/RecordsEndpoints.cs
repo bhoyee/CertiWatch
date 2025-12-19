@@ -395,9 +395,22 @@ public static class RecordsEndpoints
     }
 
     private static IReadOnlyDictionary<string, string> DeserializeFields(string json)
-        => string.IsNullOrWhiteSpace(json)
-            ? new Dictionary<string, string>()
-            : JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new Dictionary<string, string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
+        }
+        catch
+        {
+            // If stored text is not valid JSON (e.g., legacy rows), fall back to an empty map to avoid crashes.
+            return new Dictionary<string, string>();
+        }
+    }
 
     private static IReadOnlyDictionary<string, object> DeserializeMeta(string json)
         => string.IsNullOrWhiteSpace(json)
