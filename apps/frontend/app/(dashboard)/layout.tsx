@@ -267,16 +267,17 @@ function NavLinks({
   const pathname = usePathname();
   const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
   const roleLower = role?.toLowerCase();
+  const isViewer = roleLower === "viewer";
   const filteredItems = useMemo(() => {
     return navItems.filter((item) => {
-      if (roleLower === "viewer" && item.viewerHidden) return false;
+      if (isViewer && item.viewerHidden) return false;
       if (roleLower === "manager" && item.managerHidden) return false;
       return true;
     });
-  }, [roleLower]);
+  }, [isViewer, roleLower]);
 
   useEffect(() => {
-    if (roleLower === "viewer" || roleLoading) {
+    if (isViewer || roleLoading) {
       setReviewCount(0);
       return;
     }
