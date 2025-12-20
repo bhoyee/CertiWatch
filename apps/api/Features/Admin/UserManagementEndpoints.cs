@@ -41,6 +41,10 @@ public static class UserManagementEndpoints
         if (isManager)
         {
             var managerId = accessor.Current.UserId;
+            if (managerId == Guid.Empty)
+            {
+                return Results.Ok(Array.Empty<UserListItem>());
+            }
             query = query.Where(u => u.Role.ToLower() == "viewer" && u.InvitedByUserId == managerId);
         }
 
