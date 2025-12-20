@@ -85,15 +85,23 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> PatchAsync(Guid id, PatchRecordRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
-        if (!RecordVisibility.IsAdmin(tenantAccessor))
-        {
-            return Results.Forbid();
-        }
+        var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
+        var isAdmin = RecordVisibility.IsAdmin(tenantAccessor);
 
         var entity = await db.Records.FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {
             return Results.NotFound();
+        }
+
+        if (!isAdmin)
+        {
+            // Managers can only edit records they or their viewers created.
+            var allowed = scope?.AllowedCreatorIds?.Contains(entity.CreatedByUserId ?? Guid.Empty) == true;
+            if (!(RecordVisibility.IsManager(tenantAccessor) && allowed))
+            {
+                return Results.Forbid();
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.StaffName)) entity.StaffName = request.StaffName;
@@ -151,15 +159,22 @@ public static class RecordsEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
     {
-        if (!RecordVisibility.IsAdmin(tenantAccessor))
-        {
-            return Results.Forbid();
-        }
+        var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
+        var isAdmin = RecordVisibility.IsAdmin(tenantAccessor);
 
         var entity = await db.Records.Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantAccessor.Current.TenantId, token);
         if (entity is null)
         {
             return Results.NotFound();
+        }
+
+        if (!isAdmin)
+        {
+            var allowed = scope?.AllowedCreatorIds?.Contains(entity.CreatedByUserId ?? Guid.Empty) == true;
+            if (!(RecordVisibility.IsManager(tenantAccessor) && allowed))
+            {
+                return Results.Forbid();
+            }
         }
 
         var reminders = db.Reminders.Where(r => r.RecordId == id);

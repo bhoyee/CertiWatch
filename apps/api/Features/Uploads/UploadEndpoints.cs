@@ -90,14 +90,16 @@ public static class UploadEndpoints
 
     private static async Task<IResult> HistoryAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!RecordVisibility.IsAdmin(accessor))
+        var tenantId = accessor.Current.TenantId;
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+        if (RecordVisibility.IsViewer(accessor))
         {
             return Results.Forbid();
         }
 
-        var tenantId = accessor.Current.TenantId;
         var items = await db.UploadRequests.AsNoTracking()
             .Where(u => u.TenantId == tenantId)
+            .Where(u => !RecordVisibility.IsManager(accessor) || (scope != null && scope.AllowedCreatorIds.Contains(u.CreatedByUserId ?? Guid.Empty)))
             .OrderByDescending(u => u.CreatedAt)
             .Take(50)
             .ToListAsync(token);
