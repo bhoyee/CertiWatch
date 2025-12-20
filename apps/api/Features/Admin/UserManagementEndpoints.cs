@@ -40,7 +40,8 @@ public static class UserManagementEndpoints
         var query = db.Users.AsNoTracking().Where(u => u.TenantId == tenantId);
         if (isManager)
         {
-            query = query.Where(u => u.Role.ToLower() == "viewer");
+            var managerId = accessor.Current.UserId;
+            query = query.Where(u => u.Role.ToLower() == "viewer" && u.InvitedByUserId == managerId);
         }
 
         var users = await query
@@ -69,6 +70,10 @@ public static class UserManagementEndpoints
         }
 
         if (isManager && !string.Equals(user.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+        if (isManager && user.InvitedByUserId != accessor.Current.UserId)
         {
             return Results.Forbid();
         }
@@ -110,6 +115,10 @@ public static class UserManagementEndpoints
         }
 
         if (isManager && !string.Equals(user.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+        if (isManager && user.InvitedByUserId != accessor.Current.UserId)
         {
             return Results.Forbid();
         }
