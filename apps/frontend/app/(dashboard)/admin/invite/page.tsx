@@ -114,9 +114,15 @@ export default function InvitePage() {
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
+    const scoped = isManager ? users.filter((u) => u.role.toLowerCase() === "viewer") : users;
     const base = term
-      ? users.filter((u) => (u.name ?? "").toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || u.role.toLowerCase().includes(term))
-      : users;
+      ? scoped.filter(
+          (u) =>
+            (u.name ?? "").toLowerCase().includes(term) ||
+            u.email.toLowerCase().includes(term) ||
+            u.role.toLowerCase().includes(term)
+        )
+      : scoped;
     const sorted = [...base].sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       const av = (a[sortKey] ?? "").toString().toLowerCase();

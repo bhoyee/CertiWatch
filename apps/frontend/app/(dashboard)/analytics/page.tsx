@@ -37,6 +37,7 @@ type ExpiringRow = {
 export default function AnalyticsPage() {
   const { role } = useRole();
   const isViewer = role?.toLowerCase() === "viewer";
+  const isManager = role?.toLowerCase() === "manager";
   const [data, setData] = useState<AnalyticsOverviewDto | null>(null);
   const [reminders, setReminders] = useState<ReminderPreviewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,10 @@ export default function AnalyticsPage() {
     { label: "Devices", value: data.devices, accent: "from-emerald-500 to-green-500" },
     { label: "Sources", value: data.sources, accent: "from-cyan-500 to-sky-500" }
   ];
-  const cards = isViewer ? baseCards.filter((card) => card.label !== "Devices" && card.label !== "Sources") : baseCards;
+  const cards =
+    isViewer || isManager
+      ? baseCards.filter((card) => card.label !== "Devices" && card.label !== "Sources")
+      : baseCards;
 
   const statusEntries = Object.entries(data.statusCounts ?? {});
   const expiringList: ExpiringRow[] =
