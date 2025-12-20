@@ -11,6 +11,9 @@ internal static class RecordVisibility
     internal static bool IsViewer(ITenantContextAccessor accessor)
         => string.Equals(accessor.Current.Role, "viewer", StringComparison.OrdinalIgnoreCase);
 
+    internal static bool IsManager(ITenantContextAccessor accessor)
+        => string.Equals(accessor.Current.Role, "manager", StringComparison.OrdinalIgnoreCase);
+
     internal static bool IsAdmin(ITenantContextAccessor accessor)
         => string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase)
            || string.Equals(accessor.Current.Role, "superadmin", StringComparison.OrdinalIgnoreCase);

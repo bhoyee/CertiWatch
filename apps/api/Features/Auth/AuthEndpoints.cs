@@ -98,9 +98,17 @@ public static class AuthEndpoints
         ITenantContextAccessor tenantAccessor,
         CancellationToken token)
     {
-        if (!string.Equals(tenantAccessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        var isAdmin = string.Equals(tenantAccessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase);
+        var isManager = string.Equals(tenantAccessor.Current.Role, "manager", StringComparison.OrdinalIgnoreCase);
+        if (!isAdmin && !isManager)
         {
             return Results.Forbid();
+        }
+
+        // Managers may only invite viewers.
+        if (isManager && !string.Equals(request.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(new { error = "managers_can_only_invite_viewers" });
         }
 
         var tenantId = tenantAccessor.Current.TenantId;
@@ -113,7 +121,9 @@ public static class AuthEndpoints
                 TenantId = tenantId,
                 Email = request.Email,
                 Name = string.IsNullOrWhiteSpace(request.Name) ? request.Email : request.Name.Trim(),
-                Role = string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role
+                Role = isManager
+                    ? "viewer"
+                    : string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role
             };
             db.Users.Add(user);
             await db.SaveChangesAsync(token);
@@ -122,7 +132,11 @@ public static class AuthEndpoints
         {
             // Refresh the name/role if a new invite is sent with updated details.
             user.Name = string.IsNullOrWhiteSpace(request.Name) ? user.Name ?? request.Email : request.Name.Trim();
-            if (!string.IsNullOrWhiteSpace(request.Role))
+            if (isManager)
+            {
+                user.Role = "viewer";
+            }
+            else if (!string.IsNullOrWhiteSpace(request.Role))
             {
                 user.Role = request.Role;
             }
