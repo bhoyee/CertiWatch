@@ -22,15 +22,28 @@ public static class UserManagementEndpoints
     private static bool IsAdmin(ITenantContextAccessor accessor) =>
         string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsManager(ITenantContextAccessor accessor) =>
+        string.Equals(accessor.Current.Role, "manager", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAdminOrManager(ITenantContextAccessor accessor) => IsAdmin(accessor) || IsManager(accessor);
+
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsAdmin(accessor))
+        var isAdmin = IsAdmin(accessor);
+        var isManager = IsManager(accessor);
+        if (!isAdmin && !isManager)
         {
             return Results.Forbid();
         }
 
         var tenantId = accessor.Current.TenantId;
-        var users = await db.Users.AsNoTracking()
+        var query = db.Users.AsNoTracking().Where(u => u.TenantId == tenantId);
+        if (isManager)
+        {
+            query = query.Where(u => u.Role.ToLower() == "viewer");
+        }
+
+        var users = await query
             .Where(u => u.TenantId == tenantId)
             .OrderBy(u => u.Email)
             .Select(u => new UserListItem(u.Id, u.Email, u.Name, u.Role, u.CreatedAt))
@@ -41,7 +54,9 @@ public static class UserManagementEndpoints
 
     private static async Task<IResult> UpdateAsync(Guid id, UpdateUserRequest request, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsAdmin(accessor))
+        var isAdmin = IsAdmin(accessor);
+        var isManager = IsManager(accessor);
+        if (!isAdmin && !isManager)
         {
             return Results.Forbid();
         }
@@ -53,6 +68,11 @@ public static class UserManagementEndpoints
             return Results.NotFound();
         }
 
+        if (isManager && !string.Equals(user.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Name))
         {
             user.Name = request.Name.Trim();
@@ -60,6 +80,10 @@ public static class UserManagementEndpoints
 
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
+            if (isManager && !string.Equals(request.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "managers_can_only_manage_viewers" });
+            }
             user.Role = request.Role.Trim();
         }
 
@@ -69,7 +93,9 @@ public static class UserManagementEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsAdmin(accessor))
+        var isAdmin = IsAdmin(accessor);
+        var isManager = IsManager(accessor);
+        if (!isAdmin && !isManager)
         {
             return Results.Forbid();
         }
@@ -81,6 +107,11 @@ public static class UserManagementEndpoints
         if (user is null)
         {
             return Results.NotFound();
+        }
+
+        if (isManager && !string.Equals(user.Role, "viewer", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
         }
 
         if (!string.IsNullOrWhiteSpace(currentEmail) && string.Equals(user.Email, currentEmail, StringComparison.OrdinalIgnoreCase))
