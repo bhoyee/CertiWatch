@@ -260,6 +260,58 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
+
+                // Notify manager if a managed upload was ingested.
+                try
+                {
+                    var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                    Guid? createdBy = docEvent.CreatedByUserId;
+                    if (createdBy.HasValue)
+                    {
+                        var uploader = await db.Users.AsNoTracking()
+                            .FirstOrDefaultAsync(u => u.Id == createdBy && u.TenantId == docEvent.TenantId, stoppingToken);
+                        Guid? managerId = null;
+                        if (uploader is not null)
+                        {
+                            if (uploader.Role.Equals("manager", StringComparison.OrdinalIgnoreCase))
+                            {
+                                managerId = uploader.Id;
+                            }
+                            else if (uploader.Role.Equals("viewer", StringComparison.OrdinalIgnoreCase) && uploader.InvitedByUserId.HasValue)
+                            {
+                                managerId = uploader.InvitedByUserId;
+                            }
+                        }
+
+                        if (managerId.HasValue)
+                        {
+                            var manager = uploader?.Id == managerId
+                                ? uploader
+                                : await db.Users.AsNoTracking()
+                                    .FirstOrDefaultAsync(u => u.Id == managerId.Value && u.TenantId == docEvent.TenantId, stoppingToken);
+
+                            if (manager is not null && !string.IsNullOrWhiteSpace(manager.Email))
+                            {
+                                var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
+                                var html = $"""
+                                    <p>Hello {manager.Name ?? "Manager"},</p>
+                                    <p>A certificate was uploaded by your team.</p>
+                                    <ul>
+                                      <li><strong>Staff:</strong> {staff}</li>
+                                      <li><strong>Course:</strong> {course}</li>
+                                      <li><strong>Status:</strong> {statusLabel}</li>
+                                    </ul>
+                                    <p>Log in to review the record.</p>
+                                """;
+                                await emailService.SendAsync(manager.Email, $"Upload {statusLabel}: {course}", html, stoppingToken);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send manager notification email");
+                }
             }
             catch (Exception ex)
             {
