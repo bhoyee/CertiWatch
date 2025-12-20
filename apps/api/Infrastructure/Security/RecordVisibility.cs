@@ -97,7 +97,7 @@ internal static class RecordVisibility
         return query.Where(r =>
             (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value))
             ||
-            (hasTokens && tokens.All(tok => EF.Functions.ILike(r.StaffName ?? string.Empty, $"%{tok}%"))));
+            (hasTokens && tokens.All(tok => EF.Functions.ILike(r.StaffName ?? string.Empty, "%" + tok + "%"))));
     }
 
     private static string? DeriveNameFromEmail(string email)
