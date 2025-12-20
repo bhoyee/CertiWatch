@@ -50,6 +50,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [roleLoading, setRoleLoading] = useState(true);
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
+  const blockedByError =
+    planError?.toLowerCase().includes("subscription inactive") ||
+    planError?.toLowerCase().includes("payment") ||
+    planError?.toLowerCase().includes("plan");
 
   useEffect(() => {
     let active = true;
@@ -88,8 +92,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
 
   const isBlocked = useMemo(
-    () => !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
-    [plan]
+    () => blockedByError || !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
+    [blockedByError, plan]
   );
   const roleRestrictedRoutes = useMemo(
     () => ({
@@ -156,7 +160,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             )}
             <TopBar isBlocked={isBlocked} role={role} />
-            {!isViewer && !isManager && (
+            {(isBlocked || (!isViewer && !isManager)) && (
               <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
             )}
             <div

@@ -102,15 +102,21 @@ public static class BillingEndpoints
             return Results.BadRequest(new { error = "unknown_plan" });
         }
 
+        // Resolve price details for currency checks.
+        var priceService = new PriceService();
+        var price = await priceService.GetAsync(plan.PriceId, cancellationToken: cancellationToken);
+        var planCurrency = price.Currency ?? "usd";
+
         // If authenticated, allow missing fields and hydrate from current tenant/user
         var adminEmail = request.AdminEmail?.Trim();
         var adminName = request.AdminName?.Trim();
         var companyName = request.CompanyName?.Trim();
 
         var ctx = accessor.Current;
+        Tenant? tenant = null;
         if (ctx.TenantId != Guid.Empty)
         {
-            var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == ctx.TenantId, cancellationToken);
+            tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == ctx.TenantId, cancellationToken);
             companyName ??= tenant?.Name;
             adminEmail ??= ctx.Email;
             adminName ??= ctx.Email;
@@ -158,6 +164,53 @@ public static class BillingEndpoints
 
         var trialDays = trialEligible ? options.TrialDays : 0;
 
+        // Decide which customer to use.
+        string? customerId = null;
+        if (tenant is not null && !string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+        {
+            customerId = tenant.StripeCustomerId;
+        }
+        else if (tenant is not null)
+        {
+            // Create a dedicated customer for this tenant.
+            var customerService = new CustomerService();
+            var created = await customerService.CreateAsync(new CustomerCreateOptions
+            {
+                Email = adminEmail,
+                Name = companyName,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["tenant_id"] = tenant.Id.ToString(),
+                    ["company_name"] = companyName
+                }
+            }, cancellationToken: cancellationToken);
+            tenant.StripeCustomerId = created.Id;
+            await db.SaveChangesAsync(cancellationToken);
+            customerId = created.Id;
+        }
+
+        // If the tenant already has a subscription with a different currency, block checkout and ask support.
+        if (tenant is not null && !string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId))
+        {
+            try
+            {
+                var subService = new SubscriptionService();
+                var existing = await subService.GetAsync(tenant.StripeSubscriptionId, cancellationToken: cancellationToken);
+                var existingCurrency = existing.Items?.Data?.FirstOrDefault()?.Price?.Currency;
+                if (!string.IsNullOrWhiteSpace(existingCurrency) && !string.Equals(existingCurrency, planCurrency, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new
+                    {
+                        friendlyError = "This account is billed in a different currency. Please contact support or use a different billing email."
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not verify existing subscription currency for tenant {TenantId}", tenant.Id);
+            }
+        }
+
         try
         {
             var sessionOptions = new SessionCreateOptions
@@ -166,7 +219,7 @@ public static class BillingEndpoints
                 CancelUrl = options.CancelUrl,
                 Mode = "subscription",
                 CustomerEmail = adminEmail,
-                Customer = null,
+                Customer = customerId,
                 PaymentMethodCollection = "always",
                 SubscriptionData = new SessionSubscriptionDataOptions
                 {
@@ -185,7 +238,8 @@ public static class BillingEndpoints
                     ["planId"] = plan.PlanId,
                     ["companyName"] = companyName,
                     ["adminEmail"] = adminEmail,
-                    ["adminName"] = adminName
+                    ["adminName"] = adminName,
+                    ["tenantId"] = tenant?.Id.ToString() ?? "signup"
                 }
             };
 
@@ -196,7 +250,10 @@ public static class BillingEndpoints
         catch (StripeException ex)
         {
             logger.LogError(ex, "Stripe checkout failed for {Email}", adminEmail);
-            return Results.BadRequest(new { friendlyError = "We could not start checkout. Please use a different email or contact support." });
+            var friendly = ex.Message.Contains("combine currencies", StringComparison.OrdinalIgnoreCase)
+                ? "This email is already tied to a different billing currency in Stripe. Please use another billing email or contact support."
+                : "We could not start checkout. Please use a different email or contact support.";
+            return Results.BadRequest(new { friendlyError = friendly });
         }
     }
 
