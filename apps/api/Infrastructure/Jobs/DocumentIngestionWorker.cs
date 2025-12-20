@@ -161,6 +161,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         Id = Guid.NewGuid(),
                         TenantId = docEvent.TenantId,
                         SourceId = sourceId,
+                        CreatedByUserId = docEvent.CreatedByUserId,
                         FileName = docEvent.FileName,
                         FileHash = docEvent.FileHash,
                         PathOrUrl = docEvent.PathOrUrl,
@@ -177,6 +178,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         Id = Guid.NewGuid(),
                         TenantId = docEvent.TenantId,
                         DocumentId = document.Id,
+                        CreatedByUserId = docEvent.CreatedByUserId,
                         StaffName = staff,
                         CourseName = course,
                         Issuer = issuer,
@@ -208,11 +210,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
                     document.ProcessingStatus = processingStatus; // Use updated status
+                    document.CreatedByUserId ??= docEvent.CreatedByUserId;
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
                     existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
                     existingRecord.Issuer = issuer ?? NormalizeText(existingRecord.Issuer) ?? existingRecord.Issuer;
                     existingRecord.IssueDate = issueDate ?? existingRecord.IssueDate;
+                    existingRecord.CreatedByUserId ??= docEvent.CreatedByUserId;
                     if (expiryDate.HasValue)
                     {
                         existingRecord.ExpiryDate = expiryDate;

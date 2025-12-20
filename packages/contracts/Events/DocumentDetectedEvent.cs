@@ -6,6 +6,7 @@ public sealed record DocumentDetectedEvent(
     Guid TenantId,
     Guid SourceId,
     string DeviceToken,
+    Guid? CreatedByUserId,
     string FileName,
     string PathOrUrl,
     string FileHash,

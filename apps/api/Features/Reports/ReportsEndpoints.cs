@@ -23,9 +23,9 @@ public static class ReportsEndpoints
     {
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
-        recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
+        recordQuery = RecordVisibility.ApplyScope(recordQuery, scope);
         var records = await recordQuery
             .Select(r => new SimpleRecord(
                 r.Id,
@@ -73,9 +73,9 @@ public static class ReportsEndpoints
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var soon = today.AddDays(30);
 
-        var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
-        recordQuery = RecordVisibility.ApplyViewerScope(recordQuery, viewerScope);
+        recordQuery = RecordVisibility.ApplyScope(recordQuery, scope);
         var records = await recordQuery
             .Select(r => new SimpleRecord(
                 r.Id,

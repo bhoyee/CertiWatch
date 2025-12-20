@@ -214,7 +214,8 @@ public sealed class OcrWorker : BackgroundService
                     _options.TenantId,
                     _options.SourceId,
                     _options.DeviceToken,
-          Path.GetFileName(file),
+                    null, // createdByUserId unknown for filesystem watcher
+                    Path.GetFileName(file),
                     file,
                     fileHash,
                     MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),

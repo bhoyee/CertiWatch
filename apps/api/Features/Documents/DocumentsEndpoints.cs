@@ -28,12 +28,12 @@ public static class DocumentsEndpoints
         CancellationToken token)
     {
         var tenantId = accessor.Current.TenantId;
-        if (RecordVisibility.IsViewer(accessor))
+        if (RecordVisibility.IsViewer(accessor) || RecordVisibility.IsManager(accessor))
         {
-            var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
-            var recordQuery = RecordVisibility.ApplyViewerScope(
+            var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+            var recordQuery = RecordVisibility.ApplyScope(
                 db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
-                viewerScope);
+                scope);
             var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
             if (!allowed)
             {
@@ -68,12 +68,12 @@ public static class DocumentsEndpoints
         CancellationToken token)
     {
         var tenantId = accessor.Current.TenantId;
-        if (RecordVisibility.IsViewer(accessor))
+        if (RecordVisibility.IsViewer(accessor) || RecordVisibility.IsManager(accessor))
         {
-            var viewerScope = await RecordVisibility.GetViewerScopeAsync(db, accessor, token);
-            var recordQuery = RecordVisibility.ApplyViewerScope(
+            var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+            var recordQuery = RecordVisibility.ApplyScope(
                 db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
-                viewerScope);
+                scope);
             var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
             if (!allowed)
             {

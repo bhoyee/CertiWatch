@@ -6,5 +6,6 @@ public sealed class User : BaseEntity
     public required string Email { get; set; }
     public string? Name { get; set; }
     public string Role { get; set; } = "admin";
+    public Guid? InvitedByUserId { get; set; }
     public Tenant? Tenant { get; set; }
 }

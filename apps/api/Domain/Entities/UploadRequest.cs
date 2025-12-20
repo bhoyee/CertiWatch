@@ -6,6 +6,7 @@ public sealed class UploadRequest : BaseEntity
 {
     public Guid TenantId { get; set; }
     public string Token { get; set; } = string.Empty;
+    public Guid? CreatedByUserId { get; set; }
     public string? StaffName { get; set; }
     public string? StaffEmail { get; set; }
     public string? CourseName { get; set; }

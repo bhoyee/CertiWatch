@@ -112,6 +112,7 @@ public static class AuthEndpoints
         }
 
         var tenantId = tenantAccessor.Current.TenantId;
+        var invitedBy = tenantAccessor.Current.UserId;
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
         if (user is null)
         {
@@ -123,7 +124,8 @@ public static class AuthEndpoints
                 Name = string.IsNullOrWhiteSpace(request.Name) ? request.Email : request.Name.Trim(),
                 Role = isManager
                     ? "viewer"
-                    : string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role
+                    : string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role,
+                InvitedByUserId = invitedBy
             };
             db.Users.Add(user);
             await db.SaveChangesAsync(token);
@@ -140,6 +142,7 @@ public static class AuthEndpoints
             {
                 user.Role = request.Role;
             }
+            user.InvitedByUserId ??= invitedBy;
             await db.SaveChangesAsync(token);
         }
 

@@ -30,13 +30,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(r => r.ExpiryDate);
             entity.HasIndex(r => r.StaffName).HasMethod("gin").HasOperators("gin_trgm_ops");
             entity.HasIndex(r => r.CourseName).HasMethod("gin").HasOperators("gin_trgm_ops");
-            entity.Property(r => r.FieldsJson).HasColumnType("jsonb");
+            entity.HasIndex(r => r.CreatedByUserId);
+            // Keep FieldsJson as text to tolerate legacy malformed payloads that would otherwise break jsonb parsing.
+            entity.Property(r => r.FieldsJson).HasColumnType("text");
             entity.HasOne(r => r.Document).WithMany(d => d.Records).HasForeignKey(r => r.DocumentId);
         });
 
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasIndex(d => new { d.ProcessingStatus, d.CreatedAt }).HasDatabaseName("idx_documents_status_created");
+            entity.HasIndex(d => d.CreatedByUserId);
         });
 
         modelBuilder.Entity<Vendor>(entity =>
@@ -78,6 +81,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<UploadRequest>(entity =>
         {
             entity.HasIndex(u => new { u.TenantId, u.Token }).IsUnique();
+            entity.HasIndex(u => u.CreatedByUserId);
         });
 
         SeedGlobalRules(modelBuilder);

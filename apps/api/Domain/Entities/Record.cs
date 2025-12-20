@@ -12,6 +12,7 @@ public sealed class Record : BaseEntity
     public DateOnly? IssueDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }
     public bool ExpiryDerived { get; set; }
+    public Guid? CreatedByUserId { get; set; }
     public string? DocumentType { get; set; }
     public decimal? ExtractionConfidence { get; set; }
     public decimal Confidence { get; set; }

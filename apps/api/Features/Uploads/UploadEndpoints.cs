@@ -50,6 +50,7 @@ public static class UploadEndpoints
         }
 
         var tenantId = accessor.Current.TenantId;
+        var createdBy = accessor.Current.UserId;
         var expiresAt = clock.UtcNow.AddHours(24);
         var rawToken = GenerateToken();
         var entity = new UploadRequest
@@ -57,6 +58,7 @@ public static class UploadEndpoints
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Token = rawToken,
+            CreatedByUserId = createdBy,
             StaffName = request.StaffName,
             StaffEmail = request.StaffEmail,
             CourseName = request.CourseName,
@@ -150,6 +152,7 @@ public static class UploadEndpoints
         }
 
         var tenantId = req.TenantId;
+        var createdBy = req.CreatedByUserId ?? accessor.Current.UserId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
         IReadOnlyCollection<IFormFile>? fileCollection = form?.Files;
         if (fileCollection is null || fileCollection.Count == 0)
@@ -206,6 +209,7 @@ public static class UploadEndpoints
                 tenantId,
                 source.Id,
                 UploadDeviceToken,
+                createdBy,
                 fileName,
                 destPath,
                 fileHash,
@@ -254,6 +258,7 @@ public static class UploadEndpoints
         }
 
         var tenantId = accessor.Current.TenantId;
+        var createdBy = accessor.Current.UserId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
         var root = GetUploadsRoot(storageOptions.Value);
         var batchDir = Path.Combine(root, tenantId.ToString(), "bulk", clock.UtcNow.ToString("yyyyMMddHHmmssfff"));
@@ -300,6 +305,7 @@ public static class UploadEndpoints
                 tenantId,
                 source.Id,
                 UploadDeviceToken,
+                createdBy,
                 fileName,
                 destPath,
                 fileHash,

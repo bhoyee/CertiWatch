@@ -7,6 +7,7 @@ public sealed class Document : BaseEntity
     public Guid TenantId { get; set; }
     public Guid SourceId { get; set; }
     public Guid? VendorId { get; set; }
+    public Guid? CreatedByUserId { get; set; }
     public string PathOrUrl { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
     public string FileHash { get; set; } = string.Empty;
