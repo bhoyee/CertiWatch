@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRole } from "../../RoleContext";
 
 type UserRow = {
   id: string;
@@ -11,6 +12,7 @@ type UserRow = {
 };
 
 export default function InvitePage() {
+  const { role: currentRole } = useRole();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("admin");
@@ -28,6 +30,8 @@ export default function InvitePage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+  const isViewer = currentRole?.toLowerCase() === "viewer";
+  const isManager = currentRole?.toLowerCase() === "manager";
 
   const loadUsers = async () => {
     setTableLoading(true);
@@ -53,12 +57,13 @@ export default function InvitePage() {
     setStatus("loading");
     setError("");
     try {
+      const inviteRole = isManager ? "viewer" : role;
       const res = await fetch(`${apiBase}/api/auth/invite`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ email, name, role })
+        body: JSON.stringify({ email, name, role: inviteRole })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -136,6 +141,17 @@ export default function InvitePage() {
     }
   };
 
+  if (isViewer) {
+    return (
+      <div className="cw-card space-y-2 p-6">
+        <h1 className="text-lg font-semibold text-slate-900">Invite</h1>
+        <p className="text-sm text-slate-600">Viewers cannot send invites. Ask an admin to invite new teammates.</p>
+      </div>
+    );
+  }
+
+  const roleOptions = isManager ? [{ value: "viewer", label: "Viewer" }] : [{ value: "admin", label: "Admin" }, { value: "viewer", label: "Viewer" }];
+
   return (
     <div className="cw-card space-y-4 p-6">
       <div>
@@ -177,12 +193,16 @@ export default function InvitePage() {
         <div>
           <label className="block text-sm font-medium text-slate-700">Role</label>
           <select
-            value={role}
+            value={isManager ? "viewer" : role}
             onChange={(e) => setRole(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            disabled={isManager}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
           >
-            <option value="admin">Admin</option>
-            <option value="viewer">Viewer</option>
+            {roleOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="md:col-span-2 flex items-center gap-2">
@@ -276,12 +296,16 @@ export default function InvitePage() {
                   <td className="px-3 py-2 font-mono text-xs text-slate-700">{u.email}</td>
                   <td className="px-3 py-2">
                     <select
-                      value={u.role}
+                      value={isManager ? "viewer" : u.role}
                       onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, role: e.target.value } : row)))}
-                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                      disabled={isManager}
+                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
                     >
-                      <option value="admin">Admin</option>
-                      <option value="viewer">Viewer</option>
+                      {roleOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
