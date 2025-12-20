@@ -416,7 +416,7 @@ export default function UploadsPage() {
         </div>
       ) : roleReady ? (
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-          Upload links are admin-only. You can still submit files using bulk upload above.
+          Upload links are available to admins and managers. You can still submit files using bulk upload above.
         </div>
       ) : null}
 

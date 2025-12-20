@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
+import { useRole } from "../RoleContext";
 
 type RecordDto = {
   id: string;
@@ -52,6 +53,8 @@ const NEEDS_REVIEW = 2; // ProcessingStatus.NeedsReview
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
 export default function ReviewQueuePage() {
+  const { role } = useRole();
+  const isViewer = role?.toLowerCase() === "viewer";
   const [records, setRecords] = useState<RecordDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +64,11 @@ export default function ReviewQueuePage() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const load = useCallback(() => {
+    if (isViewer) {
+      setRecords([]);
+      setError("Review queue is admin/manager only.");
+      return;
+    }
     setLoading(true);
     fetchJson<PagedResult<RecordDto>>("/api/records?take=50")
       .then((res) => {
@@ -82,9 +90,14 @@ export default function ReviewQueuePage() {
       })
       .catch((err) => setError(err.message ?? "Failed to load review queue"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isViewer]);
 
   const fetchDetail = useCallback((id: string | null) => {
+    if (isViewer) {
+      setDetail(null);
+      setDetailError("Review queue is admin/manager only.");
+      return;
+    }
     if (!id) {
       setDetail(null);
       setDetailError(null);
@@ -99,7 +112,7 @@ export default function ReviewQueuePage() {
       })
       .catch((err) => setDetailError(err.message ?? "Failed to load record"))
       .finally(() => setDetailLoading(false));
-  }, []);
+  }, [isViewer]);
 
   useEffect(() => {
     load();
@@ -126,6 +139,15 @@ export default function ReviewQueuePage() {
 
   const selectedRecord =
     detail?.record ?? (records.find((record) => record.id === selectedId) ?? null);
+
+  if (isViewer) {
+    return (
+      <div className="cw-card space-y-2 p-6">
+        <h1 className="text-lg font-semibold text-slate-900">Review</h1>
+        <p className="text-sm text-slate-600">Review queue is available to managers and admins.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
