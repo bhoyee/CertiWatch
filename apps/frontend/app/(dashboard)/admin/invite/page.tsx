@@ -156,7 +156,13 @@ export default function InvitePage() {
     );
   }
 
-  const roleOptions = isManager ? [{ value: "viewer", label: "Viewer" }] : [{ value: "admin", label: "Admin" }, { value: "viewer", label: "Viewer" }];
+  const roleOptions = isManager
+    ? [{ value: "viewer", label: "Viewer" }]
+    : [
+        { value: "admin", label: "Admin" },
+        { value: "manager", label: "Manager" },
+        { value: "viewer", label: "Viewer" }
+      ];
 
   return (
     <div className="cw-card space-y-4 p-6">
