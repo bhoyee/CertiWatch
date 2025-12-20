@@ -30,11 +30,11 @@ const navItems = [
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
   { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
-  { href: "/rules", label: "Rules", icon: "shield", viewerHidden: true },
-  { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true },
+  { href: "/rules", label: "Rules", icon: "shield", viewerHidden: true, managerHidden: true },
+  { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true, managerHidden: true },
   { href: "/uploads", label: "Uploads", icon: "cloud" },
-  { href: "/sources", label: "Sources", icon: "plug", viewerHidden: true },
-  { href: "/plan", label: "Manage plan", icon: "credit", viewerHidden: true },
+  { href: "/sources", label: "Sources", icon: "plug", viewerHidden: true, managerHidden: true },
+  { href: "/plan", label: "Manage plan", icon: "credit", viewerHidden: true, managerHidden: true },
   { href: "/profile", label: "Profile", icon: "user" },
   { href: "/admin/invite", label: "Invite", icon: "users", viewerHidden: true },
   { href: "/logout", label: "Logout", icon: "exit" }
@@ -49,6 +49,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const isViewer = role?.toLowerCase() === "viewer";
+  const isManager = role?.toLowerCase() === "manager";
 
   useEffect(() => {
     let active = true;
@@ -90,11 +91,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     () => !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
     [plan]
   );
-  const viewerRestrictedRoutes = useMemo(
-    () => ["/review", "/rules", "/devices", "/sources", "/plan", "/admin/invite"],
+  const roleRestrictedRoutes = useMemo(
+    () => ({
+      viewer: ["/review", "/rules", "/devices", "/sources", "/plan", "/admin/invite"],
+      manager: ["/rules", "/devices", "/sources", "/plan"]
+    }),
     []
   );
-  const isViewerRestricted = isViewer && viewerRestrictedRoutes.some((route) => pathname?.startsWith(route));
+  const isViewerRestricted = isViewer && roleRestrictedRoutes.viewer.some((route) => pathname?.startsWith(route));
+  const isManagerRestricted = isManager && roleRestrictedRoutes.manager.some((route) => pathname?.startsWith(route));
 
   const handlePayNow = async () => {
     if (!plan) {
@@ -133,7 +138,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="flex min-h-screen">
           <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
             <Logo />
-            <NavLinks isBlocked={isBlocked} isViewer={isViewer} roleLoading={roleLoading} />
+            <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} />
           </aside>
           <main className="flex-1 px-4 py-6 md:px-10">
             <div className="mb-4 flex items-center justify-between md:hidden">
@@ -147,19 +152,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             {open && (
               <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
-                <NavLinks isBlocked={isBlocked} isViewer={isViewer} roleLoading={roleLoading} onClick={() => setOpen(false)} />
+                <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} onClick={() => setOpen(false)} />
               </div>
             )}
-            <TopBar isBlocked={isBlocked} isViewer={isViewer} />
-            {!isViewer && (
+            <TopBar isBlocked={isBlocked} role={role} />
+            {!isViewer && !isManager && (
               <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
             )}
             <div
               className={`mt-4 space-y-4 ${
-                isViewerRestricted || !isBlocked ? "" : "pointer-events-none opacity-60"
+                isViewerRestricted || isManagerRestricted || !isBlocked ? "" : "pointer-events-none opacity-60"
               }`}
             >
-              {isViewerRestricted ? <AdminOnlyNotice /> : children}
+              {isViewerRestricted || isManagerRestricted ? <AdminOnlyNotice /> : children}
             </div>
             <Footer />
           </main>
@@ -185,7 +190,9 @@ function Logo() {
   );
 }
 
-function TopBar({ isBlocked, isViewer }: { isBlocked: boolean; isViewer: boolean }) {
+function TopBar({ isBlocked, role }: { isBlocked: boolean; role: string | null }) {
+  const isViewer = role?.toLowerCase() === "viewer";
+  const isManager = role?.toLowerCase() === "manager";
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
@@ -243,25 +250,29 @@ function TopBar({ isBlocked, isViewer }: { isBlocked: boolean; isViewer: boolean
 
 function NavLinks({
   isBlocked,
-  isViewer,
+  role,
   roleLoading,
   onClick
 }: {
   isBlocked: boolean;
-  isViewer: boolean;
+  role: string | null;
   roleLoading: boolean;
   onClick?: () => void;
 }) {
   const [reviewCount, setReviewCount] = useState<number>(0);
   const pathname = usePathname();
   const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
-  const filteredItems = useMemo(
-    () => navItems.filter((item) => !(isViewer && item.viewerHidden)),
-    [isViewer]
-  );
+  const roleLower = role?.toLowerCase();
+  const filteredItems = useMemo(() => {
+    return navItems.filter((item) => {
+      if (roleLower === "viewer" && item.viewerHidden) return false;
+      if (roleLower === "manager" && item.managerHidden) return false;
+      return true;
+    });
+  }, [roleLower]);
 
   useEffect(() => {
-    if (isViewer || roleLoading) {
+    if (roleLower === "viewer" || roleLoading) {
       setReviewCount(0);
       return;
     }
