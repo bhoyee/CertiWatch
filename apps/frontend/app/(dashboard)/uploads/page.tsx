@@ -105,7 +105,8 @@ export default function UploadsPage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002"}/api/uploads/bulk`, {
         method: "POST",
-        body: formData
+        body: formData,
+        credentials: "include"
       });
       if (!res.ok) {
         const text = await res.text();
