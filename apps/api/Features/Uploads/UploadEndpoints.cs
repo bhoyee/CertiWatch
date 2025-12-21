@@ -292,6 +292,20 @@ public static class UploadEndpoints
 
         var tenantId = accessor.Current.TenantId;
         var createdBy = accessor.Current.UserId;
+        if (createdBy == Guid.Empty)
+        {
+            // Fallback: resolve current user by email when UserId is not populated (e.g., legacy session)
+            var currentEmail = accessor.Current.Email;
+            if (!string.IsNullOrWhiteSpace(currentEmail))
+            {
+                var currentUser = await db.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == currentEmail, token);
+                if (currentUser is not null)
+                {
+                    createdBy = currentUser.Id;
+                }
+            }
+        }
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
         var root = GetUploadsRoot(storageOptions.Value);
         var batchDir = Path.Combine(root, tenantId.ToString(), "bulk", clock.UtcNow.ToString("yyyyMMddHHmmssfff"));
