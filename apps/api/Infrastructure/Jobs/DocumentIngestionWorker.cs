@@ -57,6 +57,22 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     db.Sources.Add(source);
                 }
 
+                // Resolve uploader identity up-front so records/documents use a consistent CreatedBy
+                Guid? createdBy = docEvent.CreatedByUserId;
+                User? resolvedUploader = null;
+                if (docEvent.ExtractedFields.TryGetValue("staff_email", out var staffEmail) &&
+                    !string.IsNullOrWhiteSpace(staffEmail))
+                {
+                    resolvedUploader = await db.Users.AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.TenantId == docEvent.TenantId && u.Email == staffEmail, stoppingToken);
+                    if (resolvedUploader is not null)
+                    {
+                        // Always attribute to the actual staff user when we know it;
+                        // this ensures manager scoping (via InvitedByUserId) picks it up.
+                        createdBy = resolvedUploader.Id;
+                    }
+                }
+
                 var documentType = docEvent.DocumentType ?? "generic_certificate";
                 var extractionConfidence = docEvent.ExtractionConfidence;
                 var reviewHints = docEvent.VendorHints.Where(h => h.StartsWith("needs_review", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -161,7 +177,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         Id = Guid.NewGuid(),
                         TenantId = docEvent.TenantId,
                         SourceId = sourceId,
-                        CreatedByUserId = docEvent.CreatedByUserId,
+                        CreatedByUserId = createdBy,
                         FileName = docEvent.FileName,
                         FileHash = docEvent.FileHash,
                         PathOrUrl = docEvent.PathOrUrl,
@@ -178,7 +194,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         Id = Guid.NewGuid(),
                         TenantId = docEvent.TenantId,
                         DocumentId = document.Id,
-                        CreatedByUserId = docEvent.CreatedByUserId,
+                        CreatedByUserId = createdBy,
                         StaffName = staff,
                         CourseName = course,
                         Issuer = issuer,
@@ -210,13 +226,20 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
                     document.ProcessingStatus = processingStatus; // Use updated status
-                    document.CreatedByUserId ??= docEvent.CreatedByUserId;
+                    // Always attribute to the latest uploader when we get a new submission for the same hash.
+                    if (createdBy.HasValue)
+                    {
+                        document.CreatedByUserId = createdBy;
+                    }
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
                     existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
                     existingRecord.Issuer = issuer ?? NormalizeText(existingRecord.Issuer) ?? existingRecord.Issuer;
                     existingRecord.IssueDate = issueDate ?? existingRecord.IssueDate;
-                    existingRecord.CreatedByUserId ??= docEvent.CreatedByUserId;
+                    if (createdBy.HasValue)
+                    {
+                        existingRecord.CreatedByUserId = createdBy;
+                    }
                     if (expiryDate.HasValue)
                     {
                         existingRecord.ExpiryDate = expiryDate;
@@ -265,11 +288,15 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 try
                 {
                     var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                    Guid? createdBy = docEvent.CreatedByUserId;
-                    if (createdBy.HasValue)
+                    var createdByUser = createdBy;
+                    if (createdByUser.HasValue)
                     {
-                        var uploader = await db.Users.AsNoTracking()
-                            .FirstOrDefaultAsync(u => u.Id == createdBy && u.TenantId == docEvent.TenantId, stoppingToken);
+                        var uploader = resolvedUploader;
+                        if (uploader is null)
+                        {
+                            uploader = await db.Users.AsNoTracking()
+                                .FirstOrDefaultAsync(u => u.Id == createdByUser && u.TenantId == docEvent.TenantId, stoppingToken);
+                        }
                         Guid? managerId = null;
                         if (uploader is not null)
                         {

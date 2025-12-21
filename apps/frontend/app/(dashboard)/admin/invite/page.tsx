@@ -8,6 +8,7 @@ type UserRow = {
   email: string;
   name: string | null;
   role: string;
+  invitedByUserId?: string | null;
   createdAt: string;
 };
 
@@ -28,10 +29,23 @@ export default function InvitePage() {
   const [pageSize, setPageSize] = useState(10);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
   const isViewer = currentRole?.toLowerCase() === "viewer";
   const isManager = currentRole?.toLowerCase() === "manager";
+
+  const loadProfile = async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/profile`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setCurrentUserId(data.id ?? null);
+    }
+    catch {
+      // ignore profile errors; invite list will simply be empty for managers
+    }
+  };
 
   const loadUsers = async () => {
     setTableLoading(true);
@@ -49,6 +63,7 @@ export default function InvitePage() {
   };
 
   useEffect(() => {
+    loadProfile();
     loadUsers();
   }, []);
 
@@ -114,7 +129,13 @@ export default function InvitePage() {
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    const scoped = isManager ? users.filter((u) => u.role.toLowerCase() === "viewer") : users;
+    const scoped = isManager
+      ? users.filter(
+          (u) =>
+            u.role.toLowerCase() === "viewer" &&
+            (!!currentUserId ? u.invitedByUserId === currentUserId : false)
+        )
+      : users;
     const base = term
       ? scoped.filter(
           (u) =>
@@ -132,7 +153,7 @@ export default function InvitePage() {
       return 0;
     });
     return sorted;
-  }, [users, search, sortDir, sortKey]);
+  }, [users, search, sortDir, sortKey, isManager, currentUserId]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);

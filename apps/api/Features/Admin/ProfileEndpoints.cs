@@ -14,7 +14,7 @@ public static class ProfileEndpoints
         return routes;
     }
 
-    private sealed record ProfileDto(string Email, string? Name, string Role, string TenantName);
+    private sealed record ProfileDto(Guid Id, string Email, string? Name, string Role, string TenantName);
 
     private sealed record UpdateProfileRequest(string Name);
 
@@ -38,7 +38,7 @@ public static class ProfileEndpoints
             .Select(t => t.Name)
             .FirstOrDefaultAsync(token) ?? "Tenant";
 
-        return Results.Ok(new ProfileDto(user.Email, user.Name, user.Role, tenantName));
+        return Results.Ok(new ProfileDto(user.Id, user.Email, user.Name, user.Role, tenantName));
     }
 
     private static async Task<IResult> UpdateAsync(UpdateProfileRequest request, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)

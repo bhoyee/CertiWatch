@@ -44,13 +44,29 @@ public static class UploadEndpoints
         IEmailService emailService,
         CancellationToken token)
     {
-        if (!string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        var isAdmin = string.Equals(accessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase);
+        var isManager = string.Equals(accessor.Current.Role, "manager", StringComparison.OrdinalIgnoreCase);
+        if (!isAdmin && !isManager)
         {
             return Results.Forbid();
         }
 
         var tenantId = accessor.Current.TenantId;
         var createdBy = accessor.Current.UserId;
+        if (createdBy == Guid.Empty)
+        {
+            // Fallback: resolve the current viewer from email when UserId is not populated
+            var currentEmail = accessor.Current.Email;
+            if (!string.IsNullOrWhiteSpace(currentEmail))
+            {
+                var currentUser = await db.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == currentEmail, token);
+                if (currentUser is not null)
+                {
+                    createdBy = currentUser.Id;
+                }
+            }
+        }
         var expiresAt = clock.UtcNow.AddHours(24);
         var rawToken = GenerateToken();
         var entity = new UploadRequest
@@ -154,7 +170,18 @@ public static class UploadEndpoints
         }
 
         var tenantId = req.TenantId;
-        var createdBy = req.CreatedByUserId ?? accessor.Current.UserId;
+        Guid? createdBy = req.CreatedByUserId;
+        if (!string.IsNullOrWhiteSpace(req.StaffEmail))
+        {
+            var viewer = await db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == req.StaffEmail, token);
+            // Only overwrite creator when the viewer is actually managed by the link creator.
+            if (viewer is not null && (!req.CreatedByUserId.HasValue || viewer.InvitedByUserId == req.CreatedByUserId))
+            {
+                createdBy = viewer.Id;
+            }
+        }
+        createdBy ??= accessor.Current.UserId;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
         IReadOnlyCollection<IFormFile>? fileCollection = form?.Files;
         if (fileCollection is null || fileCollection.Count == 0)
@@ -242,7 +269,11 @@ public static class UploadEndpoints
         HttpContext httpContext,
         CancellationToken token)
     {
-        if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsViewer(accessor))
+        var isManager = RecordVisibility.IsManager(accessor);
+        var isAdmin = RecordVisibility.IsAdmin(accessor);
+        var isViewer = RecordVisibility.IsViewer(accessor);
+
+        if (!isAdmin && !isManager && !isViewer)
         {
             return Results.Forbid();
         }

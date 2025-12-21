@@ -16,7 +16,7 @@ public static class UserManagementEndpoints
         return routes;
     }
 
-    private sealed record UserListItem(Guid Id, string Email, string? Name, string Role, DateTime CreatedAt);
+    private sealed record UserListItem(Guid Id, string Email, string? Name, string Role, Guid? InvitedByUserId, DateTime CreatedAt);
     private sealed record UpdateUserRequest(string? Name, string? Role);
 
     private static bool IsAdmin(ITenantContextAccessor accessor) =>
@@ -51,7 +51,7 @@ public static class UserManagementEndpoints
         var users = await query
             .Where(u => u.TenantId == tenantId)
             .OrderBy(u => u.Email)
-            .Select(u => new UserListItem(u.Id, u.Email, u.Name, u.Role, u.CreatedAt))
+            .Select(u => new UserListItem(u.Id, u.Email, u.Name, u.Role, u.InvitedByUserId, u.CreatedAt))
             .ToListAsync(token);
 
         return Results.Ok(users);

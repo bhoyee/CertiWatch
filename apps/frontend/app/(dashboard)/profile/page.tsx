@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchJson, patchJson } from "../../../lib/api";
 
 type ProfileDto = {
+  id?: string;
   email: string;
   name?: string | null;
   role: string;

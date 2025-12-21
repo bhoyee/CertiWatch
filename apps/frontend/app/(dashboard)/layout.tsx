@@ -20,6 +20,7 @@ type TenantPlanDto = {
 };
 
 type ProfileDto = {
+  id?: string;
   email: string;
   role: string;
   name?: string | null;
@@ -36,7 +37,7 @@ const navItems = [
   { href: "/sources", label: "Sources", icon: "plug", viewerHidden: true, managerHidden: true },
   { href: "/plan", label: "Manage plan", icon: "credit", viewerHidden: true, managerHidden: true },
   { href: "/profile", label: "Profile", icon: "user" },
-  { href: "/admin/invite", label: "Invite", icon: "users", viewerHidden: true },
+  { href: "/invite", label: "Invite", icon: "users", viewerHidden: true },
   { href: "/logout", label: "Logout", icon: "exit" }
 ];
 
@@ -97,7 +98,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
   const roleRestrictedRoutes = useMemo(
     () => ({
-      viewer: ["/review", "/rules", "/devices", "/sources", "/plan", "/admin/invite"],
+      viewer: ["/review", "/rules", "/devices", "/sources", "/plan", "/invite"],
       manager: ["/rules", "/devices", "/sources", "/plan"]
     }),
     []
