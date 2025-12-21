@@ -26,7 +26,8 @@ public static class ReportsEndpoints
         var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
         recordQuery = RecordVisibility.ApplyScope(recordQuery, scope);
-        var records = await recordQuery
+        var records = recordQuery
+            .AsEnumerable()
             .Select(r => new SimpleRecord(
                 r.Id,
                 r.TenantId,
@@ -47,7 +48,7 @@ public static class ReportsEndpoints
                 r.CreatedAt,
                 r.UpdatedAt,
                 r.DocumentType))
-            .ToListAsync(token);
+            .ToList();
         var recordDtos = records.Select(ToLightDto).ToList();
         var digest = new TenantDigestDto(
             tenantId,
@@ -76,7 +77,8 @@ public static class ReportsEndpoints
         var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
         var recordQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
         recordQuery = RecordVisibility.ApplyScope(recordQuery, scope);
-        var records = await recordQuery
+        var records = recordQuery
+            .AsEnumerable()
             .Select(r => new SimpleRecord(
                 r.Id,
                 r.TenantId,
@@ -97,7 +99,7 @@ public static class ReportsEndpoints
                 r.CreatedAt,
                 r.UpdatedAt,
                 r.DocumentType))
-            .ToListAsync(token);
+            .ToList();
         var recordDtos = records.Select(ToLightDto).ToList();
         var okRecords = recordDtos.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
         var expiringSoon = recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today && r.ExpiryDate <= soon).ToList();
