@@ -324,8 +324,9 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                     .FirstOrDefaultAsync(u => u.Id == managerId.Value && u.TenantId == docEvent.TenantId, stoppingToken);
 
                             // Avoid noisy/empty notifications until we have real extracted fields.
-                            var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff) && !IsUnknown(staff);
-                            var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course) && !IsUnknown(course);
+                            // Fire as soon as we have any extracted staff/course (even if other fields are pending).
+                            var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff);
+                            var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course);
 
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
