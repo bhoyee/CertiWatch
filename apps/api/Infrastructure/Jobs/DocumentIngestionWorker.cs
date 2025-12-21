@@ -317,7 +317,14 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                 : await db.Users.AsNoTracking()
                                     .FirstOrDefaultAsync(u => u.Id == managerId.Value && u.TenantId == docEvent.TenantId, stoppingToken);
 
-                            if (manager is not null && !string.IsNullOrWhiteSpace(manager.Email))
+                            // Avoid noisy/empty notifications until we have real extracted fields.
+                            var hasMeaningfulStaff = !IsUnknown(staff);
+                            var hasMeaningfulCourse = !IsUnknown(course) && !IsUnknownCourseName(course);
+
+                            if (manager is not null &&
+                                !string.IsNullOrWhiteSpace(manager.Email) &&
+                                hasMeaningfulStaff &&
+                                hasMeaningfulCourse)
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
                                 var html = $"""
