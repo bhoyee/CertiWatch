@@ -319,7 +319,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                             // Avoid noisy/empty notifications until we have real extracted fields.
                             var hasMeaningfulStaff = !IsUnknown(staff);
-                            var hasMeaningfulCourse = !IsUnknown(course) && !IsUnknownCourseName(course);
+                            var hasMeaningfulCourse = !IsUnknown(course);
 
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
