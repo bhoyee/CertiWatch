@@ -1,3 +1,4 @@
+using System.Linq;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -94,10 +95,27 @@ internal static class RecordVisibility
             return query.Where(_ => false);
         }
 
-        return query.Where(r =>
-            (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value))
-            ||
-            (hasTokens && tokens.All(tok => EF.Functions.ILike(r.StaffName ?? string.Empty, "%" + tok + "%"))));
+        IQueryable<Record> scoped = query.Where(_ => false);
+
+        if (hasCreators)
+        {
+            scoped = scoped.Union(query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)));
+        }
+
+        if (hasTokens)
+        {
+            // When we only have name tokens (legacy rows without CreatedBy), filter client-side to avoid EF translation issues.
+            // This is bounded because viewers/managers only see their own data.
+            var tokenList = tokens.ToArray();
+            var tokenQuery = query.AsEnumerable()
+                .Where(r => tokenList.All(t =>
+                    (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)))
+                .AsQueryable();
+
+            scoped = hasCreators ? scoped.Union(tokenQuery) : tokenQuery;
+        }
+
+        return scoped;
     }
 
     private static string? DeriveNameFromEmail(string email)
