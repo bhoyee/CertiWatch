@@ -30,6 +30,7 @@ export default function InvitePage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
   const isViewer = currentRole?.toLowerCase() === "viewer";
@@ -37,10 +38,11 @@ export default function InvitePage() {
 
   const loadProfile = async () => {
     try {
-      const res = await fetch(`${apiBase}/api/profile`, { cache: "no-store" });
+      const res = await fetch(`${apiBase}/api/profile`, { cache: "no-store", credentials: "include" });
       if (!res.ok) return;
       const data = await res.json();
       setCurrentUserId(data.id ?? null);
+      setCurrentEmail(data.email ?? null);
     }
     catch {
       // ignore profile errors; invite list will simply be empty for managers
@@ -51,7 +53,7 @@ export default function InvitePage() {
     setTableLoading(true);
     setTableError("");
     try {
-      const res = await fetch(`${apiBase}/api/users`, { cache: "no-store" });
+      const res = await fetch(`${apiBase}/api/users`, { cache: "no-store", credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as UserRow[];
       setUsers(data);
@@ -76,8 +78,10 @@ export default function InvitePage() {
       const res = await fetch(`${apiBase}/api/auth/invite`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(currentEmail ? { "X-Admin-Email": currentEmail } : {})
         },
+        credentials: "include",
         body: JSON.stringify({ email, name, role: inviteRole })
       });
       if (!res.ok) {
@@ -102,6 +106,7 @@ export default function InvitePage() {
         headers: {
           "Content-Type": "application/json"
         },
+        credentials: "include",
         body: JSON.stringify({ name: user.name, role: user.role })
       });
       if (!res.ok) throw new Error(await res.text());
@@ -117,7 +122,7 @@ export default function InvitePage() {
     setConfirmDeleteId(null);
     setSavingId(id);
     try {
-      const res = await fetch(`${apiBase}/api/users/${id}`, { method: "DELETE" });
+      const res = await fetch(`${apiBase}/api/users/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       setUsers((prev) => prev.filter((u) => u.id !== id));
     } catch (err: any) {

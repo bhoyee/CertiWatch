@@ -109,6 +109,14 @@ public static class AuthEndpoints
         ITenantContextAccessor tenantAccessor,
         CancellationToken token)
     {
+        // If we fell back to the anonymous/default identity, require a real session instead of silently stamping admin.
+        var defaultUserId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        if (tenantAccessor.Current.UserId == defaultUserId &&
+            string.Equals(tenantAccessor.Current.Email, "admin@certiwatch.local", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Unauthorized(new { error = "session_required" });
+        }
+
         var isAdmin = string.Equals(tenantAccessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase);
         var isManager = string.Equals(tenantAccessor.Current.Role, "manager", StringComparison.OrdinalIgnoreCase);
         if (!isAdmin && !isManager)
