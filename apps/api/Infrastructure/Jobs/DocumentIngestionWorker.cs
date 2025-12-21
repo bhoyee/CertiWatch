@@ -324,14 +324,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                     .FirstOrDefaultAsync(u => u.Id == managerId.Value && u.TenantId == docEvent.TenantId, stoppingToken);
 
                             // Avoid noisy/empty notifications until we have real extracted fields.
-                            var hasMeaningfulStaff = !IsUnknown(staff);
-                            var hasMeaningfulCourse = !IsUnknown(course);
+                            var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff) && !IsUnknown(staff);
+                            var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course) && !IsUnknown(course);
 
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
                                 hasMeaningfulStaff &&
-                                hasMeaningfulCourse &&
-                                processingStatus != ProcessingStatus.Pending)
+                                hasMeaningfulCourse)
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
                                 var html = $"""
