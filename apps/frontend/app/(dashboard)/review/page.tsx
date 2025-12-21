@@ -120,6 +120,13 @@ export default function ReviewQueuePage() {
     return () => clearInterval(interval);
   }, [load]);
 
+  // Keep the selected detail fresh while the item sits in the queue
+  useEffect(() => {
+    if (!selectedId) return;
+    const interval = setInterval(() => fetchDetail(selectedId), 4000);
+    return () => clearInterval(interval);
+  }, [fetchDetail, selectedId]);
+
   useEffect(() => {
     fetchDetail(selectedId);
   }, [fetchDetail, selectedId]);
