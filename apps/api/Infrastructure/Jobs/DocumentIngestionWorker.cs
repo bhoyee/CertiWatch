@@ -72,6 +72,12 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         createdBy = resolvedUploader.Id;
                     }
                 }
+                // If we still don't have an uploader but a creator id was provided, load it
+                if (resolvedUploader is null && createdBy.HasValue)
+                {
+                    resolvedUploader = await db.Users.AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == createdBy.Value && u.TenantId == docEvent.TenantId, stoppingToken);
+                }
 
                 var documentType = docEvent.DocumentType ?? "generic_certificate";
                 var extractionConfidence = docEvent.ExtractionConfidence;
