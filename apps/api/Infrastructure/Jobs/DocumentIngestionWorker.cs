@@ -324,7 +324,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
                                 hasMeaningfulStaff &&
-                                hasMeaningfulCourse)
+                                hasMeaningfulCourse &&
+                                processingStatus != ProcessingStatus.Pending)
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
                                 var html = $"""
@@ -423,6 +424,18 @@ public sealed class DocumentIngestionWorker : BackgroundService
     private static bool IsUnknown(string value, params string[] unknownTokens)
     {
         if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var normalized = NormalizeKey(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
+        // Treat any value containing "unknown" as unknown to be more defensive.
+        if (normalized.Contains("unknown", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
