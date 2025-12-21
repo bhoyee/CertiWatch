@@ -61,13 +61,24 @@ public static class AuthEndpoints
         return Results.Ok(new { success = true });
     }
 
-    private static IResult VerifyMagicLinkAsync(
+    private static async Task<IResult> VerifyMagicLinkAsync(
         string token,
-        IOptions<MagicLinkOptions> magicOptions)
+        IOptions<MagicLinkOptions> magicOptions,
+        AppDbContext db,
+        CancellationToken cancellationToken)
     {
         var options = magicOptions.Value;
         var payload = MagicLinkTokenService.ValidateToken(token, options.Secret);
         if (payload is null || payload.Value.Purpose != "magic")
+        {
+            return Results.BadRequest(new { error = "invalid_or_expired" });
+        }
+
+        // If the user was deleted (invite removed) after the token was issued, refuse the login.
+        var exists = await db.Users.AsNoTracking().AnyAsync(
+            u => u.Email == payload.Value.Email && u.TenantId == payload.Value.TenantId,
+            cancellationToken);
+        if (!exists)
         {
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
@@ -136,15 +147,22 @@ public static class AuthEndpoints
             user.Name = string.IsNullOrWhiteSpace(request.Name) ? user.Name ?? request.Email : request.Name.Trim();
             if (isManager)
             {
+                // Re-associate this viewer to the manager sending the invite to ensure scoping works.
                 user.Role = "viewer";
+                user.InvitedByUserId = invitedBy;
             }
             else if (!string.IsNullOrWhiteSpace(request.Role))
             {
                 user.Role = request.Role;
+                user.InvitedByUserId ??= invitedBy;
             }
-            user.InvitedByUserId ??= invitedBy;
             await db.SaveChangesAsync(token);
         }
+
+        var tenantName = await db.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync(token) ?? "CertiWatch";
 
         var options = magicOptions.Value;
         var tokenString = MagicLinkTokenService.CreateToken(
@@ -157,7 +175,7 @@ public static class AuthEndpoints
             deviceId: null);
         var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
         var html = renderer.RenderMagicLink(request.Email, link);
-        await emailService.SendAsync(request.Email, $"You've been invited to CertiWatch ({tenantId})", html, token);
+        await emailService.SendAsync(request.Email, $"You've been invited to CertiWatch ({tenantName})", html, token);
 
         return Results.Ok(new { success = true });
     }
