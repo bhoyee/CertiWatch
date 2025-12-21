@@ -62,11 +62,19 @@ public static class RecordsEndpoints
     private static async Task<IResult> GetAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
-        var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantAccessor.Current.TenantId);
+        var baseQuery = db.Records.AsNoTracking()
+            .Include(r => r.Document)
+            .Where(r => r.TenantId == tenantAccessor.Current.TenantId);
         var scoped = RecordVisibility.ApplyScope(baseQuery, scope).AsEnumerable();
         var entity = scoped.FirstOrDefault(r => r.Id == id);
         if (entity is null)
         {
+            return Results.NotFound();
+        }
+
+        if (entity.Document is null)
+        {
+            // If the document was deleted or not loaded, return 404 for safety.
             return Results.NotFound();
         }
 
