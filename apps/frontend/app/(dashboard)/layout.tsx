@@ -293,7 +293,7 @@ function NavLinks({
       }
     };
     load();
-    const id = setInterval(load, 30000);
+    const id = setInterval(load, 5000);
     return () => {
       active = false;
       clearInterval(id);

@@ -116,7 +116,7 @@ export default function ReviewQueuePage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 3000);
+    const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -299,6 +299,15 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Keep form in sync when a fresh extraction/refresh brings new data
+  useEffect(() => {
+    setStaffName(record.staffName ?? "");
+    setCourseName(record.courseName ?? "");
+    setIssuer(record.issuer ?? "");
+    setIssueDate(normalizeDate(record.issueDate));
+    setExpiryDate(normalizeDate(record.expiryDate));
+    setReviewNotes(record.reviewNotes ?? "");
+  }, [record]);
 
   const confidenceText = useMemo(() => {
     if (record.extractionConfidence != null) return `${(record.extractionConfidence * 100).toFixed(0)}% AI`;
