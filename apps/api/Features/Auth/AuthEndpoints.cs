@@ -114,7 +114,7 @@ public static class AuthEndpoints
         if (tenantAccessor.Current.UserId == defaultUserId &&
             string.Equals(tenantAccessor.Current.Email, "admin@certiwatch.local", StringComparison.OrdinalIgnoreCase))
         {
-            return Results.Unauthorized(new { error = "session_required" });
+            return Results.Json(new { error = "session_required" }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
         var isAdmin = string.Equals(tenantAccessor.Current.Role, "admin", StringComparison.OrdinalIgnoreCase);
