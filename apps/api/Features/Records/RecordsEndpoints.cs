@@ -303,7 +303,13 @@ public static class RecordsEndpoints
                 (r.Issuer ?? string.Empty).ToLower().Contains(term));
         }
 
-        return RecordVisibility.ApplyScope(baseQuery, scope);
+        if (scope is not null)
+        {
+            // For scoped users (manager/viewer) we materialize client-side to avoid EF translation issues.
+            return RecordVisibility.ApplyScope(baseQuery, scope).AsEnumerable().AsQueryable();
+        }
+
+        return baseQuery;
     }
 
     private static string Escape(string? value)
