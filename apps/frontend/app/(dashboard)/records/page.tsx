@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+
 type RecordDto = {
   id: string;
   documentId?: string;
@@ -85,7 +87,7 @@ export default function RecordsPage() {
     setExporting(kind);
     try {
       const params = buildParams();
-      const res = await fetch(`/api/records/export.${kind}?${params.toString()}`, {
+      const res = await fetch(`${apiBase}/api/records/export.${kind}?${params.toString()}`, {
         credentials: "include"
       });
       if (!res.ok) {
@@ -120,7 +122,7 @@ export default function RecordsPage() {
     if (!confirmDeleteId) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/records/${confirmDeleteId}`, { method: "DELETE" });
+      const res = await fetch(`${apiBase}/api/records/${confirmDeleteId}`, { method: "DELETE" });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `Delete failed (${res.status})`);
