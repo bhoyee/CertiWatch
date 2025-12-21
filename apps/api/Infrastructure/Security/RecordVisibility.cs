@@ -84,36 +84,24 @@ internal static class RecordVisibility
             return query;
         }
 
-        var allowedCreators = scope.AllowedCreatorIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [];
+        var allowedCreators = scope.AllowedCreatorIds?.Where(id => id != Guid.Empty).Distinct().ToHashSet() ?? new HashSet<Guid>();
         var tokens = scope.StaffTokens ?? Array.Empty<string>();
-        var hasTokens = tokens.Count > 0;
+        var hasTokens = tokens.Length > 0;
         var hasCreators = allowedCreators.Count > 0;
 
-        // If we have neither creators nor tokens, restrict to none.
+        // If neither creators nor tokens, nothing is visible.
         if (!hasCreators && !hasTokens)
         {
             return query.Where(_ => false);
         }
 
-        // If token-based fallback is needed, switch to client evaluation to avoid EF translation errors.
-        if (hasTokens)
-        {
-            var tokenList = tokens.ToArray();
-            return query
-                .AsEnumerable()
-                .Where(r =>
-                    (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)) ||
-                    tokenList.All(t => (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)))
-                .AsQueryable();
-        }
-
-        if (hasCreators)
-        {
-            return query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value));
-        }
-
-        // Fallback (should not hit)
-        return query.Where(_ => false);
+        // To avoid EF translation issues, do the filtering client-side for scoped users.
+        return query
+            .AsEnumerable()
+            .Where(r =>
+                (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)) ||
+                (hasTokens && tokens.All(t => (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase))))
+            .AsQueryable();
     }
 
     private static string? DeriveNameFromEmail(string email)
