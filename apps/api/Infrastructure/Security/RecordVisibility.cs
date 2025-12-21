@@ -95,27 +95,33 @@ internal static class RecordVisibility
             return query.Where(_ => false);
         }
 
-        IQueryable<Record> scoped = query.Where(_ => false);
-
-        if (hasCreators)
+        // Avoid mixing EF and IEnumerable unions that cause translation issues.
+        if (hasCreators && !hasTokens)
         {
-            scoped = scoped.Union(query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)));
+            return query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value));
         }
 
-        if (hasTokens)
+        if (hasTokens && !hasCreators)
         {
-            // When we only have name tokens (legacy rows without CreatedBy), filter client-side to avoid EF translation issues.
-            // This is bounded because viewers/managers only see their own data.
             var tokenList = tokens.ToArray();
-            var tokenQuery = query.AsEnumerable()
+            return query.AsEnumerable()
                 .Where(r => tokenList.All(t =>
                     (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)))
                 .AsQueryable();
-
-            scoped = hasCreators ? scoped.Union(tokenQuery) : tokenQuery;
         }
 
-        return scoped;
+        if (hasCreators && hasTokens)
+        {
+            var creatorQuery = query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value));
+            var tokenList = tokens.ToArray();
+            var tokenQuery = query.AsEnumerable()
+                .Where(r => tokenList.All(t =>
+                    (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)));
+            return creatorQuery.Concat(tokenQuery);
+        }
+
+        // Fallback (should not hit here)
+        return query.Where(_ => false);
     }
 
     private static string? DeriveNameFromEmail(string email)
