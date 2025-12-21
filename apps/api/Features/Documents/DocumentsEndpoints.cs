@@ -34,7 +34,7 @@ public static class DocumentsEndpoints
             var recordQuery = RecordVisibility.ApplyScope(
                 db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
                 scope);
-            var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
+            var allowed = recordQuery.AsEnumerable().Any(r => r.DocumentId == id);
             if (!allowed)
             {
                 return Results.NotFound();
@@ -74,7 +74,7 @@ public static class DocumentsEndpoints
             var recordQuery = RecordVisibility.ApplyScope(
                 db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
                 scope);
-            var allowed = await recordQuery.AnyAsync(r => r.DocumentId == id, token);
+            var allowed = recordQuery.AsEnumerable().Any(r => r.DocumentId == id);
             if (!allowed)
             {
                 return Results.NotFound();

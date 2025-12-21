@@ -29,7 +29,8 @@ public static class NotificationsEndpoints
             var recordQuery = RecordVisibility.ApplyScope(
                 db.Records.AsNoTracking().Where(r => r.TenantId == tenantId),
                 scope);
-            remindersQuery = remindersQuery.Where(r => recordQuery.Select(rr => rr.Id).Contains(r.RecordId));
+            var recordIds = recordQuery.AsEnumerable().Select(rr => rr.Id).ToHashSet();
+            remindersQuery = remindersQuery.Where(r => recordIds.Contains(r.RecordId));
         }
 
         var reminders = await remindersQuery
@@ -51,9 +52,10 @@ public static class NotificationsEndpoints
             .Where(r => r.TenantId == tenantId && r.ExpiryDate != null);
         recordQuery = RecordVisibility.ApplyScope(recordQuery, scope);
 
-        var records = await recordQuery
+        var records = recordQuery
+            .AsEnumerable()
             .Select(r => new { r.Id, r.StaffName, r.CourseName, r.ExpiryDate, r.ProcessingStatus })
-            .ToListAsync(token);
+            .ToList();
 
         var expiring7 = records.Count(r => r.ExpiryDate >= now && r.ExpiryDate <= horizon7);
         var expiring30 = records.Count(r => r.ExpiryDate >= now && r.ExpiryDate <= horizon30);
