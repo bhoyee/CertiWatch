@@ -86,7 +86,7 @@ internal static class RecordVisibility
 
         var allowedCreators = scope.AllowedCreatorIds?.Where(id => id != Guid.Empty).Distinct().ToHashSet() ?? new HashSet<Guid>();
         var tokens = scope.StaffTokens ?? Array.Empty<string>();
-        var hasTokens = tokens.Length > 0;
+        var hasTokens = tokens.Count > 0;
         var hasCreators = allowedCreators.Count > 0;
 
         // If neither creators nor tokens, nothing is visible.
