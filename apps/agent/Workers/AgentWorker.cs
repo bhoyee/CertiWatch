@@ -85,6 +85,7 @@ public sealed class AgentWorker : BackgroundService
                 _options.TenantId,
                 _options.SourceId,
                 _deviceToken,
+                null,
                 Path.GetFileName(file),
                 file,
                 hash,
