@@ -95,32 +95,24 @@ internal static class RecordVisibility
             return query.Where(_ => false);
         }
 
-        // Avoid mixing EF and IEnumerable unions that cause translation issues.
-        if (hasCreators && !hasTokens)
+        // If token-based fallback is needed, switch to client evaluation to avoid EF translation errors.
+        if (hasTokens)
+        {
+            var tokenList = tokens.ToArray();
+            return query
+                .AsEnumerable()
+                .Where(r =>
+                    (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)) ||
+                    tokenList.All(t => (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)))
+                .AsQueryable();
+        }
+
+        if (hasCreators)
         {
             return query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value));
         }
 
-        if (hasTokens && !hasCreators)
-        {
-            var tokenList = tokens.ToArray();
-            return query.AsEnumerable()
-                .Where(r => tokenList.All(t =>
-                    (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)))
-                .AsQueryable();
-        }
-
-        if (hasCreators && hasTokens)
-        {
-            var creatorQuery = query.Where(r => r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value));
-            var tokenList = tokens.ToArray();
-            var tokenQuery = query.AsEnumerable()
-                .Where(r => tokenList.All(t =>
-                    (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase)));
-            return creatorQuery.Concat(tokenQuery);
-        }
-
-        // Fallback (should not hit here)
+        // Fallback (should not hit)
         return query.Where(_ => false);
     }
 
