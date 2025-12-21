@@ -95,13 +95,13 @@ internal static class RecordVisibility
             return query.Where(_ => false);
         }
 
-        // To avoid EF translation issues, do the filtering client-side for scoped users.
-        return query
-            .AsEnumerable()
-            .Where(r =>
-                (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)) ||
-                (hasTokens && tokens.All(t => (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase))))
-            .AsQueryable();
+        // Materialize to avoid EF translation issues, then filter client-side.
+        var items = query.AsNoTracking().ToList();
+        var filtered = items.Where(r =>
+            (hasCreators && r.CreatedByUserId.HasValue && allowedCreators.Contains(r.CreatedByUserId.Value)) ||
+            (hasTokens && tokens.All(t => (r.StaffName ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase))));
+
+        return filtered.AsQueryable();
     }
 
     private static string? DeriveNameFromEmail(string email)
