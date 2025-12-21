@@ -33,10 +33,11 @@ public static class RecordsEndpoints
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
-        baseQuery = ApplySort(baseQuery, query.Sort);
+        // For managers/viewers we have already moved to in-memory filtering.
+        var sorted = ApplySort(baseQuery, query.Sort).ToList();
 
-        var total = await baseQuery.CountAsync(token);
-        var items = await baseQuery.Skip(query.Offset).Take(query.Take).ToListAsync(token);
+        var total = sorted.Count;
+        var items = sorted.Skip(query.Offset).Take(query.Take).ToList();
         var dtos = items.Select(ToDto).ToList();
         return Results.Ok(new PagedResult<RecordDto>
         {
@@ -52,8 +53,8 @@ public static class RecordsEndpoints
         var tenantId = tenantAccessor.Current.TenantId;
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
-        baseQuery = RecordVisibility.ApplyScope(baseQuery, scope);
-        var count = await baseQuery.Where(r => r.ProcessingStatus == ProcessingStatus.NeedsReview).CountAsync(token);
+        var scoped = RecordVisibility.ApplyScope(baseQuery, scope).AsEnumerable();
+        var count = scoped.Count(r => r.ProcessingStatus == ProcessingStatus.NeedsReview);
 
         return Results.Ok(new { count });
     }
@@ -62,8 +63,8 @@ public static class RecordsEndpoints
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantAccessor.Current.TenantId);
-        baseQuery = RecordVisibility.ApplyScope(baseQuery, scope);
-        var entity = await baseQuery.Include(r => r.Document).FirstOrDefaultAsync(r => r.Id == id, token);
+        var scoped = RecordVisibility.ApplyScope(baseQuery, scope).AsEnumerable();
+        var entity = scoped.FirstOrDefault(r => r.Id == id);
         if (entity is null)
         {
             return Results.NotFound();
@@ -216,7 +217,7 @@ public static class RecordsEndpoints
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
-        var rows = await baseQuery
+        var rows = baseQuery
             .OrderBy(r => r.CreatedAt)
             .Select(r => new
             {
@@ -228,7 +229,7 @@ public static class RecordsEndpoints
                 r.ProcessingStatus,
                 r.Confidence
             })
-            .ToListAsync(token);
+            .ToList();
 
         var csv = new StringBuilder();
         csv.AppendLine("Staff,Course,Issuer,Issue,Expiry,Status,Confidence");
@@ -252,10 +253,10 @@ public static class RecordsEndpoints
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
-        var rows = await baseQuery
+        var rows = baseQuery
             .OrderBy(r => r.CreatedAt)
             .Take(500)
-            .ToListAsync(token);
+            .ToList();
 
         var sb = new StringBuilder();
         sb.AppendLine("CertiWatch Records Export");
