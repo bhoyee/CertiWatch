@@ -116,7 +116,8 @@ export default function ReviewQueuePage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 4000);
+    // Refresh queue less frequently to reduce flicker.
+    const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, [load]);
 

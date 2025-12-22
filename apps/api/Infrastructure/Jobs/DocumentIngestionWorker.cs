@@ -330,20 +330,34 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
-                                (hasMeaningfulStaff || hasMeaningfulCourse))
+                                (hasMeaningfulStaff || hasMeaningfulCourse || processingStatus == ProcessingStatus.NeedsReview))
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
-                                var html = $"""
-                                    <p>Hello {manager.Name ?? "Manager"},</p>
-                                    <p>A certificate was uploaded by your team.</p>
-                                    <ul>
-                                      <li><strong>Staff:</strong> {staff}</li>
-                                      <li><strong>Course:</strong> {course}</li>
-                                      <li><strong>Status:</strong> {statusLabel}</li>
-                                    </ul>
-                                    <p>Log in to review the record.</p>
-                                """;
-                                await emailService.SendAsync(manager.Email, $"Upload {statusLabel}: {course}", html, stoppingToken);
+                                string html;
+                                if (hasMeaningfulStaff || hasMeaningfulCourse)
+                                {
+                                    html = $"""
+                                        <p>Hello {manager.Name ?? "Manager"},</p>
+                                        <p>A certificate was uploaded by your team.</p>
+                                        <ul>
+                                          {(hasMeaningfulStaff ? $"<li><strong>Staff:</strong> {staff}</li>" : string.Empty)}
+                                          {(hasMeaningfulCourse ? $"<li><strong>Course:</strong> {course}</li>" : string.Empty)}
+                                          <li><strong>Status:</strong> {statusLabel}</li>
+                                        </ul>
+                                        <p>Log in to review the record.</p>
+                                    """;
+                                }
+                                else
+                                {
+                                    html = $"""
+                                        <p>Hello {manager.Name ?? "Manager"},</p>
+                                        <p>A certificate was uploaded by your team.</p>
+                                        <p>Status: {statusLabel}</p>
+                                        <p>Log in to review the record for approval or rejection.</p>
+                                    """;
+                                }
+
+                                await emailService.SendAsync(manager.Email, $"Upload {statusLabel}", html, stoppingToken);
                             }
                         }
                     }
