@@ -325,13 +325,12 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                             // Avoid noisy/empty notifications until we have real extracted fields.
                             // Fire as soon as we have any extracted staff/course (even if other fields are pending).
-                            // Use meaningfully extracted fields for templating (but still allow generic sends).
+                            // Use meaningfully extracted fields for templating; always send at least the generic notification.
                             var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff) && !IsUnknown(staff);
                             var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course) && !IsUnknown(course);
 
                             if (manager is not null &&
-                                !string.IsNullOrWhiteSpace(manager.Email) &&
-                                (hasMeaningfulStaff || hasMeaningfulCourse || processingStatus == ProcessingStatus.NeedsReview))
+                                !string.IsNullOrWhiteSpace(manager.Email))
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
                                 string html;
