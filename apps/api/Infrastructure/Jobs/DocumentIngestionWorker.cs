@@ -329,6 +329,15 @@ public sealed class DocumentIngestionWorker : BackgroundService
                             var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff) && !IsUnknown(staff);
                             var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course) && !IsUnknown(course);
 
+                            // If no manager found, fall back to any tenant admin so something gets notified.
+                            if (manager is null)
+                            {
+                                manager = await db.Users.AsNoTracking()
+                                    .Where(u => u.TenantId == docEvent.TenantId && u.Role.ToLower() == "admin")
+                                    .OrderBy(u => u.CreatedAt)
+                                    .FirstOrDefaultAsync(stoppingToken);
+                            }
+
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email))
                             {
