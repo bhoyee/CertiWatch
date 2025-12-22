@@ -330,8 +330,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                             if (manager is not null &&
                                 !string.IsNullOrWhiteSpace(manager.Email) &&
-                                hasMeaningfulStaff &&
-                                hasMeaningfulCourse)
+                                (hasMeaningfulStaff || hasMeaningfulCourse))
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
                                 var html = $"""
