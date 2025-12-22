@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
@@ -62,6 +62,7 @@ export default function ReviewQueuePage() {
   const [detail, setDetail] = useState<RecordDetailDto | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const lastDetailHash = useRef<string | null>(null);
 
   const load = useCallback(() => {
     if (isViewer) {
@@ -107,7 +108,11 @@ export default function ReviewQueuePage() {
     setDetailLoading(true);
     fetchJson<RecordDetailDto>(`/api/records/${id}`)
       .then((res) => {
-        setDetail(res);
+        const hash = JSON.stringify(res);
+        if (hash !== lastDetailHash.current) {
+          lastDetailHash.current = hash;
+          setDetail(res);
+        }
         setDetailError(null);
       })
       .catch((err) => setDetailError(err.message ?? "Failed to load record"))
@@ -117,14 +122,14 @@ export default function ReviewQueuePage() {
   useEffect(() => {
     load();
     // Refresh queue less frequently to reduce flicker.
-    const interval = setInterval(load, 10000);
+    const interval = setInterval(load, 15000);
     return () => clearInterval(interval);
   }, [load]);
 
   // Keep the selected detail fresh while the item sits in the queue
   useEffect(() => {
     if (!selectedId) return;
-    const interval = setInterval(() => fetchDetail(selectedId), 4000);
+    const interval = setInterval(() => fetchDetail(selectedId), 8000);
     return () => clearInterval(interval);
   }, [fetchDetail, selectedId]);
 
