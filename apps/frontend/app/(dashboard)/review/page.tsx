@@ -105,7 +105,8 @@ export default function ReviewQueuePage() {
       return;
     }
 
-    setDetailLoading(true);
+    const shouldShowLoader = !detail;
+    if (shouldShowLoader) setDetailLoading(true);
     fetchJson<RecordDetailDto>(`/api/records/${id}`)
       .then((res) => {
         const hash = JSON.stringify(res);
@@ -116,8 +117,10 @@ export default function ReviewQueuePage() {
         setDetailError(null);
       })
       .catch((err) => setDetailError(err.message ?? "Failed to load record"))
-      .finally(() => setDetailLoading(false));
-  }, [isViewer]);
+      .finally(() => {
+        if (shouldShowLoader) setDetailLoading(false);
+      });
+  }, [isViewer, detail]);
 
   useEffect(() => {
     load();
@@ -129,7 +132,7 @@ export default function ReviewQueuePage() {
   // Keep the selected detail fresh while the item sits in the queue
   useEffect(() => {
     if (!selectedId) return;
-    const interval = setInterval(() => fetchDetail(selectedId), 8000);
+    const interval = setInterval(() => fetchDetail(selectedId), 12000);
     return () => clearInterval(interval);
   }, [fetchDetail, selectedId]);
 
