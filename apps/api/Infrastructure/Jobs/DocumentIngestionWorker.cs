@@ -325,10 +325,6 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                             // Avoid noisy/empty notifications until we have real extracted fields.
                             // Fire as soon as we have any extracted staff/course (even if other fields are pending).
-                            // Use meaningfully extracted fields for templating; always send at least the generic notification.
-                            var hasMeaningfulStaff = !string.IsNullOrWhiteSpace(staff) && !IsUnknown(staff);
-                            var hasMeaningfulCourse = !string.IsNullOrWhiteSpace(course) && !IsUnknown(course);
-
                             // If no manager found, fall back to any tenant admin so something gets notified.
                             if (manager is null)
                             {
@@ -342,29 +338,13 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                 !string.IsNullOrWhiteSpace(manager.Email))
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
-                                string html;
-                                if (hasMeaningfulStaff || hasMeaningfulCourse)
-                                {
-                                    html = $"""
-                                        <p>Hello {manager.Name ?? "Manager"},</p>
-                                        <p>A certificate was uploaded by your team.</p>
-                                        <ul>
-                                          {(hasMeaningfulStaff ? $"<li><strong>Staff:</strong> {staff}</li>" : string.Empty)}
-                                          {(hasMeaningfulCourse ? $"<li><strong>Course:</strong> {course}</li>" : string.Empty)}
-                                          <li><strong>Status:</strong> {statusLabel}</li>
-                                        </ul>
-                                        <p>Log in to review the record.</p>
-                                    """;
-                                }
-                                else
-                                {
-                                    html = $"""
-                                        <p>Hello {manager.Name ?? "Manager"},</p>
-                                        <p>A certificate was uploaded by your team.</p>
-                                        <p>Status: {statusLabel}</p>
-                                        <p>Log in to review the record for approval or rejection.</p>
-                                    """;
-                                }
+                                var needsReview = processingStatus == ProcessingStatus.NeedsReview;
+                                var html = $"""
+                                    <p>Hello {manager.Name ?? "Manager"},</p>
+                                    <p>A certificate was uploaded by your team.</p>
+                                    <p>Status: {statusLabel}</p>
+                                    <p>Log in to review the record{(needsReview ? " for approval or rejection" : string.Empty)}.</p>
+                                """;
 
                                 await emailService.SendAsync(manager.Email, $"Upload {statusLabel}", html, stoppingToken);
                             }
