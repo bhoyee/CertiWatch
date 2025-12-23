@@ -31,6 +31,7 @@ const navItems = [
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
   { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
+  { href: "/team", label: "Team", icon: "users", viewerHidden: true, managerHidden: true },
   { href: "/rules", label: "Rules", icon: "shield", viewerHidden: true, managerHidden: true },
   { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true, managerHidden: true },
   { href: "/uploads", label: "Uploads", icon: "cloud" },
@@ -98,8 +99,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
   const roleRestrictedRoutes = useMemo(
     () => ({
-      viewer: ["/review", "/rules", "/devices", "/sources", "/plan", "/invite"],
-      manager: ["/rules", "/devices", "/sources", "/plan"]
+      viewer: ["/review", "/rules", "/devices", "/sources", "/plan", "/invite", "/team"],
+      manager: ["/rules", "/devices", "/sources", "/plan", "/team"]
     }),
     []
   );
