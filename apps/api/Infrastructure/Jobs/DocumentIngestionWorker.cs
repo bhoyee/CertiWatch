@@ -338,10 +338,16 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                 !string.IsNullOrWhiteSpace(manager.Email))
                             {
                                 var statusLabel = processingStatus == ProcessingStatus.NeedsReview ? "Needs Review" : "OK";
+                                var uploaderName = uploader?.Name;
+                                var uploaderEmail = uploader?.Email;
+                                var uploaderLabel = !string.IsNullOrWhiteSpace(uploaderName)
+                                    ? uploaderName
+                                    : (!string.IsNullOrWhiteSpace(uploaderEmail) ? uploaderEmail : "Your team member");
                                 var needsReview = processingStatus == ProcessingStatus.NeedsReview;
                                 var html = $"""
                                     <p>Hello {manager.Name ?? "Manager"},</p>
                                     <p>A certificate was uploaded by your team.</p>
+                                    <p><strong>Uploaded by:</strong> {uploaderLabel}</p>
                                     <p>Status: {statusLabel}</p>
                                     <p>Log in to review the record{(needsReview ? " for approval or rejection" : string.Empty)}.</p>
                                 """;
