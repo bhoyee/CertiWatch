@@ -74,11 +74,11 @@ public static class AuthEndpoints
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
 
-        // If the user was deleted (invite removed) after the token was issued, refuse the login.
-        var exists = await db.Users.AsNoTracking().AnyAsync(
+        // If the user was deleted (invite removed) or disabled after the token was issued, refuse the login.
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(
             u => u.Email == payload.Value.Email && u.TenantId == payload.Value.TenantId,
             cancellationToken);
-        if (!exists)
+        if (user is null || user.IsDisabled)
         {
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
@@ -144,7 +144,8 @@ public static class AuthEndpoints
                 Role = isManager
                     ? "viewer"
                     : string.IsNullOrWhiteSpace(request.Role) ? "admin" : request.Role,
-                InvitedByUserId = invitedBy
+                InvitedByUserId = invitedBy,
+                IsDisabled = false
             };
             db.Users.Add(user);
             await db.SaveChangesAsync(token);
@@ -164,6 +165,7 @@ public static class AuthEndpoints
                 user.Role = request.Role;
                 user.InvitedByUserId ??= invitedBy;
             }
+            user.IsDisabled = false; // re-activate on new invite
             await db.SaveChangesAsync(token);
         }
 

@@ -46,6 +46,12 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
             var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email && u.TenantId == tenantId);
             if (user is not null)
             {
+                if (user.IsDisabled)
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    await context.Response.WriteAsync("user_disabled");
+                    return;
+                }
                 roleFromUser = user.Role;
                 userId = user.Id;
             }

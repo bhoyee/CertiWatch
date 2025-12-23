@@ -10,6 +10,7 @@ type ManagerDto = {
   name?: string | null;
   createdAt: string;
   viewerCount: number;
+  isDisabled?: boolean;
 };
 
 type ViewerDto = {
@@ -17,6 +18,7 @@ type ViewerDto = {
   email: string;
   name?: string | null;
   createdAt: string;
+  isDisabled?: boolean;
 };
 
 export default function TeamPage() {
@@ -35,6 +37,10 @@ export default function TeamPage() {
   const [viewerSearch, setViewerSearch] = useState("");
   const [managerPage, setManagerPage] = useState(1);
   const [viewerPage, setViewerPage] = useState(1);
+  const [showManagerModal, setShowManagerModal] = useState(false);
+  const [showViewerModal, setShowViewerModal] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const pageSize = 10;
 
   const filteredManagers = managers.filter((m) => {
@@ -125,7 +131,7 @@ export default function TeamPage() {
      }
    };
 
-   const handleAddManager = async () => {
+  const handleAddManager = async () => {
      if (!managerForm.email) {
        setError("Email is required for a manager");
        return;
@@ -136,8 +142,9 @@ export default function TeamPage() {
          method: "POST",
          body: JSON.stringify(managerForm),
        });
-       setManagerForm({ name: "", email: "" });
-       refreshManagers();
+      setManagerForm({ name: "", email: "" });
+      setShowManagerModal(false);
+      refreshManagers();
      } catch (err: any) {
        setError(err?.message ?? "Failed to add manager");
      } finally {
@@ -145,7 +152,7 @@ export default function TeamPage() {
      }
    };
 
-   const handleAddViewer = async () => {
+  const handleAddViewer = async () => {
      if (!selectedManager) {
        setError("Select a manager first");
        return;
@@ -160,9 +167,10 @@ export default function TeamPage() {
          method: "POST",
          body: JSON.stringify(viewerForm),
        });
-       setViewerForm({ name: "", email: "" });
-       refreshManagers();
-       refreshViewers();
+      setViewerForm({ name: "", email: "" });
+      setShowViewerModal(false);
+      refreshManagers();
+      refreshViewers();
      } catch (err: any) {
        setError(err?.message ?? "Failed to add viewer");
      } finally {
@@ -200,23 +208,45 @@ export default function TeamPage() {
      }
    };
 
-   const handleRename = async (userId: string, currentName?: string | null) => {
-     const next = window.prompt("Update name", currentName ?? "");
-     if (next === null) return;
-     setSaving(true);
-     try {
-       await apiRequest(`/api/admin/team/users/${userId}`, {
-         method: "PATCH",
-         body: JSON.stringify({ name: next }),
-       });
-       refreshManagers();
-       refreshViewers();
-     } catch (err: any) {
-       setError(err?.message ?? "Failed to update user");
-     } finally {
-       setSaving(false);
-     }
-   };
+  const handleRename = async (userId: string, currentName?: string | null) => {
+    setEditUserId(userId);
+    setEditName(currentName ?? "");
+  };
+
+  const toggleDisable = async (userId: string, isDisabled: boolean) => {
+    setSaving(true);
+    try {
+      await apiRequest(`/api/admin/team/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isDisabled: !isDisabled }),
+      });
+      refreshManagers();
+      refreshViewers();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to update status");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitRename = async () => {
+    if (!editUserId) return;
+    setSaving(true);
+    try {
+      await apiRequest(`/api/admin/team/users/${editUserId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: editName }),
+      });
+      setEditUserId(null);
+      setEditName("");
+      refreshManagers();
+      refreshViewers();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to update user");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!isAdmin) {
     return (
@@ -234,6 +264,122 @@ export default function TeamPage() {
         <p className="text-sm text-slate-600">View managers and their viewers.</p>
         {error && <p className="text-xs text-rose-600">{error}</p>}
       </div>
+      {(showManagerModal || showViewerModal || editUserId) && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setShowManagerModal(false); setShowViewerModal(false); setEditUserId(null); }} />
+      )}
+      {showManagerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Invite manager</h3>
+              <button onClick={() => setShowManagerModal(false)} className="text-slate-500 hover:text-slate-700">
+                ✕
+              </button>
+            </div>
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Name (optional)"
+              value={managerForm.name}
+              onChange={(e) => setManagerForm((p) => ({ ...p, name: e.target.value }))}
+            />
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Email"
+              value={managerForm.email}
+              onChange={(e) => setManagerForm((p) => ({ ...p, email: e.target.value }))}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowManagerModal(false)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddManager}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Invite manager"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showViewerModal && selectedManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Invite viewer for {selectedManager.name ?? selectedManager.email}
+              </h3>
+              <button onClick={() => setShowViewerModal(false)} className="text-slate-500 hover:text-slate-700">
+                ✕
+              </button>
+            </div>
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Name (optional)"
+              value={viewerForm.name}
+              onChange={(e) => setViewerForm((p) => ({ ...p, name: e.target.value }))}
+            />
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Email"
+              value={viewerForm.email}
+              onChange={(e) => setViewerForm((p) => ({ ...p, email: e.target.value }))}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowViewerModal(false)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddViewer}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Invite viewer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editUserId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Edit name</h3>
+              <button onClick={() => setEditUserId(null)} className="text-slate-500 hover:text-slate-700">
+                ✕
+              </button>
+            </div>
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditUserId(null)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRename}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -249,6 +395,12 @@ export default function TeamPage() {
                 disabled={loadingManagers}
               >
                 {loadingManagers ? "Refreshing..." : "Refresh"}
+              </button>
+              <button
+                onClick={() => setShowManagerModal(true)}
+                className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Invite manager
               </button>
             </div>
           </div>
@@ -285,11 +437,14 @@ export default function TeamPage() {
                     return (
                       <tr
                         key={m.id}
-                        className={`border-t border-slate-100 text-slate-700 ${isActive ? "bg-slate-100" : ""}`}
+                        className={`border-t border-slate-100 text-slate-700 ${isActive ? "bg-slate-100" : ""} ${
+                          m.isDisabled ? "opacity-60" : ""
+                        }`}
                       >
                         <td className="px-3 py-2 align-top">
                           <div className="font-semibold text-slate-900">{m.name ?? m.email}</div>
                           <div className="text-xs text-slate-500">{m.email}</div>
+                          {m.isDisabled && <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 text-[11px] font-semibold text-amber-800">Disabled</span>}
                         </td>
                         <td className="px-3 py-2 align-top">{m.viewerCount}</td>
                         <td className="px-3 py-2 align-top text-xs text-slate-500">{new Date(m.createdAt).toLocaleDateString()}</td>
@@ -314,6 +469,13 @@ export default function TeamPage() {
                               disabled={saving}
                             >
                               Delete
+                            </button>
+                            <button
+                              onClick={() => toggleDisable(m.id, m.isDisabled ?? false)}
+                              className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              disabled={saving}
+                            >
+                              {m.isDisabled ? "Activate" : "Deactivate"}
                             </button>
                           </div>
                         </td>
@@ -384,7 +546,7 @@ export default function TeamPage() {
             </div>
             {selectedManager && (
               <button
-                onClick={handleAddViewer}
+                onClick={() => setShowViewerModal(true)}
                 className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 disabled={saving}
               >
@@ -427,6 +589,7 @@ export default function TeamPage() {
                       <td className="px-3 py-2 align-top">
                         <div className="font-semibold text-slate-900">{v.name ?? v.email}</div>
                         <div className="text-xs text-slate-500">{v.email}</div>
+                        {v.isDisabled && <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 text-[11px] font-semibold text-amber-800">Disabled</span>}
                       </td>
                       <td className="px-3 py-2 align-top text-xs text-slate-500">{new Date(v.createdAt).toLocaleDateString()}</td>
                       <td className="px-3 py-2 align-top text-center">
@@ -457,6 +620,13 @@ export default function TeamPage() {
                             disabled={saving}
                           >
                             Delete
+                          </button>
+                          <button
+                            onClick={() => toggleDisable(v.id, v.isDisabled ?? false)}
+                            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            disabled={saving}
+                          >
+                            {v.isDisabled ? "Activate" : "Deactivate"}
                           </button>
                         </div>
                       </td>
@@ -509,13 +679,21 @@ export default function TeamPage() {
                   onChange={(e) => setViewerForm((p) => ({ ...p, email: e.target.value }))}
                 />
               </div>
-              <button
-                onClick={handleAddViewer}
-                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                disabled={saving}
-              >
-                {saving ? "Saving..." : "Invite viewer"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddViewer}
+                  className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Invite viewer"}
+                </button>
+                <button
+                  onClick={() => setShowViewerModal(true)}
+                  className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Open modal
+                </button>
+              </div>
             </div>
           )}
         </section>

@@ -70,6 +70,7 @@ public static class AdminEndpoints
             m.Email,
             m.Name,
             m.CreatedAt,
+            m.IsDisabled,
             ViewerCount = viewerCounts.TryGetValue(m.Id, out var count) ? count : 0
         });
 
@@ -85,11 +86,11 @@ public static class AdminEndpoints
             .OrderBy(u => u.CreatedAt)
             .ToListAsync(token);
 
-        return Results.Ok(viewers.Select(v => new { v.Id, v.Email, v.Name, v.CreatedAt }));
+        return Results.Ok(viewers.Select(v => new { v.Id, v.Email, v.Name, v.CreatedAt, v.IsDisabled }));
     }
 
     private sealed record UpsertUserRequest(string Email, string? Name);
-    private sealed record UpdateUserRequest(string? Name, string? Role);
+    private sealed record UpdateUserRequest(string? Name, string? Role, bool? IsDisabled);
     private sealed record ReassignRequest(Guid ManagerId);
 
     private static async Task<IResult> CreateManagerAsync(
@@ -131,6 +132,7 @@ public static class AdminEndpoints
             }
         }
 
+        user.IsDisabled = false;
         await db.SaveChangesAsync(token);
         await SendMagicLinkAsync(email, tenantId, magicOptions.Value, renderer, emailService, token);
         return Results.Ok(new { user.Id, user.Email, user.Name, user.Role, user.InvitedByUserId });
@@ -179,6 +181,7 @@ public static class AdminEndpoints
             }
         }
 
+        user.IsDisabled = false;
         await db.SaveChangesAsync(token);
         await SendMagicLinkAsync(email, tenantId, magicOptions.Value, renderer, emailService, token);
         return Results.Ok(new { user.Id, user.Email, user.Name, user.Role, user.InvitedByUserId });
@@ -209,6 +212,11 @@ public static class AdminEndpoints
                 return Results.BadRequest(new { error = "invalid_role" });
             }
             user.Role = role;
+        }
+
+        if (request.IsDisabled.HasValue)
+        {
+            user.IsDisabled = request.IsDisabled.Value;
         }
 
         await db.SaveChangesAsync(token);
