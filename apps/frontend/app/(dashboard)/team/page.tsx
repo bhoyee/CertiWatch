@@ -450,13 +450,13 @@ export default function TeamPage() {
                   })}
                 </tbody>
               </table>
-              {filteredManagers.length > pageSize && (
+              {filteredManagers.length > 0 && (
                 <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
                   <span>
                     Showing{" "}
                     {Math.min((managerPage - 1) * pageSize + 1, filteredManagers.length)}-
                     {Math.min(managerPage * pageSize, filteredManagers.length)} of {filteredManagers.length} • Page {managerPage} /
-                    {Math.ceil(filteredManagers.length / pageSize)}
+                    {Math.max(1, Math.ceil(filteredManagers.length / pageSize))}
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -603,13 +603,13 @@ export default function TeamPage() {
                   ))}
                 </tbody>
               </table>
-              {filteredViewers.length > pageSize && (
+              {filteredViewers.length > 0 && (
                 <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
                   <span>
                     Showing{" "}
                     {Math.min((viewerPage - 1) * pageSize + 1, filteredViewers.length)}-
                     {Math.min(viewerPage * pageSize, filteredViewers.length)} of {filteredViewers.length} • Page {viewerPage} /
-                    {Math.ceil(filteredViewers.length / pageSize)}
+                    {Math.max(1, Math.ceil(filteredViewers.length / pageSize))}
                   </span>
                   <div className="flex gap-2">
                     <button
