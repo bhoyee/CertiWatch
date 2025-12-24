@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchJson } from "../../lib/api";
+import { deleteJson, fetchJson, patchJson, postJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
 type ManagerDto = {
@@ -112,25 +112,6 @@ export default function TeamPage() {
        .finally(() => setLoadingViewers(false));
    };
 
-   const apiRequest = async (url: string, options: RequestInit) => {
-     const resp = await fetch(url, {
-       ...options,
-       headers: {
-         "Content-Type": "application/json",
-         ...(options.headers ?? {}),
-       },
-     });
-     const text = await resp.text();
-     if (!resp.ok) {
-       throw new Error(text || resp.statusText);
-     }
-     try {
-       return text ? JSON.parse(text) : null;
-     } catch {
-       return null;
-     }
-   };
-
   const handleAddManager = async () => {
      if (!managerForm.email) {
        setError("Email is required for a manager");
@@ -138,10 +119,7 @@ export default function TeamPage() {
      }
      setSaving(true);
      try {
-       await apiRequest("/api/admin/team/managers", {
-         method: "POST",
-         body: JSON.stringify(managerForm),
-       });
+       await postJson("/api/admin/team/managers", managerForm);
       setManagerForm({ name: "", email: "" });
       setShowManagerModal(false);
       refreshManagers();
@@ -163,10 +141,7 @@ export default function TeamPage() {
      }
      setSaving(true);
      try {
-       await apiRequest(`/api/admin/team/managers/${selectedManager.id}/viewers`, {
-         method: "POST",
-         body: JSON.stringify(viewerForm),
-       });
+       await postJson(`/api/admin/team/managers/${selectedManager.id}/viewers`, viewerForm);
       setViewerForm({ name: "", email: "" });
       setShowViewerModal(false);
       refreshManagers();
@@ -182,7 +157,7 @@ export default function TeamPage() {
      if (!window.confirm("Delete this user? This cannot be undone.")) return;
      setSaving(true);
      try {
-       await apiRequest(`/api/admin/team/users/${id}`, { method: "DELETE" });
+       await deleteJson(`/api/admin/team/users/${id}`);
        refreshManagers();
        refreshViewers();
      } catch (err: any) {
@@ -195,10 +170,7 @@ export default function TeamPage() {
    const handleReassignViewer = async (viewerId: string, managerId: string) => {
      setSaving(true);
      try {
-       await apiRequest(`/api/admin/team/viewers/${viewerId}/reassign`, {
-         method: "PATCH",
-         body: JSON.stringify({ managerId }),
-       });
+       await patchJson(`/api/admin/team/viewers/${viewerId}/reassign`, { managerId });
        refreshManagers();
        refreshViewers();
      } catch (err: any) {
@@ -216,10 +188,7 @@ export default function TeamPage() {
   const toggleDisable = async (userId: string, isDisabled: boolean) => {
     setSaving(true);
     try {
-      await apiRequest(`/api/admin/team/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isDisabled: !isDisabled }),
-      });
+      await patchJson(`/api/admin/team/users/${userId}`, { isDisabled: !isDisabled });
       refreshManagers();
       refreshViewers();
     } catch (err: any) {
@@ -233,10 +202,7 @@ export default function TeamPage() {
     if (!editUserId) return;
     setSaving(true);
     try {
-      await apiRequest(`/api/admin/team/users/${editUserId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: editName }),
-      });
+      await patchJson(`/api/admin/team/users/${editUserId}`, { name: editName });
       setEditUserId(null);
       setEditName("");
       refreshManagers();
@@ -487,7 +453,10 @@ export default function TeamPage() {
               {filteredManagers.length > pageSize && (
                 <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
                   <span>
-                    Page {managerPage} / {Math.ceil(filteredManagers.length / pageSize)}
+                    Showing{" "}
+                    {Math.min((managerPage - 1) * pageSize + 1, filteredManagers.length)}-
+                    {Math.min(managerPage * pageSize, filteredManagers.length)} of {filteredManagers.length} • Page {managerPage} /
+                    {Math.ceil(filteredManagers.length / pageSize)}
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -637,7 +606,10 @@ export default function TeamPage() {
               {filteredViewers.length > pageSize && (
                 <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
                   <span>
-                    Page {viewerPage} / {Math.ceil(filteredViewers.length / pageSize)}
+                    Showing{" "}
+                    {Math.min((viewerPage - 1) * pageSize + 1, filteredViewers.length)}-
+                    {Math.min(viewerPage * pageSize, filteredViewers.length)} of {filteredViewers.length} • Page {viewerPage} /
+                    {Math.ceil(filteredViewers.length / pageSize)}
                   </span>
                   <div className="flex gap-2">
                     <button
