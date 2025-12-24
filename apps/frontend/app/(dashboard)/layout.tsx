@@ -50,6 +50,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [planLoading, setPlanLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
+  const [showTour, setShowTour] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
   const blockedByError =
@@ -91,6 +93,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = localStorage.getItem("cw_onboarding_seen_v1");
+    if (!seen) {
+      setShowTour(true);
+    }
   }, []);
 
   const isBlocked = useMemo(
@@ -161,7 +171,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} onClick={() => setOpen(false)} />
               </div>
             )}
-            <TopBar isBlocked={isBlocked} role={role} />
+            <TopBar isBlocked={isBlocked} role={role} onShowTour={() => setShowTour(true)} />
             {(isBlocked || (!isViewer && !isManager)) && (
               <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
             )}
@@ -175,6 +185,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Footer />
           </main>
         </div>
+        <OnboardingTour
+          open={showTour}
+          step={tourStep}
+          onClose={(markSeen) => {
+            setShowTour(false);
+            setTourStep(0);
+            if (markSeen && typeof window !== "undefined") {
+              localStorage.setItem("cw_onboarding_seen_v1", "true");
+            }
+          }}
+          onNext={() => setTourStep((s) => Math.min(s + 1, tourSteps.length - 1))}
+          onPrev={() => setTourStep((s) => Math.max(0, s - 1))}
+        />
       </div>
     </RoleProvider>
   );
@@ -196,7 +219,7 @@ function Logo() {
   );
 }
 
-function TopBar({ isBlocked, role }: { isBlocked: boolean; role: string | null }) {
+function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: string | null; onShowTour: () => void }) {
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
   return (
@@ -249,6 +272,12 @@ function TopBar({ isBlocked, role }: { isBlocked: boolean; role: string | null }
             Review queue
           </Link>
         )}
+        <button
+          onClick={onShowTour}
+          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Show tour
+        </button>
       </div>
     </div>
   );
@@ -367,6 +396,86 @@ function Footer() {
         </span>
       </div>
     </footer>
+  );
+}
+
+const tourSteps = [
+  { title: "Uploads", body: "Add certificates via single upload, bulk, or shareable links. Managers see their own team uploads." },
+  { title: "Review queue", body: "Review flagged certificates, approve, or request fixes. Needs-review items live here." },
+  { title: "Records & Analytics", body: "Browse all records and track expiring items, confidence, and trends." },
+  { title: "Team & Roles", body: "Admins manage managers/viewers; managers oversee their viewers; viewers can upload and view their own items." },
+  { title: "Billing & Plan", body: "Admins can manage plans and billing from the Manage Plan page when subscription is active." }
+];
+
+function OnboardingTour({
+  open,
+  step,
+  onClose,
+  onNext,
+  onPrev
+}: {
+  open: boolean;
+  step: number;
+  onClose: (markSeen: boolean) => void;
+  onNext: () => void;
+  onPrev: () => void;
+}) {
+  const current = tourSteps[step];
+  if (!open) return null;
+  const isLast = step === tourSteps.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Getting started</p>
+            <h3 className="text-lg font-semibold text-slate-900">{current.title}</h3>
+          </div>
+          <button
+            onClick={() => onClose(true)}
+            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Skip
+          </button>
+        </div>
+        <p className="text-sm text-slate-700">{current.body}</p>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex gap-1">
+            {tourSteps.map((_, idx) => (
+              <span
+                key={idx}
+                className={`h-2 w-8 rounded-full ${idx === step ? "bg-indigo-500" : "bg-slate-200"}`}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onPrev}
+              disabled={step === 0}
+              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => {
+                if (isLast) onClose(true);
+                else onNext();
+              }}
+              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              {isLast ? "Done" : "Next"}
+            </button>
+          </div>
+        </div>
+        <button
+          onClick={() => onClose(true)}
+          className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Don’t show again
+        </button>
+      </div>
+    </div>
   );
 }
 
