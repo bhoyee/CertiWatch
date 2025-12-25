@@ -18,6 +18,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<BillingInvoice> BillingInvoices => Set<BillingInvoice>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<UploadRequest> UploadRequests => Set<UploadRequest>();
+    public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
+    public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,6 +84,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(u => new { u.TenantId, u.Token }).IsUnique();
             entity.HasIndex(u => u.CreatedByUserId);
+        });
+
+        modelBuilder.Entity<SupportTicket>(entity =>
+        {
+            entity.HasIndex(t => new { t.TenantId, t.Status });
+            entity.HasIndex(t => t.CreatedByUserId);
+            entity.HasIndex(t => t.AssignedToUserId);
+            entity.Property(t => t.Subject).HasMaxLength(256);
+            entity.Property(t => t.Body).HasColumnType("text");
+            entity.Property(t => t.AssignedRole).HasMaxLength(32);
+            entity.Property(t => t.Status).HasMaxLength(32);
+            entity.Property(t => t.Priority).HasMaxLength(32);
+            entity.HasMany(t => t.Messages)
+                .WithOne(m => m.Ticket!)
+                .HasForeignKey(m => m.TicketId);
+        });
+
+        modelBuilder.Entity<SupportMessage>(entity =>
+        {
+            entity.HasIndex(m => m.AuthorUserId);
+            entity.Property(m => m.Body).HasColumnType("text");
         });
 
         SeedGlobalRules(modelBuilder);
