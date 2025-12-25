@@ -54,6 +54,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [tourStep, setTourStep] = useState(0);
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
+  const tourSteps = useMemo(() => getTourSteps(role), [role]);
   const blockedByError =
     planError?.toLowerCase().includes("subscription inactive") ||
     planError?.toLowerCase().includes("payment") ||
@@ -188,6 +189,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <OnboardingTour
           open={showTour}
           step={tourStep}
+          steps={tourSteps}
           onClose={(markSeen) => {
             setShowTour(false);
             setTourStep(0);
@@ -399,30 +401,44 @@ function Footer() {
   );
 }
 
-const tourSteps = [
-  { title: "Uploads", body: "Add certificates via single upload, bulk, or shareable links. Managers see their own team uploads." },
-  { title: "Review queue", body: "Review flagged certificates, approve, or request fixes. Needs-review items live here." },
-  { title: "Records & Analytics", body: "Browse all records and track expiring items, confidence, and trends." },
-  { title: "Team & Roles", body: "Admins manage managers/viewers; managers oversee their viewers; viewers can upload and view their own items." },
-  { title: "Billing & Plan", body: "Admins can manage plans and billing from the Manage Plan page when subscription is active." }
-];
+function getTourSteps(role: string | null) {
+  const common = [
+    { title: "Uploads", body: "Add certificates via single upload, bulk, or shareable links." },
+    { title: "Records & Analytics", body: "Browse records and track expiries, confidence, and trends." }
+  ];
+  const review = { title: "Review queue", body: "Review flagged certificates, approve, or request fixes." };
+  const team = { title: "Team & Roles", body: "Admins manage managers/viewers; managers oversee their viewers and invites." };
+  const billing = { title: "Billing & Plan", body: "Admins can manage plans and billing from the Manage Plan page." };
+
+  const r = role?.toLowerCase();
+  if (r === "viewer") {
+    return common;
+  }
+  if (r === "manager") {
+    return [common[0], review, common[1], team];
+  }
+  // admin or unknown
+  return [common[0], review, common[1], team, billing];
+}
 
 function OnboardingTour({
   open,
   step,
+  steps,
   onClose,
   onNext,
   onPrev
 }: {
   open: boolean;
   step: number;
+  steps: { title: string; body: string }[];
   onClose: (markSeen: boolean) => void;
   onNext: () => void;
   onPrev: () => void;
 }) {
-  const current = tourSteps[step];
-  if (!open) return null;
-  const isLast = step === tourSteps.length - 1;
+  const current = steps[step];
+  if (!open || steps.length === 0) return null;
+  const isLast = step === steps.length - 1;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm">
@@ -442,7 +458,7 @@ function OnboardingTour({
         <p className="text-sm text-slate-700">{current.body}</p>
         <div className="mt-4 flex items-center justify-between">
           <div className="flex gap-1">
-            {tourSteps.map((_, idx) => (
+            {steps.map((_, idx) => (
               <span
                 key={idx}
                 className={`h-2 w-8 rounded-full ${idx === step ? "bg-indigo-500" : "bg-slate-200"}`}
