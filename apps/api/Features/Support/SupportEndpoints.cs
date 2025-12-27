@@ -16,6 +16,7 @@ public static class SupportEndpoints
         group.MapPost("/tickets/{id:guid}/messages", ReplyAsync);
         group.MapPatch("/tickets/{id:guid}/assign", AssignAsync);
         group.MapPatch("/tickets/{id:guid}/status", UpdateStatusAsync);
+        group.MapDelete("/tickets/{id:guid}", DeleteAsync);
         return routes;
     }
 
@@ -247,6 +248,27 @@ public static class SupportEndpoints
             AuthorUserId = accessor.Current.UserId,
             Body = request.Body.Trim()
         });
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid id,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        var ticket = await db.SupportTickets
+            .Include(t => t.Messages)
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == accessor.Current.TenantId, token);
+        if (ticket is null || !await CanAccessAsync(db, accessor, ticket, token))
+        {
+            return Results.NotFound();
+        }
+
+        // Allow delete for: creator, manager of creator, admin (if invited/assigned as per access rules).
+        db.SupportMessages.RemoveRange(ticket.Messages);
+        db.SupportTickets.Remove(ticket);
         await db.SaveChangesAsync(token);
         return Results.NoContent();
     }
