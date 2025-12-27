@@ -1,7 +1,10 @@
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
+using CertiWatch.Api.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Net;
 
 namespace CertiWatch.Api.Features.Support;
 
@@ -168,6 +171,7 @@ public static class SupportEndpoints
         CreateTicketRequest request,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IEmailService emailService,
         CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Body))
@@ -219,6 +223,8 @@ public static class SupportEndpoints
         });
 
         await db.SaveChangesAsync(token);
+
+        await NotifyAssigneesAsync(db, emailService, ticket, "created", token);
 
         return Results.Ok(new { ticket.Id, ticket.AssignedRole, ticket.Status });
     }
@@ -278,6 +284,7 @@ public static class SupportEndpoints
         AssignRequest request,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IEmailService emailService,
         CancellationToken token)
     {
         if (!IsAdmin(accessor) && !IsManager(accessor))
@@ -298,6 +305,7 @@ public static class SupportEndpoints
         }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(token);
+        await NotifyAssigneesAsync(db, emailService, ticket, "assigned", token);
         return Results.NoContent();
     }
 
@@ -323,6 +331,89 @@ public static class SupportEndpoints
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(token);
         return Results.NoContent();
+    }
+
+    private static async Task NotifyAssigneesAsync(
+        AppDbContext db,
+        IEmailService emailService,
+        SupportTicket ticket,
+        string action,
+        CancellationToken token)
+    {
+        var recipientEmails = new List<string>();
+
+        // Prefer explicit assignee
+        if (ticket.AssignedToUserId is Guid userId)
+        {
+            var email = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync(token);
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                recipientEmails.Add(email);
+            }
+        }
+
+        // Fallback by role
+        if (!recipientEmails.Any())
+        {
+            if (ticket.AssignedRole == "manager" && ticket.CreatedByUserId is Guid creatorId)
+            {
+                var inviterEmail = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == creatorId)
+                    .Select(u => u.InvitedByUserId)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .Join(db.Users.AsNoTracking(), id => id, u => u.Id, (id, u) => u.Email)
+                    .FirstOrDefaultAsync(token);
+                if (!string.IsNullOrWhiteSpace(inviterEmail))
+                {
+                    recipientEmails.Add(inviterEmail!);
+                }
+            }
+
+            if (ticket.AssignedRole == "admin" || ticket.AssignedRole == "support" || !recipientEmails.Any())
+            {
+                var admins = await db.Users.AsNoTracking()
+                    .Where(u => u.TenantId == ticket.TenantId &&
+                                (u.Role.ToLower() == "admin" || u.Role.ToLower() == "superadmin") &&
+                                (!u.IsDisabled))
+                    .Select(u => u.Email)
+                    .ToListAsync(token);
+                recipientEmails.AddRange(admins.Where(e => !string.IsNullOrWhiteSpace(e))!);
+            }
+        }
+
+        if (!recipientEmails.Any()) return;
+
+        var creator = ticket.CreatedByUserId.HasValue
+            ? await db.Users.AsNoTracking()
+                .Where(u => u.Id == ticket.CreatedByUserId.Value)
+                .Select(u => new { u.Name, u.Email })
+                .FirstOrDefaultAsync(token)
+            : null;
+
+        var subject = $"Support ticket {action}: {ticket.Subject}";
+        var assignmentText = ticket.AssignedToUserId.HasValue
+            ? await db.Users.AsNoTracking().Where(u => u.Id == ticket.AssignedToUserId.Value)
+                .Select(u => u.Name ?? u.Email ?? "Unassigned").FirstOrDefaultAsync(token) ?? "Unassigned"
+            : ticket.AssignedRole ?? "Unassigned";
+
+        var body = $@"
+<p>A support ticket was {WebUtility.HtmlEncode(action)}.</p>
+<ul>
+  <li><strong>Subject:</strong> {WebUtility.HtmlEncode(ticket.Subject)}</li>
+  <li><strong>Status:</strong> {WebUtility.HtmlEncode(ticket.Status)}</li>
+  <li><strong>From:</strong> {WebUtility.HtmlEncode(creator?.Name ?? creator?.Email ?? "" )}</li>
+  <li><strong>Assigned:</strong> {WebUtility.HtmlEncode(assignmentText)}</li>
+</ul>
+<p><strong>Description</strong><br/>{WebUtility.HtmlEncode(ticket.Body)}</p>";
+
+        foreach (var email in recipientEmails.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            await emailService.SendAsync(email, subject, body, token);
+        }
     }
 
     private static async Task<bool> CanAccessAsync(AppDbContext db, ITenantContextAccessor accessor, SupportTicket ticket, CancellationToken token)
