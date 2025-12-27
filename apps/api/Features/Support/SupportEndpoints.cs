@@ -75,7 +75,18 @@ public static class SupportEndpoints
                 .ToListAsync(token);
             query = query.Where(t => t.CreatedByUserId == userId || (t.CreatedByUserId != null && viewers.Contains(t.CreatedByUserId.Value)));
         }
-        // Admins see all within tenant
+        else if (IsAdmin(accessor))
+        {
+            var invitedByAdminIds = await db.Users.AsNoTracking()
+                .Where(u => u.TenantId == tenantId && u.InvitedByUserId == userId)
+                .Select(u => u.Id)
+                .ToListAsync(token);
+
+            query = query.Where(t =>
+                (t.CreatedByUserId != null && invitedByAdminIds.Contains(t.CreatedByUserId.Value)) ||
+                t.AssignedRole == "admin" ||
+                t.AssignedToUserId == userId);
+        }
 
         var items = await query
             .OrderByDescending(t => t.UpdatedAt)
@@ -259,7 +270,19 @@ public static class SupportEndpoints
         if (ticket.TenantId != tenantId) return false;
         var userId = accessor.Current.UserId;
 
-        if (IsAdmin(accessor)) return true;
+        if (IsAdmin(accessor))
+        {
+            if (ticket.AssignedRole == "admin" || ticket.AssignedToUserId == userId) return true;
+            if (ticket.CreatedByUserId is Guid creatorId)
+            {
+                var invitedByAdmin = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == creatorId)
+                    .Select(u => u.InvitedByUserId)
+                    .FirstOrDefaultAsync(token);
+                return invitedByAdmin == userId;
+            }
+            return false;
+        }
         if (IsViewer(accessor)) return ticket.CreatedByUserId == userId;
 
         if (IsManager(accessor))
