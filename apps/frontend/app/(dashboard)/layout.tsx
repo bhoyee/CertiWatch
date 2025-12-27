@@ -49,6 +49,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<TenantPlanDto | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const [showTour, setShowTour] = useState(false);
@@ -84,9 +85,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     const loadProfile = async () => {
       try {
         const res = await fetchJson<ProfileDto>("/api/profile");
-        if (active) setRole(res.role);
+        if (active) {
+          setRole(res.role);
+          setUserId(res.id ?? null);
+        }
       } catch {
-        if (active) setRole(null);
+        if (active) {
+          setRole(null);
+          setUserId(null);
+        }
       } finally {
         if (active) setRoleLoading(false);
       }
@@ -338,9 +345,15 @@ function NavLinks({
     let active = true;
     const load = async () => {
       try {
-        const tickets = await fetchJson<Array<{ status: string }>>("/api/support/tickets");
+        const tickets = await fetchJson<Array<{ status: string; createdByUserId?: string | null }>>(
+          "/api/support/tickets"
+        );
         if (active) {
-          const count = tickets.filter((t) => t.status === "open" || t.status === "pending").length;
+          const count = tickets.filter(
+            (t) =>
+              (t.status === "open" || t.status === "pending") &&
+              (!userId || (t.createdByUserId ?? "").toLowerCase() !== userId.toLowerCase())
+          ).length;
           setSupportCount(count);
         }
       } catch {
@@ -353,7 +366,7 @@ function NavLinks({
       active = false;
       clearInterval(id);
     };
-  }, []);
+  }, [userId]);
 
   return (
     <nav className="space-y-1">
