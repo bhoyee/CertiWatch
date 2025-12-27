@@ -10,7 +10,9 @@ type Ticket = {
   status: string;
   assignedRole: string;
   assignedToUserId?: string | null;
+  assignedToName?: string | null;
   createdByUserId?: string | null;
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -18,6 +20,7 @@ type Ticket = {
 type Message = {
   id: string;
   authorUserId?: string | null;
+  authorName?: string | null;
   body: string;
   createdAt: string;
 };
@@ -29,7 +32,9 @@ type TicketDetail = {
   status: string;
   assignedRole: string;
   assignedToUserId?: string | null;
+  assignedToName?: string | null;
   createdByUserId?: string | null;
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
   messages: Message[];
@@ -240,12 +245,18 @@ export default function SupportPage() {
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-slate-900">{t.subject}</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      t.status === "open"
+                        ? "bg-amber-100 text-amber-700"
+                        : t.status === "pending"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}>
                       {t.status}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs text-slate-600">
-                    <span>Assigned: {t.assignedRole || "—"}</span>
+                    <span>Assigned: {t.assignedToName || t.assignedRole || "—"}</span>
                     <span>{new Date(t.updatedAt).toLocaleString()}</span>
                   </div>
                 </button>
@@ -264,15 +275,21 @@ export default function SupportPage() {
               <h2 className="text-lg font-semibold text-slate-900">{detail?.subject || "Select a ticket"}</h2>
               {detail && (
                 <p className="mt-1 text-xs text-slate-600">
-                  Created {new Date(detail.createdAt).toLocaleString()} • Updated {new Date(detail.updatedAt).toLocaleString()}
+                  Created {new Date(detail.createdAt).toLocaleString()} by {detail.createdByName ?? detail.createdByUserId ?? "Unknown"} • Updated {new Date(detail.updatedAt).toLocaleString()}
                 </p>
               )}
             </div>
             {detail && (
               <div className="flex items-center gap-2 text-xs">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{detail.status}</span>
+                <span className={`rounded-full px-2 py-0.5 font-medium ${
+                  detail.status === "open"
+                    ? "bg-amber-100 text-amber-700"
+                    : detail.status === "pending"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}>{detail.status}</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-                  assigned: {detail.assignedRole || "—"}
+                  assigned: {detail.assignedToName || detail.assignedRole || "—"}
                 </span>
               </div>
             )}
@@ -290,7 +307,7 @@ export default function SupportPage() {
                   {detail.messages.map(m => (
                     <div key={m.id} className="rounded border border-slate-100 bg-white px-2 py-1.5 text-sm text-slate-800">
                       <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>{m.authorUserId ? m.authorUserId : "System"}</span>
+                        <span>{m.authorName ?? m.authorUserId ?? "System"}</span>
                         <span>{new Date(m.createdAt).toLocaleString()}</span>
                       </div>
                       <p className="mt-1 whitespace-pre-wrap">{m.body}</p>

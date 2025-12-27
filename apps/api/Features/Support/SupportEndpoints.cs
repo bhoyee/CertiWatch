@@ -25,7 +25,9 @@ public static class SupportEndpoints
         string Status,
         string AssignedRole,
         Guid? AssignedToUserId,
+        string? AssignedToName,
         Guid? CreatedByUserId,
+        string? CreatedByName,
         DateTime CreatedAt,
         DateTime UpdatedAt);
 
@@ -36,12 +38,14 @@ public static class SupportEndpoints
         string Status,
         string AssignedRole,
         Guid? AssignedToUserId,
+        string? AssignedToName,
         Guid? CreatedByUserId,
+        string? CreatedByName,
         DateTime CreatedAt,
         DateTime UpdatedAt,
         IEnumerable<MessageDto> Messages);
 
-    private sealed record MessageDto(Guid Id, Guid? AuthorUserId, string Body, DateTime CreatedAt);
+    private sealed record MessageDto(Guid Id, Guid? AuthorUserId, string? AuthorName, string Body, DateTime CreatedAt);
     private sealed record CreateTicketRequest(string Subject, string Body, Guid? RecordId, string? PageContext);
     private sealed record ReplyRequest(string Body);
     private sealed record AssignRequest(Guid? AssignedToUserId, string? AssignedRole);
@@ -88,11 +92,31 @@ public static class SupportEndpoints
                 t.AssignedToUserId == userId);
         }
 
-        var items = await query
+        var itemsRaw = await query
             .OrderByDescending(t => t.UpdatedAt)
             .Take(200)
-            .Select(t => new TicketDto(t.Id, t.Subject, t.Status, t.AssignedRole, t.AssignedToUserId, t.CreatedByUserId, t.CreatedAt, t.UpdatedAt))
             .ToListAsync(token);
+
+        var userIds = itemsRaw
+            .SelectMany(t => new[] { t.CreatedByUserId, t.AssignedToUserId }.Where(id => id.HasValue).Select(id => id!.Value))
+            .Distinct()
+            .ToList();
+        var userLookup = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email, token);
+
+        var items = itemsRaw.Select(t =>
+            new TicketDto(
+                t.Id,
+                t.Subject,
+                t.Status,
+                t.AssignedRole,
+                t.AssignedToUserId,
+                t.AssignedToUserId.HasValue && userLookup.TryGetValue(t.AssignedToUserId.Value, out var an) ? an : null,
+                t.CreatedByUserId,
+                t.CreatedByUserId.HasValue && userLookup.TryGetValue(t.CreatedByUserId.Value, out var cn) ? cn : null,
+                t.CreatedAt,
+                t.UpdatedAt)).ToList();
 
         return Results.Ok(items);
     }
@@ -109,6 +133,13 @@ public static class SupportEndpoints
             return Results.NotFound();
         }
 
+        var ids = ticket.Messages.Select(m => m.AuthorUserId).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        if (ticket.CreatedByUserId.HasValue) ids.Add(ticket.CreatedByUserId.Value);
+        if (ticket.AssignedToUserId.HasValue) ids.Add(ticket.AssignedToUserId.Value);
+        var userLookup = await db.Users.AsNoTracking()
+            .Where(u => ids.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email, token);
+
         var dto = new TicketDetailDto(
             ticket.Id,
             ticket.Subject,
@@ -116,10 +147,18 @@ public static class SupportEndpoints
             ticket.Status,
             ticket.AssignedRole,
             ticket.AssignedToUserId,
+            ticket.AssignedToUserId.HasValue && userLookup.TryGetValue(ticket.AssignedToUserId.Value, out var an) ? an : null,
             ticket.CreatedByUserId,
+            ticket.CreatedByUserId.HasValue && userLookup.TryGetValue(ticket.CreatedByUserId.Value, out var cn) ? cn : null,
             ticket.CreatedAt,
             ticket.UpdatedAt,
-            ticket.Messages.Select(m => new MessageDto(m.Id, m.AuthorUserId, m.Body, m.CreatedAt)).ToList());
+            ticket.Messages.Select(m =>
+                new MessageDto(
+                    m.Id,
+                    m.AuthorUserId,
+                    m.AuthorUserId.HasValue && userLookup.TryGetValue(m.AuthorUserId.Value, out var mn) ? mn : null,
+                    m.Body,
+                    m.CreatedAt)).ToList());
 
         return Results.Ok(dto);
     }
