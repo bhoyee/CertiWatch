@@ -47,7 +47,13 @@ export async function patchJson<TResponse, TBody extends Record<string, unknown>
     throw new Error(await parseError(response));
   }
 
-  return (await response.json()) as TResponse;
+  // Some endpoints legitimately return 204/empty body (we still treat that as success).
+  const text = await response.text();
+  if (!text) {
+    return undefined as TResponse;
+  }
+
+  return JSON.parse(text) as TResponse;
 }
 
 export async function deleteJson(path: string): Promise<void> {

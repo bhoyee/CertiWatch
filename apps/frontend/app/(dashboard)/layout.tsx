@@ -298,6 +298,7 @@ function NavLinks({
   onClick?: () => void;
 }) {
   const [reviewCount, setReviewCount] = useState<number>(0);
+  const [supportCount, setSupportCount] = useState<number>(0);
   const pathname = usePathname();
   const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
   const roleLower = role?.toLowerCase();
@@ -333,10 +334,32 @@ function NavLinks({
     };
   }, [isViewer, roleLoading]);
 
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const tickets = await fetchJson<Array<{ status: string }>>("/api/support/tickets");
+        if (active) {
+          const count = tickets.filter((t) => t.status === "open" || t.status === "pending").length;
+          setSupportCount(count);
+        }
+      } catch {
+        if (active) setSupportCount(0);
+      }
+    };
+    load();
+    const id = setInterval(load, 8000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <nav className="space-y-1">
       {filteredItems.map((item) => {
         const showBadge = item.href === "/review" && reviewCount > 0;
+        const showSupportBadge = item.href === "/support" && supportCount > 0;
         const active = pathname?.startsWith(item.href);
         const disabled = isBlocked && !allowedWhenBlocked.has(item.href);
         return (
@@ -356,14 +379,14 @@ function NavLinks({
             onClickCapture={(event) => {
               if (disabled) event.preventDefault();
             }}
-          >
+            >
             <span className="flex items-center gap-2">
               <NavIcon name={item.icon} active={active} />
               {item.label}
             </span>
-            {showBadge && (
+            {(showBadge || showSupportBadge) && (
               <span className="ml-2 rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">
-                {reviewCount}
+                {showBadge ? reviewCount : supportCount}
               </span>
             )}
           </Link>

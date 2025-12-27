@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson, postJson, patchJson } from "../../../lib/api";
@@ -256,7 +256,7 @@ export default function SupportPage() {
                     </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs text-slate-600">
-                    <span>Assigned: {t.assignedToName || t.assignedRole || "—"}</span>
+                    <span>Assigned: {t.assignedToName || t.assignedRole || "Unassigned"}</span>
                     <span>{new Date(t.updatedAt).toLocaleString()}</span>
                   </div>
                 </button>
@@ -275,7 +275,7 @@ export default function SupportPage() {
               <h2 className="text-lg font-semibold text-slate-900">{detail?.subject || "Select a ticket"}</h2>
               {detail && (
                 <p className="mt-1 text-xs text-slate-600">
-                  Created {new Date(detail.createdAt).toLocaleString()} by {detail.createdByName ?? detail.createdByUserId ?? "Unknown"} • Updated {new Date(detail.updatedAt).toLocaleString()}
+                  Created {new Date(detail.createdAt).toLocaleString()} by {detail.createdByName ?? detail.createdByUserId ?? "Unknown"} - Updated {new Date(detail.updatedAt).toLocaleString()}
                 </p>
               )}
             </div>
@@ -289,13 +289,13 @@ export default function SupportPage() {
                     : "bg-emerald-100 text-emerald-700"
                 }`}>{detail.status}</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-                  assigned: {detail.assignedToName || detail.assignedRole || "—"}
+                  assigned: {detail.assignedToName || detail.assignedRole || "Unassigned"}
                 </span>
               </div>
             )}
           </div>
 
-          {detailLoading && <div className="mt-4 text-sm text-slate-600">Loading…</div>}
+          {detailLoading && <div className="mt-4 text-sm text-slate-600">Loadingâ€¦</div>}
 
           {detail && !detailLoading && (
             <div className="mt-4 space-y-4">
@@ -372,3 +372,26 @@ export default function SupportPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
