@@ -283,30 +283,30 @@ export default function SupportPage() {
               )}
             </div>
 
-            {filteredTickets.length > 0 && (
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
-                <span>
-                  Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filteredTickets.length)} of {filteredTickets.length}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                  >
-                    Prev
-                  </button>
-                  <span className="text-slate-700">Page {page} / {totalPages}</span>
-                  <button
-                    className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+              <span>
+                {filteredTickets.length === 0
+                  ? "No tickets"
+                  : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, filteredTickets.length)} of ${filteredTickets.length}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1 || filteredTickets.length === 0}
+                >
+                  Prev
+                </button>
+                <span className="text-slate-700">Page {page} / {totalPages}</span>
+                <button
+                  className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages || filteredTickets.length === 0}
+                >
+                  Next
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
