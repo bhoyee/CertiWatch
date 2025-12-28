@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { fetchJson, postJson } from "../../lib/api";
+import { fetchJson, postJson } from "../lib/api";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
 
@@ -29,6 +29,9 @@ type ProfileDto = {
 
 const navItems = [
   { href: "/platform/tenants", label: "Platform", icon: "shield", superOnly: true },
+  { href: "/platform/billing", label: "Platform Billing", icon: "credit", superOnly: true },
+  { href: "/platform/usage", label: "Platform Usage", icon: "chart", superOnly: true },
+  { href: "/platform/support", label: "Platform Support", icon: "life-buoy", superOnly: true },
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
   { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
