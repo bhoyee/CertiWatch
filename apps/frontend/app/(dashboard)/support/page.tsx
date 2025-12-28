@@ -63,6 +63,8 @@ export default function SupportPage() {
   const [updatingAssign, setUpdatingAssign] = useState(false);
 
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const filteredTickets = useMemo(() => {
     if (filter === "open") return tickets.filter(t => t.status === "open");
@@ -71,9 +73,23 @@ export default function SupportPage() {
     return tickets;
   }, [tickets, filter]);
 
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredTickets.length / pageSize)), [filteredTickets.length]);
+  const pagedTickets = useMemo(
+    () => filteredTickets.slice((page - 1) * pageSize, page * pageSize),
+    [filteredTickets, page, pageSize]
+  );
+
   useEffect(() => {
     void loadTickets();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    setPage(p => Math.min(Math.max(p, 1), totalPages));
+  }, [totalPages]);
 
   async function loadTickets() {
     setTicketsLoading(true);
@@ -81,6 +97,7 @@ export default function SupportPage() {
     try {
       const data = await fetchJson<Ticket[]>("/api/support/tickets");
       setTickets(data);
+      setPage(1);
       if (data.length && !detail) {
         void loadDetail(data[0].id);
       }
@@ -235,7 +252,7 @@ export default function SupportPage() {
               </div>
             </div>
             <div className="max-h-[520px] divide-y divide-slate-200 overflow-y-auto">
-              {filteredTickets.map(t => (
+              {pagedTickets.map(t => (
                 <button
                   key={t.id}
                   onClick={() => void loadDetail(t.id)}
@@ -265,6 +282,31 @@ export default function SupportPage() {
                 <div className="px-4 py-6 text-center text-sm text-slate-600">No tickets yet.</div>
               )}
             </div>
+
+            {filteredTickets.length > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+                <span>
+                  Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filteredTickets.length)} of {filteredTickets.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-slate-700">Page {page} / {totalPages}</span>
+                  <button
+                    className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
