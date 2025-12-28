@@ -2,7 +2,7 @@ import { fetchJson } from "../../../../lib/api";
 
 type DayStat = { date: string; count: number };
 type TenantStat = { tenantId: string; name: string; total: number; needsReview: number };
-type Health = { postgres: string; worker: string; ocr: string; queueDepth: number };
+type Health = { postgres: string; redis: string; worker: string; ocr: string; queueDepth: number; queueDepthTrend: number[] };
 
 type UsageOverview = {
   totalRecords: number;
@@ -93,7 +93,7 @@ export default async function PlatformUsagePage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Health</h2>
-              <p className="text-sm text-slate-500">Workers, OCR and queue depth</p>
+              <p className="text-sm text-slate-500">Workers, OCR, Redis, queue depth</p>
             </div>
             <StatusBadge
               label={data.health.postgres}
@@ -101,6 +101,12 @@ export default async function PlatformUsagePage() {
             />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <HealthCard
+              label="Redis"
+              status={data.health.redis}
+              tone={data.health.redis.toLowerCase() === "ok" ? "green" : "amber"}
+              hint="Cache & queues"
+            />
             <HealthCard
               label="Worker"
               status={data.health.worker}
@@ -120,6 +126,22 @@ export default async function PlatformUsagePage() {
               hint="Pending jobs"
             />
           </div>
+          {data.health.queueDepthTrend?.length ? (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-slate-500">Queue depth trend (last 7 days)</p>
+              <div className="flex items-end gap-1">
+                {data.health.queueDepthTrend.map((v, idx) => {
+                  const max = Math.max(...data.health.queueDepthTrend, 1);
+                  const h = Math.max(6, Math.round((v / max) * 50));
+                  return (
+                    <div key={idx} className="w-8 rounded-t bg-emerald-500" style={{ height: `${h}px` }}>
+                      <span className="sr-only">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
