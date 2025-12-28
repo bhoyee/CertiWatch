@@ -100,7 +100,7 @@ export default function PlatformSupportPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-7 gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="grid grid-cols-8 gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <span>Tenant</span>
           <span>Subject</span>
           <span>Status</span>
@@ -108,6 +108,7 @@ export default function PlatformSupportPage() {
           <span>Created by</span>
           <span>Created</span>
           <span>Updated</span>
+          <span>Actions</span>
         </div>
         {loading && <div className="px-4 py-6 text-center text-sm text-slate-600">Loading tickets…</div>}
         {error && !loading && <div className="px-4 py-6 text-center text-sm text-rose-600">{error}</div>}
@@ -119,7 +120,7 @@ export default function PlatformSupportPage() {
           tickets.map((t) => (
             <div
               key={t.id}
-              className="grid grid-cols-7 gap-3 border-b border-slate-100 px-4 py-3 text-sm text-slate-800"
+              className="grid grid-cols-8 gap-3 border-b border-slate-100 px-4 py-3 text-sm text-slate-800"
             >
               <span className="font-semibold text-slate-900">{t.tenantName}</span>
               <span className="truncate" title={t.subject}>
@@ -130,6 +131,15 @@ export default function PlatformSupportPage() {
               <span>{t.createdByName ?? "Unknown"}</span>
               <span>{new Date(t.createdAt).toLocaleString()}</span>
               <span>{new Date(t.updatedAt).toLocaleString()}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled
+                  title="Escalation controls hook into the API; coming soon."
+                  className="cursor-not-allowed rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500"
+                >
+                  Escalate
+                </button>
+              </div>
             </div>
           ))}
       </div>
