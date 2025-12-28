@@ -163,7 +163,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="flex min-h-screen">
           <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
             <Logo />
-            <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} />
+            <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} userId={userId} />
           </aside>
           <main className="flex-1 px-4 py-6 md:px-10">
             <div className="mb-4 flex items-center justify-between md:hidden">
@@ -177,7 +177,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             {open && (
               <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
-                <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} onClick={() => setOpen(false)} />
+                <NavLinks
+                  isBlocked={isBlocked}
+                  role={role}
+                  roleLoading={roleLoading}
+                  userId={userId}
+                  onClick={() => setOpen(false)}
+                />
               </div>
             )}
             <TopBar isBlocked={isBlocked} role={role} onShowTour={() => setShowTour(true)} />
@@ -297,11 +303,13 @@ function NavLinks({
   isBlocked,
   role,
   roleLoading,
+  userId,
   onClick
 }: {
   isBlocked: boolean;
   role: string | null;
   roleLoading: boolean;
+  userId?: string | null;
   onClick?: () => void;
 }) {
   const [reviewCount, setReviewCount] = useState<number>(0);
