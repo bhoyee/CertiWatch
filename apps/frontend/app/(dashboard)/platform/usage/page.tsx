@@ -30,6 +30,7 @@ function StatusBadge({ label, tone }: { label: string; tone?: "green" | "amber" 
 
 export default async function PlatformUsagePage() {
   const data = await getUsage();
+  const maxCount = data.last7Days.length ? Math.max(...data.last7Days.map((d) => d.count)) : 1;
 
   const cards = [
     { label: "Total records", value: data.totalRecords },
@@ -71,35 +72,53 @@ export default async function PlatformUsagePage() {
           ) : (
             <div className="mt-3 space-y-2">
               {data.last7Days.map((d) => (
-                <div key={d.date} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                  <span className="text-sm text-slate-600">{new Date(d.date).toLocaleDateString()}</span>
-                  <span className="text-sm font-semibold text-slate-900">{d.count}</span>
+                <div key={d.date} className="space-y-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>{new Date(d.date).toLocaleDateString()}</span>
+                    <span className="font-semibold text-slate-900">{d.count}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white">
+                    <div
+                      className="h-full rounded-full bg-emerald-500"
+                      style={{ width: `${Math.max(8, Math.round((d.count / maxCount) * 100))}%` }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Health</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Health</h2>
+              <p className="text-sm text-slate-500">Workers, OCR and queue depth</p>
+            </div>
             <StatusBadge
               label={data.health.postgres}
               tone={data.health.postgres.toLowerCase() === "ok" ? "green" : "red"}
             />
           </div>
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-              <span className="text-slate-600">Worker</span>
-              <StatusBadge
-                label={data.health.worker}
-                tone={data.health.worker.toLowerCase() === "ok" ? "green" : "amber"}
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-              <span className="text-slate-600">OCR</span>
-              <StatusBadge label={data.health.ocr} tone={data.health.ocr.toLowerCase() === "ok" ? "green" : "amber"} />
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <HealthCard
+              label="Worker"
+              status={data.health.worker}
+              tone={data.health.worker.toLowerCase() === "ok" ? "green" : "amber"}
+              hint="Ingestion + notifications"
+            />
+            <HealthCard
+              label="OCR"
+              status={data.health.ocr}
+              tone={data.health.ocr.toLowerCase() === "ok" ? "green" : "amber"}
+              hint="PaddleOCR extraction"
+            />
+            <HealthCard
+              label="Queue depth"
+              status={`${data.health.queueDepth}`}
+              tone={data.health.queueDepth > 50 ? "amber" : "green"}
+              hint="Pending jobs"
+            />
           </div>
         </div>
       </div>
@@ -134,6 +153,28 @@ export default async function PlatformUsagePage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function HealthCard({
+  label,
+  status,
+  tone,
+  hint
+}: {
+  label: string;
+  status: string;
+  tone: "green" | "amber" | "red" | "slate";
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">{label}</p>
+        {hint && <p className="text-xs text-slate-500">{hint}</p>}
+      </div>
+      <StatusBadge label={status} tone={tone} />
     </div>
   );
 }
