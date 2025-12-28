@@ -28,6 +28,7 @@ type ProfileDto = {
 };
 
 const navItems = [
+  { href: "/platform/tenants", label: "Platform", icon: "shield", superOnly: true },
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
   { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
@@ -322,6 +323,7 @@ function NavLinks({
     return navItems.filter((item) => {
       if (isViewer && item.viewerHidden) return false;
       if (roleLower === "manager" && item.managerHidden) return false;
+      if (item.superOnly && roleLower !== "superadmin") return false;
       return true;
     });
   }, [isViewer, roleLower]);
