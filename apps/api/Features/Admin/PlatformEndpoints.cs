@@ -515,10 +515,21 @@ public static class PlatformEndpoints
             .Select(d => d.ProcessedAt ?? d.CreatedAt)
             .FirstOrDefaultAsync(token);
 
+        string postgresStatus;
+        try
+        {
+            var canConnect = await db.Database.CanConnectAsync(token);
+            postgresStatus = canConnect ? "ok" : "down";
+        }
+        catch
+        {
+            postgresStatus = "down";
+        }
+
         var health = new
         {
-            Postgres = "ok",
-            Redis = "ok",
+            Postgres = postgresStatus,
+            Redis = "unknown", // No live Redis probe wired; can be enhanced with a ping if a client is registered.
             Worker = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "stale",
             Ocr = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "unknown",
             QueueDepth = pendingRecords,
