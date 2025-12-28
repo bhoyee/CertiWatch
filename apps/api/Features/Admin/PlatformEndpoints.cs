@@ -22,6 +22,7 @@ public static class PlatformEndpoints
         group.MapPost("/tenants/{id:guid}/reset-subscription", ResetSubscriptionAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/magic-link", SendMagicLinkAsync);
         group.MapGet("/support/tickets", ListSupportTicketsAsync);
+        group.MapPost("/support/tickets/{id:guid}/status", UpdateSupportTicketAsync);
         group.MapGet("/billing/overview", BillingOverviewAsync);
         group.MapPost("/billing/invoices/{invoiceId}/resend", ResendInvoiceAsync);
         group.MapPost("/billing/subscriptions/{id}/cancel", CancelSubscriptionAsync);
@@ -517,9 +518,11 @@ public static class PlatformEndpoints
         var health = new
         {
             Postgres = "ok",
+            Redis = "ok",
             Worker = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "stale",
             Ocr = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "unknown",
-            QueueDepth = pendingRecords
+            QueueDepth = pendingRecords,
+            QueueDepthTrend = last7.Select(l => l.Count)
         };
 
         var dto = new
@@ -540,6 +543,40 @@ public static class PlatformEndpoints
         };
 
         return Results.Ok(dto);
+    }
+
+    #endregion
+
+    #region Support actions
+
+    private sealed record UpdateTicketRequest(string? Status, Guid? AssignedToUserId);
+
+    private static async Task<IResult> UpdateSupportTicketAsync(
+        Guid id,
+        UpdateTicketRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+        var ticket = await db.SupportTickets.FirstOrDefaultAsync(t => t.Id == id, token);
+        if (ticket is null) return Results.NotFound();
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            ticket.Status = request.Status.Trim().ToLowerInvariant();
+        }
+
+        if (request.AssignedToUserId.HasValue)
+        {
+            ticket.AssignedToUserId = request.AssignedToUserId;
+        }
+
+        ticket.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, ticket.TenantId, accessor, "platform_support_update", new { ticketId = id, request.Status, request.AssignedToUserId }, token);
+
+        return Results.NoContent();
     }
 
     #endregion
