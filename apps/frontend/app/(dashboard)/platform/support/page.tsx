@@ -32,6 +32,7 @@ export default function PlatformSupportPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const tenantId = search.get("tenantId") ?? "";
   const status = search.get("status") ?? "";
@@ -70,6 +71,22 @@ export default function PlatformSupportPage() {
     if (nextTenantId) qs.set("tenantId", nextTenantId);
     if (nextStatus) qs.set("status", nextStatus);
     router.push(`/platform/support${qs.toString() ? `?${qs}` : ""}`);
+  };
+
+  const updateTicket = async (id: string, status: string) => {
+    setBusyId(id);
+    try {
+      await fetch("/api/platform/support/tickets/" + id + "/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t)));
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to update ticket");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const tenantOptions = useMemo(() => [{ id: "", name: "All tenants" }, ...tenants], [tenants]);
@@ -132,13 +149,16 @@ export default function PlatformSupportPage() {
               <span>{new Date(t.createdAt).toLocaleString()}</span>
               <span>{new Date(t.updatedAt).toLocaleString()}</span>
               <div className="flex items-center gap-2">
-                <button
-                  disabled
-                  title="Escalation controls hook into the API; coming soon."
-                  className="cursor-not-allowed rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500"
-                >
-                  Escalate
-                </button>
+                <ActionButton
+                  label="Set pending"
+                  onClick={() => updateTicket(t.id, "pending")}
+                  disabled={busyId === t.id}
+                />
+                <ActionButton
+                  label="Close"
+                  onClick={() => updateTicket(t.id, "closed")}
+                  disabled={busyId === t.id}
+                />
               </div>
             </div>
           ))}
@@ -159,6 +179,18 @@ function StatusBadge({ value }: { value: string }) {
       : "bg-slate-100 text-slate-700";
   return (
     <span className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{value ?? "unknown"}</span>
+  );
+}
+
+function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {label}
+    </button>
   );
 }
 
