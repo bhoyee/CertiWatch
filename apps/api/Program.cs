@@ -143,6 +143,7 @@ app.UseMiddleware<SubscriptionGateMiddleware>();
 
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();
+app.MapPlatformEndpoints();
 app.MapDeviceEndpoints();
 app.MapSourceEndpoints();
 app.MapRecordEndpoints();
