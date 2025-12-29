@@ -519,13 +519,18 @@ public static class PlatformEndpoints
 
         var opts = stripeOptions.Value;
         var subService = new SubscriptionService();
-        var list = await subService.ListAsync(new SubscriptionListOptions
-        {
-            Status = "all",
-            Limit = 100
-        }, cancellationToken: token);
 
-        var subs = list.Data ?? new List<Subscription>();
+        // Fetch all subscriptions (beyond the 100 item Stripe limit) for accurate metrics
+        var allSubs = new List<Subscription>();
+        await foreach (var s in subService.ListAutoPagingAsync(new SubscriptionListOptions
+        {
+            Status = "all"
+        }, cancellationToken: token))
+        {
+            allSubs.Add(s);
+        }
+
+        var subs = allSubs;
         var customerIds = subs
             .Where(s => !string.IsNullOrWhiteSpace(s.CustomerId))
             .Select(s => s.CustomerId!)
@@ -574,18 +579,29 @@ public static class PlatformEndpoints
     private static async Task<IResult> ListSubscriptionsAsync(
         AppDbContext db,
         ITenantContextAccessor accessor,
+        int? page,
+        int? pageSize,
         CancellationToken token)
     {
         if (!IsSuperAdmin(accessor)) return Results.Forbid();
 
         var subService = new SubscriptionService();
-        var list = await subService.ListAsync(new SubscriptionListOptions
-        {
-            Status = "all",
-            Limit = 100
-        }, cancellationToken: token);
 
-        var subs = list.Data ?? new List<Subscription>();
+        // Fetch all, then page locally to allow >100 items
+        var allSubs = new List<Subscription>();
+        await foreach (var s in subService.ListAutoPagingAsync(new SubscriptionListOptions
+        {
+            Status = "all"
+        }, cancellationToken: token))
+        {
+            allSubs.Add(s);
+        }
+
+        var size = Math.Clamp(pageSize ?? 100, 10, 200);
+        var pageNumber = Math.Max(page ?? 1, 1);
+        var skip = (pageNumber - 1) * size;
+
+        var subs = allSubs.Skip(skip).Take(size).ToList();
         var customerIds = subs.Where(s => !string.IsNullOrWhiteSpace(s.CustomerId)).Select(s => s.CustomerId!).Distinct().ToList();
         var tenantNames = await db.Tenants.AsNoTracking()
             .Where(t => !string.IsNullOrWhiteSpace(t.StripeCustomerId) && customerIds.Contains(t.StripeCustomerId!))
@@ -614,23 +630,30 @@ public static class PlatformEndpoints
                 s.CancelAtPeriodEnd == true);
         });
 
-        return Results.Ok(dtos);
+        return Results.Ok(new { total = allSubs.Count, items = dtos });
     }
 
     private static async Task<IResult> ListInvoicesAsync(
         AppDbContext db,
         ITenantContextAccessor accessor,
+        int? page,
+        int? pageSize,
         CancellationToken token)
     {
         if (!IsSuperAdmin(accessor)) return Results.Forbid();
 
         var invoiceService = new InvoiceService();
-        var list = await invoiceService.ListAsync(new InvoiceListOptions
+        var allInvoices = new List<Invoice>();
+        await foreach (var i in invoiceService.ListAutoPagingAsync(new InvoiceListOptions(), cancellationToken: token))
         {
-            Limit = 100
-        }, cancellationToken: token);
+            allInvoices.Add(i);
+        }
 
-        var invoices = list.Data ?? new List<Invoice>();
+        var size = Math.Clamp(pageSize ?? 100, 10, 200);
+        var pageNumber = Math.Max(page ?? 1, 1);
+        var skip = (pageNumber - 1) * size;
+
+        var invoices = allInvoices.Skip(skip).Take(size).ToList();
         var customerIds = invoices.Where(i => !string.IsNullOrWhiteSpace(i.CustomerId)).Select(i => i.CustomerId!).Distinct().ToList();
         var tenantNames = await db.Tenants.AsNoTracking()
             .Where(t => !string.IsNullOrWhiteSpace(t.StripeCustomerId) && customerIds.Contains(t.StripeCustomerId!))
@@ -649,7 +672,7 @@ public static class PlatformEndpoints
             i.InvoicePdf,
             i.HostedInvoiceUrl));
 
-        return Results.Ok(dtos);
+        return Results.Ok(new { total = allInvoices.Count, items = dtos });
     }
 
     private static async Task<IResult> ResendInvoiceAsync(
