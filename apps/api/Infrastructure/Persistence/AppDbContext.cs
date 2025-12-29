@@ -20,6 +20,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UploadRequest> UploadRequests => Set<UploadRequest>();
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -105,6 +106,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(m => m.AuthorUserId);
             entity.Property(m => m.Body).HasColumnType("text");
+        });
+
+        modelBuilder.Entity<ApiKey>(entity =>
+        {
+            entity.HasIndex(k => new { k.TenantId, k.IsRevoked });
+            entity.HasIndex(k => k.Key).IsUnique();
+            entity.Property(k => k.Key).HasMaxLength(256);
+            entity.Property(k => k.Name).HasMaxLength(128);
         });
 
         SeedGlobalRules(modelBuilder);

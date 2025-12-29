@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fetchJson } from "../../../../../lib/api";
-import { ActionButtons, SendLinkButton } from "./ClientActions";
+import { ActionButtons, SendLinkButton, UserStatusButtons } from "./ClientActions";
+import { ApiKeysClient } from "./ApiKeysClient";
 
 type TenantDetail = {
   id: string;
@@ -17,6 +18,7 @@ type TenantDetail = {
   userCount: number;
   deviceCount: number;
   sourceCount: number;
+  apiKeys: { id: string; name: string; key: string; isRevoked: boolean; createdAt: string }[];
   users: { id: string; email: string; name?: string | null; role: string; isDisabled: boolean; createdAt: string }[];
   devices: { id: string; name: string; status: string; createdAt: string; lastSeenAt?: string | null }[];
   sources: { id: string; displayName: string; type: string; createdAt: string }[];
@@ -77,6 +79,10 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
         <StatCard label="Created" value={formatDate(tenant.createdAtUtc)} />
         <StatCard label="Stripe Customer" value={tenant.stripeCustomerId ?? "—"} />
       </div>
+
+      <Section title="API keys">
+        <ApiKeysClient tenantId={tenant.id} initialKeys={tenant.apiKeys} />
+      </Section>
 
       <Section title="Users">
         <UsersTable tenantId={tenant.id} users={tenant.users} />
@@ -145,8 +151,9 @@ function UsersTable({ users, tenantId }: { users: TenantDetail["users"]; tenantI
           <span className="capitalize">{u.role}</span>
           <span className={u.isDisabled ? "text-amber-700" : "text-emerald-700"}>{u.isDisabled ? "disabled" : "active"}</span>
           <span>{new Date(u.createdAt).toLocaleDateString()}</span>
-          <span className="text-right">
+          <span className="text-right space-y-1">
             <SendLinkButton tenantId={tenantId} userId={u.id} />
+            <UserStatusButtons tenantId={tenantId} userId={u.id} isDisabled={u.isDisabled} />
           </span>
         </div>
       ))}

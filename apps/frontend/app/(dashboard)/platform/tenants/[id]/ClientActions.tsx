@@ -74,3 +74,48 @@ export function SendLinkButton({ tenantId, userId }: { tenantId: string; userId:
     </button>
   );
 }
+
+export function UserStatusButtons({ tenantId, userId, isDisabled }: { tenantId: string; userId: string; isDisabled: boolean }) {
+  const [pending, start] = useTransition();
+  const [localDisabled, setLocalDisabled] = useState(isDisabled);
+
+  const call = (action: "disable" | "enable" | "force-reset") => {
+    start(async () => {
+      await fetch(`/api/platform/tenants/${tenantId}/users/${userId}/${action}`, {
+        method: "POST",
+        credentials: "include"
+      });
+      if (action === "disable") setLocalDisabled(true);
+      if (action === "enable") setLocalDisabled(false);
+    });
+  };
+
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <button
+        onClick={() => call("force-reset")}
+        disabled={pending}
+        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+      >
+        Force reset
+      </button>
+      {localDisabled ? (
+        <button
+          onClick={() => call("enable")}
+          disabled={pending}
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+        >
+          Enable
+        </button>
+      ) : (
+        <button
+          onClick={() => call("disable")}
+          disabled={pending}
+          className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+        >
+          Disable
+        </button>
+      )}
+    </div>
+  );
+}

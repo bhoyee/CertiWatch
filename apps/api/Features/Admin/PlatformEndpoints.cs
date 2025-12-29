@@ -21,6 +21,9 @@ public static class PlatformEndpoints
         group.MapPost("/tenants/{id:guid}/suspend", SuspendTenantAsync);
         group.MapPost("/tenants/{id:guid}/resume", ResumeTenantAsync);
         group.MapPost("/tenants/{id:guid}/reset-subscription", ResetSubscriptionAsync);
+        group.MapGet("/tenants/{id:guid}/api-keys", ListApiKeysAsync);
+        group.MapPost("/tenants/{id:guid}/api-keys", CreateApiKeyAsync);
+        group.MapPost("/api-keys/{keyId:guid}/revoke", RevokeApiKeyAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/magic-link", SendMagicLinkAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/disable", DisableUserAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/enable", EnableUserAsync);
@@ -42,6 +45,23 @@ public static class PlatformEndpoints
 
     private static bool IsSuperAdmin(ITenantContextAccessor accessor) =>
         string.Equals(accessor.Current.Role, "superadmin", StringComparison.OrdinalIgnoreCase);
+
+    private static Task EnsureApiKeysTableAsync(AppDbContext db, CancellationToken token) =>
+        db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ApiKeys"(
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "TenantId" uuid NOT NULL,
+                "Name" varchar(128) NOT NULL,
+                "Key" varchar(256) NOT NULL,
+                "IsRevoked" boolean NOT NULL DEFAULT false,
+                "CreatedAt" timestamp without time zone NOT NULL,
+                "UpdatedAt" timestamp without time zone NOT NULL,
+                CONSTRAINT api_keys_key_unique UNIQUE("Key")
+            );
+            CREATE INDEX IF NOT EXISTS idx_apikeys_tenant_revoked ON "ApiKeys"("TenantId","IsRevoked");
+            """,
+            cancellationToken: token);
 
     private static async Task LogAuditAsync(AppDbContext db, Guid tenantId, ITenantContextAccessor accessor, string action, object meta, CancellationToken token)
     {
@@ -123,6 +143,13 @@ public static class PlatformEndpoints
             .Select(s => new { s.Id, s.DisplayName, s.Type, s.CreatedAt })
             .ToListAsync(token);
 
+        await EnsureApiKeysTableAsync(db, token);
+        var apiKeys = await db.ApiKeys.AsNoTracking()
+            .Where(k => k.TenantId == id)
+            .OrderByDescending(k => k.CreatedAt)
+            .Select(k => new { k.Id, k.Name, k.Key, k.IsRevoked, k.CreatedAt })
+            .ToListAsync(token);
+
         var recentRecords = await db.Records.AsNoTracking()
             .Where(r => r.TenantId == id)
             .OrderByDescending(r => r.CreatedAt)
@@ -148,8 +175,64 @@ public static class PlatformEndpoints
             Users = users,
             Devices = devices,
             Sources = sources,
+            ApiKeys = apiKeys,
             RecentRecords = recentRecords
         });
+    }
+
+    private static async Task<IResult> ListApiKeysAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+        await EnsureApiKeysTableAsync(db, token);
+        var keys = await db.ApiKeys.AsNoTracking()
+            .Where(k => k.TenantId == id)
+            .OrderByDescending(k => k.CreatedAt)
+            .Select(k => new { k.Id, k.Name, k.Key, k.IsRevoked, k.CreatedAt })
+            .ToListAsync(token);
+        return Results.Ok(keys);
+    }
+
+    private static async Task<IResult> CreateApiKeyAsync(
+        Guid id,
+        HttpContext http,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+        await EnsureApiKeysTableAsync(db, token);
+        var body = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(http.Request.Body, cancellationToken: token) ?? new();
+        var name = body.TryGetValue("name", out var n) ? n?.Trim() : string.Empty;
+        if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest(new { error = "Name is required" });
+
+        var key = $"cw_{Guid.NewGuid():N}";
+        var now = DateTime.UtcNow;
+        db.ApiKeys.Add(new Domain.Entities.ApiKey
+        {
+            Id = Guid.NewGuid(),
+            TenantId = id,
+            Name = name,
+            Key = key,
+            IsRevoked = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, id, accessor, "platform_create_api_key", new { tenantId = id, name }, token);
+        return Results.Ok(new { key });
+    }
+
+    private static async Task<IResult> RevokeApiKeyAsync(Guid keyId, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+        await EnsureApiKeysTableAsync(db, token);
+        var key = await db.ApiKeys.FirstOrDefaultAsync(k => k.Id == keyId, token);
+        if (key is null) return Results.NotFound();
+        key.IsRevoked = true;
+        key.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, key.TenantId, accessor, "platform_revoke_api_key", new { keyId }, token);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> SuspendTenantAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
@@ -303,6 +386,7 @@ public static class PlatformEndpoints
         string Subject,
         string Status,
         string AssignedRole,
+        Guid? AssignedToUserId,
         string? AssignedToName,
         string? CreatedByName,
         DateTime CreatedAt,
@@ -346,7 +430,8 @@ public static class PlatformEndpoints
             tenants.TryGetValue(t.TenantId, out var tn) ? tn : "Unknown",
             t.Subject,
             t.Status,
-            t.AssignedRole,
+            string.IsNullOrWhiteSpace(t.AssignedRole) ? "unassigned" : t.AssignedRole!,
+            t.AssignedToUserId,
             t.AssignedToUserId.HasValue && users.TryGetValue(t.AssignedToUserId.Value, out var an) ? an : null,
             t.CreatedByUserId.HasValue && users.TryGetValue(t.CreatedByUserId.Value, out var cn) ? cn : null,
             t.CreatedAt,
@@ -568,6 +653,13 @@ public static class PlatformEndpoints
             .OrderBy(g => g.Date)
             .ToListAsync(token);
 
+        var last7Pending = await db.Records.AsNoTracking()
+            .Where(r => r.CreatedAt >= sevenDaysAgo && r.ProcessingStatus == CertiWatch.Contracts.Enums.ProcessingStatus.Pending)
+            .GroupBy(r => r.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .OrderBy(g => g.Date)
+            .ToListAsync(token);
+
         var perTenant = await db.Records.AsNoTracking()
             .GroupBy(r => r.TenantId)
             .Select(g => new
@@ -636,7 +728,7 @@ public static class PlatformEndpoints
             Worker = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "stale",
             Ocr = ocrStatus,
             QueueDepth = pendingRecords,
-            QueueDepthTrend = last7.Select(l => l.Count)
+            QueueDepthTrend = last7Pending.Count == 0 ? new[] { pendingRecords } : last7Pending.Select(l => l.Count)
         };
 
         var dto = new
@@ -733,7 +825,7 @@ public static class PlatformEndpoints
 
     #region Support actions
 
-    private sealed record UpdateTicketRequest(string? Status, Guid? AssignedToUserId);
+    private sealed record UpdateTicketRequest(string? Status, Guid? AssignedToUserId, string? AssignedRole, bool? Unassign);
 
     private static async Task<IResult> UpdateSupportTicketAsync(
         Guid id,
@@ -751,14 +843,36 @@ public static class PlatformEndpoints
             ticket.Status = request.Status.Trim().ToLowerInvariant();
         }
 
-        if (request.AssignedToUserId.HasValue)
+        if (request.Unassign == true)
+        {
+            ticket.AssignedToUserId = null;
+        }
+        else if (request.AssignedToUserId.HasValue)
         {
             ticket.AssignedToUserId = request.AssignedToUserId;
         }
 
+        if (!string.IsNullOrWhiteSpace(request.AssignedRole))
+        {
+            ticket.AssignedRole = request.AssignedRole.Trim().ToLowerInvariant();
+        }
+
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(token);
-        await LogAuditAsync(db, ticket.TenantId, accessor, "platform_support_update", new { ticketId = id, request.Status, request.AssignedToUserId }, token);
+        await LogAuditAsync(
+            db,
+            ticket.TenantId,
+            accessor,
+            "platform_support_update",
+            new
+            {
+                ticketId = id,
+                request.Status,
+                request.AssignedToUserId,
+                request.AssignedRole,
+                request.Unassign
+            },
+            token);
 
         return Results.NoContent();
     }

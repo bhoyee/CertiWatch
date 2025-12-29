@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -10,6 +10,8 @@ type Ticket = {
   tenantName: string;
   subject: string;
   status: string;
+  assignedRole: string;
+  assignedToUserId?: string | null;
   assignedToName?: string | null;
   createdByName?: string | null;
   createdAt: string;
@@ -33,6 +35,7 @@ export default function PlatformSupportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [savingStatus, setSavingStatus] = useState<string | null>(null);
 
   const tenantId = search.get("tenantId") ?? "";
   const status = search.get("status") ?? "";
@@ -73,19 +76,40 @@ export default function PlatformSupportPage() {
     router.push(`/platform/support${qs.toString() ? `?${qs}` : ""}`);
   };
 
-  const updateTicket = async (id: string, status: string) => {
+  const updateTicket = async (
+    id: string,
+    payload: Partial<Pick<Ticket, "status" | "assignedRole" | "assignedToUserId">> & { unassign?: boolean }
+  ) => {
     setBusyId(id);
+    setSavingStatus(payload.status ?? null);
     try {
       await fetch("/api/platform/support/tickets/" + id + "/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
+        body: JSON.stringify(payload)
       });
-      setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t)));
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: payload.status ?? t.status,
+                assignedRole:
+                  payload.unassign === true
+                    ? "unassigned"
+                    : payload.assignedRole ?? t.assignedRole ?? "unassigned",
+                assignedToUserId: payload.unassign === true ? null : payload.assignedToUserId ?? t.assignedToUserId,
+                assignedToName: payload.unassign === true ? null : t.assignedToName,
+                updatedAt: new Date().toISOString()
+              }
+            : t
+        )
+      );
     } catch (e: any) {
       setError(e?.message ?? "Failed to update ticket");
     } finally {
       setBusyId(null);
+      setSavingStatus(null);
     }
   };
 
@@ -144,21 +168,42 @@ export default function PlatformSupportPage() {
                 {t.subject}
               </span>
               <StatusBadge value={t.status} />
-              <span>{t.assignedToName ?? "Unassigned"}</span>
+              <span className="truncate">
+                {t.assignedToName ?? "Unassigned"}
+                {t.assignedRole ? ` · ${t.assignedRole}` : ""}
+              </span>
               <span>{t.createdByName ?? "Unknown"}</span>
               <span>{new Date(t.createdAt).toLocaleString()}</span>
               <span>{new Date(t.updatedAt).toLocaleString()}</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ActionButton
-                  label="Set pending"
-                  onClick={() => updateTicket(t.id, "pending")}
+                  label="Open"
+                  onClick={() => updateTicket(t.id, { status: "open" })}
+                  disabled={busyId === t.id}
+                />
+                <ActionButton
+                  label="Pending"
+                  onClick={() => updateTicket(t.id, { status: "pending" })}
                   disabled={busyId === t.id}
                 />
                 <ActionButton
                   label="Close"
-                  onClick={() => updateTicket(t.id, "closed")}
+                  onClick={() => updateTicket(t.id, { status: "closed" })}
                   disabled={busyId === t.id}
                 />
+                <ActionButton
+                  label="Escalate"
+                  onClick={() =>
+                    updateTicket(t.id, { assignedRole: "superadmin", assignedToUserId: null, unassign: true })
+                  }
+                  disabled={busyId === t.id}
+                />
+                <ActionButton
+                  label="Unassign"
+                  onClick={() => updateTicket(t.id, { unassign: true })}
+                  disabled={busyId === t.id}
+                />
+                {savingStatus && busyId === t.id && <span className="text-xs text-slate-500">Saving…</span>}
               </div>
             </div>
           ))}
