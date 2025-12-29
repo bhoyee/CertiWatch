@@ -1,6 +1,7 @@
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Sockets;
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Services;
@@ -21,6 +22,9 @@ public static class PlatformEndpoints
         group.MapPost("/tenants/{id:guid}/resume", ResumeTenantAsync);
         group.MapPost("/tenants/{id:guid}/reset-subscription", ResetSubscriptionAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/magic-link", SendMagicLinkAsync);
+        group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/disable", DisableUserAsync);
+        group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/enable", EnableUserAsync);
+        group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/force-reset", ForceResetAsync);
         group.MapGet("/support/tickets", ListSupportTicketsAsync);
         group.MapPost("/support/tickets/{id:guid}/status", UpdateSupportTicketAsync);
         group.MapGet("/billing/overview", BillingOverviewAsync);
@@ -31,6 +35,8 @@ public static class PlatformEndpoints
         group.MapPost("/billing/subscriptions/{id}/move-plan", MoveSubscriptionPlanAsync);
         group.MapPost("/billing/customers/{customerId}/credit", CreateCustomerCreditAsync);
         group.MapGet("/usage/overview", UsageOverviewAsync);
+        group.MapGet("/audit/logs", ListAuditLogsAsync);
+        group.MapGet("/audit/logins", ListLoginActivityAsync);
         return group;
     }
 
@@ -218,6 +224,75 @@ public static class PlatformEndpoints
         await emailService.SendAsync(user.Email, "Your CertiWatch login link", html, token);
 
         await LogAuditAsync(db, tenantId, accessor, "platform_force_magic_link", new { tenantId, userId }, token);
+        return Results.Ok(new { success = true });
+    }
+
+    private static async Task<IResult> DisableUserAsync(
+        Guid tenantId,
+        Guid userId,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
+        if (user is null) return Results.NotFound();
+
+        user.IsDisabled = true;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, tenantId, accessor, "platform_disable_user", new { tenantId, userId }, token);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> EnableUserAsync(
+        Guid tenantId,
+        Guid userId,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
+        if (user is null) return Results.NotFound();
+
+        user.IsDisabled = false;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, tenantId, accessor, "platform_enable_user", new { tenantId, userId }, token);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ForceResetAsync(
+        Guid tenantId,
+        Guid userId,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IOptions<MagicLinkOptions> magicOptions,
+        IEmailTemplateRenderer renderer,
+        IEmailService emailService,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
+        if (user is null) return Results.NotFound();
+
+        var options = magicOptions.Value;
+        var magicToken = Infrastructure.Security.MagicLinkTokenService.CreateToken(
+            user.Email,
+            tenantId,
+            options.Secret,
+            TimeSpan.FromMinutes(options.ExpiryMinutes),
+            purpose: "magic",
+            rememberDevice: false,
+            deviceId: null);
+
+        var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={magicToken}";
+        var html = renderer.RenderMagicLink(user.Email, link);
+        await emailService.SendAsync(user.Email, "Reset your CertiWatch access", html, token);
+
+        await LogAuditAsync(db, tenantId, accessor, "platform_force_reset", new { tenantId, userId }, token);
         return Results.Ok(new { success = true });
     }
 
@@ -515,6 +590,34 @@ public static class PlatformEndpoints
             .Select(d => d.ProcessedAt ?? d.CreatedAt)
             .FirstOrDefaultAsync(token);
 
+        static string ProbeTcp(string host, int port, int timeoutMs = 1500)
+        {
+            try
+            {
+                using var client = new TcpClient();
+                var task = client.ConnectAsync(host, port);
+                var completed = task.Wait(timeoutMs);
+                if (!completed) return "down";
+                return client.Connected ? "ok" : "down";
+            }
+            catch
+            {
+                return "down";
+            }
+        }
+
+        var redisHost = Environment.GetEnvironmentVariable("REDIS_HOST") ?? "redis";
+        var redisPortEnv = Environment.GetEnvironmentVariable("REDIS_PORT");
+        var redisPort = 6379;
+        _ = int.TryParse(redisPortEnv, out redisPort);
+        var redisStatus = ProbeTcp(redisHost, redisPort);
+
+        var ocrHost = Environment.GetEnvironmentVariable("OCR_HOST") ?? "paddleocr";
+        var ocrPortEnv = Environment.GetEnvironmentVariable("OCR_PORT");
+        var ocrPort = 8000;
+        _ = int.TryParse(ocrPortEnv, out ocrPort);
+        var ocrStatus = ProbeTcp(ocrHost, ocrPort);
+
         string postgresStatus;
         try
         {
@@ -529,9 +632,9 @@ public static class PlatformEndpoints
         var health = new
         {
             Postgres = postgresStatus,
-            Redis = "unknown", // No live Redis probe wired; can be enhanced with a ping if a client is registered.
+            Redis = redisStatus,
             Worker = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "stale",
-            Ocr = lastProcessed.HasValue && lastProcessed.Value >= now.AddMinutes(-30) ? "ok" : "unknown",
+            Ocr = ocrStatus,
             QueueDepth = pendingRecords,
             QueueDepthTrend = last7.Select(l => l.Count)
         };
@@ -552,6 +655,76 @@ public static class PlatformEndpoints
             }),
             Health = health
         };
+
+        return Results.Ok(dto);
+    }
+
+    private sealed record AuditLogDto(Guid Id, Guid TenantId, string TenantName, Guid? ActorId, string? ActorEmail, string Action, string? Meta, DateTime CreatedAt);
+
+    private static async Task<IResult> ListAuditLogsAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        Guid? tenantId,
+        int? take,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var limit = Math.Clamp(take ?? 200, 20, 500);
+        var query = db.AuditLogs.AsNoTracking();
+        if (tenantId.HasValue) query = query.Where(a => a.TenantId == tenantId.Value);
+
+        var logs = await query.OrderByDescending(a => a.CreatedAt).Take(limit).ToListAsync(token);
+        var tenantNames = await db.Tenants.AsNoTracking()
+            .Where(t => logs.Select(l => l.TenantId).Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, token);
+        var userEmails = await db.Users.AsNoTracking()
+            .Where(u => logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email, token);
+
+        var dto = logs.Select(l => new AuditLogDto(
+            l.Id,
+            l.TenantId,
+            tenantNames.TryGetValue(l.TenantId, out var tn) ? tn : "Unknown",
+            l.ActorId,
+            l.ActorId.HasValue && userEmails.TryGetValue(l.ActorId.Value, out var em) ? em : null,
+            l.Action,
+            l.MetaJson,
+            l.CreatedAt));
+
+        return Results.Ok(dto);
+    }
+
+    private static async Task<IResult> ListLoginActivityAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        Guid? tenantId,
+        int? take,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+        var limit = Math.Clamp(take ?? 200, 20, 500);
+
+        var query = db.AuditLogs.AsNoTracking().Where(a => a.Action == "auth_login");
+        if (tenantId.HasValue) query = query.Where(a => a.TenantId == tenantId.Value);
+
+        var logs = await query.OrderByDescending(a => a.CreatedAt).Take(limit).ToListAsync(token);
+        var tenantNames = await db.Tenants.AsNoTracking()
+            .Where(t => logs.Select(l => l.TenantId).Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, token);
+        var userEmails = await db.Users.AsNoTracking()
+            .Where(u => logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email, token);
+
+        var dto = logs.Select(l => new AuditLogDto(
+            l.Id,
+            l.TenantId,
+            tenantNames.TryGetValue(l.TenantId, out var tn) ? tn : "Unknown",
+            l.ActorId,
+            l.ActorId.HasValue && userEmails.TryGetValue(l.ActorId.Value, out var em) ? em : null,
+            l.Action,
+            l.MetaJson,
+            l.CreatedAt));
 
         return Results.Ok(dto);
     }

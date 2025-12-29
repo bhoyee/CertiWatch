@@ -83,6 +83,19 @@ public static class AuthEndpoints
             return Results.BadRequest(new { error = "invalid_or_expired" });
         }
 
+        // audit login
+        db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = user.TenantId,
+            ActorId = user.Id,
+            Action = "auth_login",
+            MetaJson = "{\"email\":\"" + user.Email + "\"}",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
         var sessionLifetime = payload.Value.RememberDevice
             ? TimeSpan.FromDays(options.LongSessionDays)
             : TimeSpan.FromHours(options.ShortSessionHours);

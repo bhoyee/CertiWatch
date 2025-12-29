@@ -31,6 +31,7 @@ const navItems = [
   { href: "/platform/tenants", label: "Platform", icon: "shield", superOnly: true },
   { href: "/platform/billing", label: "Platform Billing", icon: "credit", superOnly: true },
   { href: "/platform/usage", label: "Platform Usage", icon: "chart", superOnly: true },
+   { href: "/platform/security", label: "Platform Security", icon: "shield-check", superOnly: true },
   { href: "/platform/support", label: "Platform Support", icon: "life-buoy", superOnly: true },
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
