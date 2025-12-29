@@ -37,6 +37,8 @@ public static class PlatformEndpoints
         group.MapPost("/billing/subscriptions/{id}/resume", ResumeSubscriptionAsync);
         group.MapPost("/billing/subscriptions/{id}/move-plan", MoveSubscriptionPlanAsync);
         group.MapPost("/billing/customers/{customerId}/credit", CreateCustomerCreditAsync);
+        group.MapGet("/billing/subscriptions", ListSubscriptionsAsync);
+        group.MapGet("/billing/invoices", ListInvoicesAsync);
         group.MapGet("/usage/overview", UsageOverviewAsync);
         group.MapGet("/audit/logs", ListAuditLogsAsync);
         group.MapGet("/audit/logins", ListLoginActivityAsync);
@@ -450,9 +452,37 @@ public static class PlatformEndpoints
         int Trialing,
         int Canceled,
         int TrialsExpiring,
+        int CanceledLast30,
+        decimal ChurnRate,
         decimal Mrr,
         decimal Arr,
         IEnumerable<object> UpcomingRenewals);
+
+    private sealed record SubscriptionSummaryDto(
+        string Id,
+        string Status,
+        DateTime? CurrentPeriodEnd,
+        DateTime? TrialEnd,
+        string? PriceId,
+        decimal MonthlyAmount,
+        string Currency,
+        string? CustomerId,
+        string TenantName,
+        string? LastInvoiceId,
+        bool CancelAtPeriodEnd);
+
+    private sealed record InvoiceSummaryDto(
+        string Id,
+        string Status,
+        decimal AmountDue,
+        decimal AmountPaid,
+        string Currency,
+        string? SubscriptionId,
+        string? CustomerId,
+        string TenantName,
+        DateTime Created,
+        string? PdfUrl,
+        string? HostedInvoiceUrl);
 
     private static decimal MonthlyAmount(SubscriptionItem item)
     {
@@ -496,6 +526,8 @@ public static class PlatformEndpoints
             .ToDictionaryAsync(t => t.StripeCustomerId!, t => t.Name, token);
 
         int CountStatus(string status) => subs.Count(s => string.Equals(s.Status, status, StringComparison.OrdinalIgnoreCase));
+        var canceledLast30 = subs.Count(s => s.CanceledAt.HasValue && s.CanceledAt.Value >= DateTime.UtcNow.AddDays(-30));
+        var churnRate = subs.Count > 0 ? Math.Round((decimal)canceledLast30 / subs.Count * 100m, 2) : 0m;
         var mrr = subs.Sum(s => s.Items?.Data?.Sum(MonthlyAmount) ?? 0m);
         var arr = mrr * 12m;
         var trialsExpiring = subs.Count(s => s.TrialEnd.HasValue && s.TrialEnd.Value <= DateTime.UtcNow.AddDays(7));
@@ -519,11 +551,94 @@ public static class PlatformEndpoints
             Trialing: CountStatus("trialing"),
             Canceled: CountStatus("canceled"),
             TrialsExpiring: trialsExpiring,
+            CanceledLast30: canceledLast30,
+            ChurnRate: churnRate,
             Mrr: decimal.Round(mrr, 2),
             Arr: decimal.Round(arr, 2),
             UpcomingRenewals: upcomingRenewals);
 
         return Results.Ok(dto);
+    }
+
+    private static async Task<IResult> ListSubscriptionsAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var subService = new SubscriptionService();
+        var list = await subService.ListAsync(new SubscriptionListOptions
+        {
+            Status = "all",
+            Limit = 100
+        }, cancellationToken: token);
+
+        var subs = list.Data ?? new List<Subscription>();
+        var customerIds = subs.Where(s => !string.IsNullOrWhiteSpace(s.CustomerId)).Select(s => s.CustomerId!).Distinct().ToList();
+        var tenantNames = await db.Tenants.AsNoTracking()
+            .Where(t => !string.IsNullOrWhiteSpace(t.StripeCustomerId) && customerIds.Contains(t.StripeCustomerId!))
+            .ToDictionaryAsync(t => t.StripeCustomerId!, t => t.Name, token);
+
+        var dtos = subs.Select(s =>
+        {
+            var items = s.Items?.Data ?? new List<SubscriptionItem>();
+            var price = items.FirstOrDefault()?.Price;
+            var amount = items.Sum(MonthlyAmount);
+            var currency = price?.Currency?.ToUpperInvariant() ?? "USD";
+            var lastInvoiceId = s.LatestInvoiceId;
+            var tenantName = s.CustomerId != null && tenantNames.TryGetValue(s.CustomerId, out var tn) ? tn : "Unknown";
+
+            return new SubscriptionSummaryDto(
+                s.Id,
+                s.Status ?? "unknown",
+                s.CurrentPeriodEnd,
+                s.TrialEnd,
+                price?.Id,
+                Math.Round(amount, 2),
+                currency,
+                s.CustomerId,
+                tenantName,
+                lastInvoiceId,
+                s.CancelAtPeriodEnd == true);
+        });
+
+        return Results.Ok(dtos);
+    }
+
+    private static async Task<IResult> ListInvoicesAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!IsSuperAdmin(accessor)) return Results.Forbid();
+
+        var invoiceService = new InvoiceService();
+        var list = await invoiceService.ListAsync(new InvoiceListOptions
+        {
+            Limit = 100
+        }, cancellationToken: token);
+
+        var invoices = list.Data ?? new List<Invoice>();
+        var customerIds = invoices.Where(i => !string.IsNullOrWhiteSpace(i.CustomerId)).Select(i => i.CustomerId!).Distinct().ToList();
+        var tenantNames = await db.Tenants.AsNoTracking()
+            .Where(t => !string.IsNullOrWhiteSpace(t.StripeCustomerId) && customerIds.Contains(t.StripeCustomerId!))
+            .ToDictionaryAsync(t => t.StripeCustomerId!, t => t.Name, token);
+
+        var dtos = invoices.Select(i => new InvoiceSummaryDto(
+            i.Id,
+            i.Status ?? "unknown",
+            Math.Round((i.AmountDue ?? 0) / 100m, 2),
+            Math.Round((i.AmountPaid ?? 0) / 100m, 2),
+            (i.Currency ?? "usd").ToUpperInvariant(),
+            i.SubscriptionId,
+            i.CustomerId,
+            i.CustomerId != null && tenantNames.TryGetValue(i.CustomerId, out var tn) ? tn : "Unknown",
+            i.Created,
+            i.InvoicePdf,
+            i.HostedInvoiceUrl));
+
+        return Results.Ok(dtos);
     }
 
     private static async Task<IResult> ResendInvoiceAsync(
