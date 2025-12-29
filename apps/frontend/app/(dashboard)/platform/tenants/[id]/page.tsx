@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { fetchJson } from "../../../../../lib/api";
 import { ActionButtons, SendLinkButton, UserStatusButtons } from "./ClientActions";
 import { ApiKeysClient } from "./ApiKeysClient";
+import { TenantAuditClient } from "./AuditClient";
 
 type TenantDetail = {
   id: string;
@@ -118,6 +119,10 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
             new Date(r.createdAt).toLocaleString()
           ])}
         />
+      </Section>
+
+      <Section title="Security">
+        <TenantAuditClient tenantId={tenant.id} />
       </Section>
     </div>
   );
