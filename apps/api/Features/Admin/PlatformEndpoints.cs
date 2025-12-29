@@ -399,6 +399,8 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         Guid? tenantId,
         string? status,
+        int? page,
+        int? pageSize,
         CancellationToken token)
     {
         if (!IsSuperAdmin(accessor)) return Results.Forbid();
@@ -411,7 +413,16 @@ public static class PlatformEndpoints
             query = query.Where(t => t.Status.ToLower() == s);
         }
 
-        var tickets = await query.OrderByDescending(t => t.UpdatedAt).Take(300).ToListAsync(token);
+        var size = Math.Clamp(pageSize ?? 25, 10, 100);
+        var pageNumber = Math.Max(page ?? 1, 1);
+        var skip = (pageNumber - 1) * size;
+
+        var total = await query.CountAsync(token);
+
+        var tickets = await query.OrderByDescending(t => t.UpdatedAt)
+            .Skip(skip)
+            .Take(size)
+            .ToListAsync(token);
 
         var tenantIds = tickets.Select(t => t.TenantId).Distinct().ToList();
         var tenants = await db.Tenants.AsNoTracking()
@@ -440,7 +451,7 @@ public static class PlatformEndpoints
             t.UpdatedAt
         ));
 
-        return Results.Ok(dto);
+        return Results.Ok(new { total, items = dto });
     }
 
     #region Billing overview/actions
@@ -947,11 +958,14 @@ public static class PlatformEndpoints
         UpdateTicketRequest request,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IEmailService emailService,
         CancellationToken token)
     {
         if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var ticket = await db.SupportTickets.FirstOrDefaultAsync(t => t.Id == id, token);
         if (ticket is null) return Results.NotFound();
+
+        var previousAssignee = ticket.AssignedToUserId;
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -988,6 +1002,17 @@ public static class PlatformEndpoints
                 request.Unassign
             },
             token);
+
+        if (ticket.AssignedToUserId.HasValue && ticket.AssignedToUserId != previousAssignee)
+        {
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == ticket.AssignedToUserId.Value, token);
+            if (user != null && !string.IsNullOrWhiteSpace(user.Email))
+            {
+                var html =
+                    $"<p>Hello,</p><p>A support ticket was assigned to you.</p><p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(ticket.Subject)}</p><p>Status: {ticket.Status}</p><p>Tenant: {ticket.TenantId}</p>";
+                await emailService.SendAsync(user.Email, "Support ticket assigned to you", html, token);
+            }
+        }
 
         return Results.NoContent();
     }
