@@ -48,7 +48,8 @@ public static class AuthEndpoints
             TimeSpan.FromMinutes(options.ExpiryMinutes),
             purpose: "magic",
             rememberDevice: request.RememberDevice,
-            deviceId: request.DeviceId);
+            deviceId: request.DeviceId,
+            role: existing.Role);
         var link = $"{options.BaseUrl.TrimEnd('/')}/magic?token={tokenString}";
         var html = renderer.RenderMagicLink(request.Email, link);
         await emailService.SendAsync(request.Email, "Your CertiWatch login link", html, token);
@@ -91,8 +92,7 @@ public static class AuthEndpoints
             ActorId = user.Id,
             Action = "auth_login",
             MetaJson = "{\"email\":\"" + user.Email + "\"}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         });
         await db.SaveChangesAsync(cancellationToken);
 
@@ -107,7 +107,8 @@ public static class AuthEndpoints
             sessionLifetime,
             purpose: "session",
             rememberDevice: payload.Value.RememberDevice,
-            deviceId: payload.Value.DeviceId);
+            deviceId: payload.Value.DeviceId,
+            role: user.Role);
 
         var expiresAt = DateTimeOffset.UtcNow.Add(sessionLifetime);
         return Results.Ok(new MagicLinkVerifyResponse(payload.Value.Email, payload.Value.TenantId, sessionToken, expiresAt, payload.Value.DeviceId));

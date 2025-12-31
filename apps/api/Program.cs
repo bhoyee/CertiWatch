@@ -114,7 +114,7 @@ builder.Services.Configure<JsonOptions>(o =>
 var app = builder.Build();
 
 app.UseSerilogRequestLogging();
-app.UseHttpsRedirection();
+// Leave HTTPS redirection off for local/docker to avoid mixed-content/fetch failures.
 app.UseSecurityHeaders();
 app.UseCors();
 app.UseAuthentication();
@@ -142,6 +142,7 @@ app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseMiddleware<SubscriptionGateMiddleware>();
 
 app.MapAuthEndpoints();
+app.MapPlatformAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapPlatformEndpoints();
 app.MapDeviceEndpoints();

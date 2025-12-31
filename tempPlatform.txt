@@ -541,19 +541,11 @@ public static class PlatformEndpoints
             .ToDictionaryAsync(t => t.StripeCustomerId!, t => t.Name, token);
 
         int CountStatus(string status) => subs.Count(s => string.Equals(s.Status, status, StringComparison.OrdinalIgnoreCase));
-        var canceledLast30 = subs.Count(s =>
-        {
-            DateTime? canceled = s.CanceledAt;
-            return canceled.HasValue && canceled.Value >= DateTime.UtcNow.AddDays(-30);
-        });
+        var canceledLast30 = subs.Count(s => s.CanceledAt.HasValue && s.CanceledAt.Value >= DateTime.UtcNow.AddDays(-30));
         var churnRate = subs.Count > 0 ? Math.Round((decimal)canceledLast30 / subs.Count * 100m, 2) : 0m;
         var mrr = subs.Sum(s => s.Items?.Data?.Sum(MonthlyAmount) ?? 0m);
         var arr = mrr * 12m;
-        var trialsExpiring = subs.Count(s =>
-        {
-            DateTime? trialEnd = s.TrialEnd;
-            return trialEnd.HasValue && trialEnd.Value <= DateTime.UtcNow.AddDays(7);
-        });
+        var trialsExpiring = subs.Count(s => s.TrialEnd.HasValue && s.TrialEnd.Value <= DateTime.UtcNow.AddDays(7));
 
         var upcomingRenewals = subs
             .Where(s => s.Status == "active")

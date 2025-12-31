@@ -22,21 +22,30 @@ public static class ProfileEndpoints
     {
         var tenantId = accessor.Current.TenantId;
         var email = accessor.Current.Email;
+        var role = accessor.Current.Role?.ToLower();
         if (email is null)
         {
             return Results.Unauthorized();
         }
 
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Email == email, token);
+        IQueryable<Domain.Entities.User> query = db.Users.AsNoTracking().Where(u => u.Email == email);
+        if (role != "superadmin")
+        {
+            query = query.Where(u => u.TenantId == tenantId);
+        }
+
+        var user = await query.FirstOrDefaultAsync(token);
         if (user is null)
         {
             return Results.NotFound();
         }
 
-        var tenantName = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => t.Name)
-            .FirstOrDefaultAsync(token) ?? "Tenant";
+        var tenantName = role == "superadmin"
+            ? "Platform"
+            : await db.Tenants.AsNoTracking()
+                .Where(t => t.Id == tenantId)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync(token) ?? "Tenant";
 
         return Results.Ok(new ProfileDto(user.Id, user.Email, user.Name, user.Role, tenantName));
     }

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
-import { fetchJson, postJson } from "../lib/api";
+import { usePathname, useRouter } from "next/navigation";
+import { fetchJson, postJson } from "../../lib/api";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
 
@@ -50,6 +50,7 @@ const navItems = [
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState<TenantPlanDto | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -62,13 +63,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
   const tourSteps = useMemo(() => getTourSteps(role), [role]);
+  const roleLower = role?.toLowerCase();
+  const isSuper = roleLower === "superadmin";
   const blockedByError =
     planError?.toLowerCase().includes("subscription inactive") ||
     planError?.toLowerCase().includes("payment") ||
     planError?.toLowerCase().includes("plan");
 
   useEffect(() => {
+    if (roleLoading) return;
     let active = true;
+    if (isSuper) {
+      setPlanLoading(false);
+      setPlan(null);
+      setPlanError(null);
+      return;
+    }
     const load = async () => {
       try {
         const res = await fetchJson<TenantPlanDto>("/api/tenant/me");
@@ -83,7 +93,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isSuper, roleLoading]);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +120,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!roleLower) return;
+    if (roleLower === "superadmin" && pathname && !pathname.startsWith("/platform")) {
+      router.replace("/platform/tenants");
+    }
+  }, [pathname, roleLower, router]);
+
+  useEffect(() => {
+    if (!roleLower) return;
+    if (roleLower === "superadmin" && pathname && !pathname.startsWith("/platform")) {
+      router.replace("/platform/tenants");
+    }
+  }, [roleLower, pathname, router]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const seen = localStorage.getItem("cw_onboarding_seen_v1");
     if (!seen) {
@@ -118,8 +142,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
 
   const isBlocked = useMemo(
-    () => blockedByError || !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
-    [blockedByError, plan]
+    () =>
+      isSuper ? false : blockedByError || !isSubscriptionActive(plan?.subscriptionStatus, plan?.currentPeriodEndUtc),
+    [blockedByError, isSuper, plan]
   );
   const roleRestrictedRoutes = useMemo(
     () => ({
@@ -167,12 +192,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <div className="flex min-h-screen">
           <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
-            <Logo />
-            <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} userId={userId} />
+            <Logo isSuper={isSuper} />
+            <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} isSuper={isSuper} userId={userId} />
           </aside>
           <main className="flex-1 px-4 py-6 md:px-10">
             <div className="mb-4 flex items-center justify-between md:hidden">
-              <Logo />
+              <Logo isSuper={isSuper} />
               <button
                 onClick={() => setOpen((v) => !v)}
                 className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm"
@@ -186,13 +211,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   isBlocked={isBlocked}
                   role={role}
                   roleLoading={roleLoading}
+                  isSuper={isSuper}
                   userId={userId}
                   onClick={() => setOpen(false)}
                 />
               </div>
             )}
             <TopBar isBlocked={isBlocked} role={role} onShowTour={() => setShowTour(true)} />
-            {(isBlocked || (!isViewer && !isManager)) && (
+            {(!isSuper && (isBlocked || (!isViewer && !isManager))) && (
               <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
             )}
             <div
@@ -224,14 +250,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function Logo() {
+function Logo({ isSuper }: { isSuper?: boolean }) {
   return (
     <div className="flex items-center gap-3 px-1">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white font-semibold shadow-sm">
         CW
       </div>
       <div>
-        <Link href="/analytics" className="text-lg font-semibold text-slate-900">
+        <Link href={isSuper ? "/platform/tenants" : "/analytics"} className="text-lg font-semibold text-slate-900">
           CertiWatch
         </Link>
         <p className="text-xs text-slate-500">Compliance dashboard</p>
@@ -308,12 +334,14 @@ function NavLinks({
   isBlocked,
   role,
   roleLoading,
+  isSuper,
   userId,
   onClick
 }: {
   isBlocked: boolean;
   role: string | null;
   roleLoading: boolean;
+  isSuper?: boolean;
   userId?: string | null;
   onClick?: () => void;
 }) {
@@ -323,17 +351,22 @@ function NavLinks({
   const allowedWhenBlocked = useMemo(() => new Set(["/plan", "/profile", "/logout"]), []);
   const roleLower = role?.toLowerCase();
   const isViewer = roleLower === "viewer";
+  const isSuperRole = isSuper || roleLower === "superadmin";
+  const currentUserId = userId ?? null;
   const filteredItems = useMemo(() => {
     return navItems.filter((item) => {
+      if (isSuperRole) {
+        return item.superOnly || item.href === "/profile" || item.href === "/logout";
+      }
       if (isViewer && item.viewerHidden) return false;
       if (roleLower === "manager" && item.managerHidden) return false;
       if (item.superOnly && roleLower !== "superadmin") return false;
       return true;
     });
-  }, [isViewer, roleLower]);
+  }, [isSuperRole, isViewer, roleLower]);
 
   useEffect(() => {
-    if (isViewer || roleLoading) {
+    if (isViewer || roleLoading || isSuperRole) {
       setReviewCount(0);
       return;
     }
@@ -353,10 +386,14 @@ function NavLinks({
       active = false;
       clearInterval(id);
     };
-  }, [isViewer, roleLoading]);
+  }, [isViewer, roleLoading, isSuperRole]);
 
   useEffect(() => {
     let active = true;
+    if (isSuperRole) {
+      setSupportCount(0);
+      return;
+    }
     const load = async () => {
       try {
         const tickets = await fetchJson<Array<{ status: string; createdByUserId?: string | null }>>(
@@ -366,7 +403,7 @@ function NavLinks({
           const count = tickets.filter(
             (t) =>
               (t.status === "open" || t.status === "pending") &&
-              (!userId || (t.createdByUserId ?? "").toLowerCase() !== userId.toLowerCase())
+              (!currentUserId || (t.createdByUserId ?? "").toLowerCase() !== currentUserId.toLowerCase())
           ).length;
           setSupportCount(count);
         }
@@ -380,7 +417,7 @@ function NavLinks({
       active = false;
       clearInterval(id);
     };
-  }, [userId]);
+  }, [isSuperRole, currentUserId]);
 
   return (
     <nav className="space-y-1">

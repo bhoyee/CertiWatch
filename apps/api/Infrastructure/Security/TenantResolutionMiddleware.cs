@@ -15,13 +15,16 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
         var sessionToken = context.Request.Cookies["cw_session"];
         Guid? magicTenant = null;
         string? magicEmail = null;
+        string? magicRole = null;
         string? roleFromUser = null;
+        var emailFromHeader = context.Request.Headers["X-Admin-Email"].FirstOrDefault();
 
         if (!string.IsNullOrWhiteSpace(sessionToken))
         {
             var payload = MagicLinkTokenService.ValidateToken(sessionToken, magicOptions.Value.Secret);
             if (payload is not null && payload.Value.Purpose == "session")
             {
+                magicRole = payload.Value.Role;
                 var deviceCookie = context.Request.Cookies["cw_device"];
                 if (string.IsNullOrWhiteSpace(payload.Value.DeviceId))
                 {
@@ -36,14 +39,29 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
             }
         }
 
-        var tenantId = magicTenant ?? ResolveTenantId(context);
+        var isSuper = string.Equals(magicRole, "superadmin", StringComparison.OrdinalIgnoreCase);
+        var tenantId = isSuper ? Guid.Empty : magicTenant ?? ResolveTenantId(context);
         var userId = ResolveUserId(context);
-        var email = magicEmail ?? context.User?.Identity?.Name ?? context.Request.Headers["X-Admin-Email"].FirstOrDefault() ?? "admin@certiwatch.local";
-        var role = context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value ?? "admin";
+        var email = magicEmail
+                    ?? context.User?.Identity?.Name
+                    ?? emailFromHeader
+                    ?? (isSuper ? string.Empty : "admin@certiwatch.local");
+        var role = magicRole
+                   ?? context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value
+                   ?? "admin";
 
         if (!string.IsNullOrWhiteSpace(email))
         {
-            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email && u.TenantId == tenantId);
+            var userQuery = db.Users.AsNoTracking().Where(u => u.Email == email);
+            if (isSuper)
+            {
+                userQuery = userQuery.Where(u => u.Role.ToLower() == "superadmin");
+            }
+            else
+            {
+                userQuery = userQuery.Where(u => u.TenantId == tenantId);
+            }
+            var user = await userQuery.FirstOrDefaultAsync();
             if (user is not null)
             {
                 if (user.IsDisabled)
@@ -55,6 +73,18 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
                 roleFromUser = user.Role;
                 userId = user.Id;
             }
+            else if (isSuper)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsync("superadmin_not_found");
+                return;
+            }
+        }
+        else if (isSuper)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsync("superadmin_auth_required");
+            return;
         }
 
         accessor.Set(new TenantContext
@@ -62,7 +92,7 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Ma
             TenantId = tenantId,
             UserId = userId,
             Email = email,
-            Role = roleFromUser ?? role
+            Role = isSuper ? "superadmin" : roleFromUser ?? role
         });
 
         await next(context);
