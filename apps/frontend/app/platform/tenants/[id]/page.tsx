@@ -85,18 +85,34 @@ const statusPill = (value?: string | null) => {
 };
 
 export default function TenantDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
+  const id = useMemo(() => {
+    const raw = (params as any)?.id;
+    if (Array.isArray(raw)) return raw[0];
+    return raw ?? null;
+  }, [params]);
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      setError("Missing tenant id");
+      return;
+    }
     fetchJson<TenantDetail>(`/api/platform/tenants/${id}`)
       .then((data) => {
         if (mounted) {
-          setTenant(data);
+          setTenant({
+            ...data,
+            recentRecords: data.recentRecords ?? [],
+            users: data.users ?? [],
+            devices: data.devices ?? [],
+            sources: data.sources ?? [],
+            apiKeys: data.apiKeys ?? [],
+          });
           setLoading(false);
         }
       })
@@ -173,7 +189,11 @@ export default function TenantDetailPage() {
         ))}
       </div>
 
-      <Section title="Recent records" emptyText="No recent records.">
+      <Section
+        title="Recent records"
+        emptyText="No recent records."
+        count={tenant.recentRecords.length}
+      >
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -198,7 +218,7 @@ export default function TenantDetailPage() {
         </table>
       </Section>
 
-      <Section title="Users" emptyText="No users found.">
+      <Section title="Users" emptyText="No users found." count={tenant.users.length}>
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -237,7 +257,11 @@ export default function TenantDetailPage() {
         </table>
       </Section>
 
-      <Section title="Devices" emptyText="No devices found.">
+      <Section
+        title="Devices"
+        emptyText="No devices found."
+        count={tenant.devices.length}
+      >
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -260,7 +284,11 @@ export default function TenantDetailPage() {
         </table>
       </Section>
 
-      <Section title="Sources" emptyText="No sources found.">
+      <Section
+        title="Sources"
+        emptyText="No sources found."
+        count={tenant.sources.length}
+      >
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -281,7 +309,11 @@ export default function TenantDetailPage() {
         </table>
       </Section>
 
-      <Section title="API keys" emptyText="No API keys.">
+      <Section
+        title="API keys"
+        emptyText="No API keys."
+        count={tenant.apiKeys.length}
+      >
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -323,13 +355,14 @@ function Section({
   title,
   emptyText,
   children,
+  count,
 }: {
   title: string;
   emptyText: string;
   children: React.ReactNode;
+  count: number;
 }) {
-  const hasRows = Array.isArray((children as any)?.props?.children) ||
-    ((children as any)?.props?.children?.props?.children?.length ?? 0) > 0;
+  const hasRows = count > 0;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
