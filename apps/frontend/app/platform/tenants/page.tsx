@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { fetchJson } from "../../../lib/api";
+import { fetchJson } from "../../lib/api";
 
 type Tenant = {
   id: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from "react";
-import { postJson } from "../../../../lib/api";
+import { postJson } from "@/lib/api";
 
 export function ActionButtons({ tenantId, isSuspended }: { tenantId: string; isSuspended: boolean }) {
   const [pending, startTransition] = useTransition();

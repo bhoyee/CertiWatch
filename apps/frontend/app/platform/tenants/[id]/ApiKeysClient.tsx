@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from "react";
-import { postJson } from "../../../../lib/api";
+import { postJson } from "@/lib/api";
 
 type ApiKey = { id: string; name: string; key: string; isRevoked: boolean; createdAt: string };
 
