@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<DeviceEnrollmentCode> DeviceEnrollmentCodes => Set<DeviceEnrollmentCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(k => k.Key).IsUnique();
             entity.Property(k => k.Key).HasMaxLength(256);
             entity.Property(k => k.Name).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<DeviceEnrollmentCode>(entity =>
+        {
+            entity.HasIndex(c => c.CodeHash).IsUnique();
+            entity.HasIndex(c => new { c.TenantId, c.RevokedAt, c.ExpiresAt });
+            entity.Property(c => c.CodeHash).HasMaxLength(128);
         });
 
         SeedGlobalRules(modelBuilder);

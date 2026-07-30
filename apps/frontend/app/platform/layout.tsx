@@ -16,7 +16,6 @@ const navItems: NavItem[] = [
   { href: "/platform/usage", label: "Usage & Health" },
   { href: "/platform/support", label: "Support" },
   { href: "/platform/security", label: "Security" },
-  { href: "/platform/settings", label: "Settings" },
 ];
 
 export default function PlatformLayout({

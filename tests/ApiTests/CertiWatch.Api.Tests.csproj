@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\\..\\packages\\contracts\\CertiWatch.Contracts.csproj" />
     <ProjectReference Include="..\\..\\packages\\parsing\\CertiWatch.Parsing.csproj" />
+    <ProjectReference Include="..\\..\\apps\\api\\CertiWatch.Api.csproj" />
   </ItemGroup>
 
 </Project>

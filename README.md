@@ -72,7 +72,12 @@ curl -X POST http://localhost:5002/api/devices/enroll \
   -d '{ "deviceName": "local-worker", "operatingSystem": "docker", "enrollmentCode": "local-dev" }'
 ```
 
-Copy the returned `deviceId`/`deviceToken` into `.env` (`WORKER__...`) and re-run `docker compose up` to bring the worker online.
+`local-dev` is seeded by `scripts/seed.sql` for the dev tenant and never expires - it's only meant
+for local development. For a real tenant, mint a fresh code (as a logged-in tenant admin) via
+`POST /api/devices/enrollment-codes` and use that instead - each code is revoked as soon as a new
+one is minted, and expires after 24 hours.
+
+Copy the returned `deviceId`/`deviceToken` into `.env` (`WORKER__DeviceId` / `WORKER__DeviceToken`) and re-run `docker compose up` to bring the worker online.
 
 Billing in Docker:
 - Frontend: http://localhost:3300, API: http://localhost:5002.

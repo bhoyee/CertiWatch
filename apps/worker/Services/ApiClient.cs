@@ -27,6 +27,7 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
             var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/events", new
             {
                 deviceId = _options.DeviceId,
+                deviceToken = _options.DeviceToken,
                 documents = new[] { payload }
             }, cancellationToken);
 
@@ -46,7 +47,7 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
         try
         {
             var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/check-hash",
-                new { DeviceId = deviceId, FileHash = fileHash }, cancellationToken);
+                new { DeviceId = deviceId, DeviceToken = _options.DeviceToken, FileHash = fileHash }, cancellationToken);
 
             if (response.StatusCode == HttpStatusCode.PaymentRequired)
             {

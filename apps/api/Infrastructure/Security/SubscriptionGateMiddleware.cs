@@ -29,6 +29,14 @@ public sealed class SubscriptionGateMiddleware
             return;
         }
 
+        if (!accessor.IsSet)
+        {
+            // Not a cookie-authenticated call (e.g. a device-token-authenticated device endpoint) -
+            // nothing to gate here, those endpoints enforce their own auth.
+            await _next(context);
+            return;
+        }
+
         var tenantId = accessor.Current.TenantId;
         if (tenantId == Guid.Empty)
         {

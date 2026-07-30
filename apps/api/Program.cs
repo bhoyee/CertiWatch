@@ -21,7 +21,6 @@ using CertiWatch.Parsing;
 using CertiWatch.Parsing.Text;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Serilog;
@@ -85,17 +84,16 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 
 builder.Services.AddMediatR(typeof(Program));
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.SlidingExpiration = true;
-        options.Cookie.Name = "certiwatch_admin";
-        options.Cookie.SameSite = SameSiteMode.None;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.LoginPath = "/login";
-    });
+builder.Services.AddAuthentication(CwSessionAuthenticationDefaults.Scheme)
+    .AddScheme<CwSessionAuthenticationOptions, CwSessionAuthenticationHandler>(
+        CwSessionAuthenticationDefaults.Scheme,
+        _ => { });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Admin", p => p.RequireRole("admin", "superadmin"));
+    options.AddPolicy("SuperAdmin", p => p.RequireRole("superadmin"));
+});
 
 builder.Services.AddCors(options =>
 {

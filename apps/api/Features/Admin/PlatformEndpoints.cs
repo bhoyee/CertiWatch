@@ -16,9 +16,7 @@ public static class PlatformEndpoints
 {
     public static IEndpointRouteBuilder MapPlatformEndpoints(this IEndpointRouteBuilder routes)
     {
-        // We perform our own superadmin guard inside each handler via TenantResolutionMiddleware,
-        // so avoid the default cookie authorization challenge that was producing 302/AccessDenied.
-        var group = routes.MapGroup("/api/platform");
+        var group = routes.MapGroup("/api/platform").RequireAuthorization("SuperAdmin");
         group.MapGet("/tenants", ListTenantsAsync);
         group.MapGet("/tenants/{id:guid}", GetTenantAsync);
         group.MapPost("/tenants/{id:guid}/suspend", SuspendTenantAsync);
@@ -47,9 +45,6 @@ public static class PlatformEndpoints
         group.MapGet("/audit/logins", ListLoginActivityAsync);
         return group;
     }
-
-    private static bool IsSuperAdmin(ITenantContextAccessor accessor) =>
-        string.Equals(accessor.Current.Role, "superadmin", StringComparison.OrdinalIgnoreCase);
 
     private static Task EnsureApiKeysTableAsync(AppDbContext db, CancellationToken token) =>
         db.Database.ExecuteSqlRawAsync(
@@ -83,8 +78,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> ListTenantsAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var tenants = await db.Tenants.AsNoTracking().OrderBy(t => t.CreatedAtUtc).ToListAsync(token);
 
         var recordCounts = await db.Records.AsNoTracking()
@@ -116,8 +109,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> GetTenantAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, token);
         if (tenant is null) return Results.NotFound();
 
@@ -185,7 +176,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> ListApiKeysAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         await EnsureApiKeysTableAsync(db, token);
         var keys = await db.ApiKeys.AsNoTracking()
             .Where(k => k.TenantId == id)
@@ -202,7 +192,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         await EnsureApiKeysTableAsync(db, token);
         var body = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(http.Request.Body, cancellationToken: token) ?? new();
         var name = body.TryGetValue("name", out var n) ? n?.Trim() : string.Empty;
@@ -226,7 +215,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> RevokeApiKeyAsync(Guid keyId, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         await EnsureApiKeysTableAsync(db, token);
         var key = await db.ApiKeys.FirstOrDefaultAsync(k => k.Id == keyId, token);
         if (key is null) return Results.NotFound();
@@ -238,8 +226,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> SuspendTenantAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == id, token);
         if (tenant is null) return Results.NotFound();
 
@@ -253,8 +239,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> ResumeTenantAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == id, token);
         if (tenant is null) return Results.NotFound();
 
@@ -268,7 +252,6 @@ public static class PlatformEndpoints
 
     private static async Task<IResult> ResetSubscriptionAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == id, token);
         if (tenant is null) return Results.NotFound();
         tenant.SubscriptionStatus = null;
@@ -288,8 +271,6 @@ public static class PlatformEndpoints
         IEmailService emailService,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
         if (user is null) return Results.NotFound();
 
@@ -318,8 +299,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
         if (user is null) return Results.NotFound();
 
@@ -336,8 +315,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
         if (user is null) return Results.NotFound();
 
@@ -357,8 +334,6 @@ public static class PlatformEndpoints
         IEmailService emailService,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, token);
         if (user is null) return Results.NotFound();
 
@@ -402,8 +377,6 @@ public static class PlatformEndpoints
         int? pageSize,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var query = db.SupportTickets.AsNoTracking().AsQueryable();
         if (tenantId.HasValue) query = query.Where(t => t.TenantId == tenantId.Value);
         if (!string.IsNullOrWhiteSpace(status))
@@ -514,8 +487,6 @@ public static class PlatformEndpoints
         IOptions<StripeOptions> stripeOptions,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var opts = stripeOptions.Value;
         var subService = new SubscriptionService();
 
@@ -590,8 +561,6 @@ public static class PlatformEndpoints
         int? pageSize,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var subService = new SubscriptionService();
 
         // Fetch all, then page locally to allow >100 items
@@ -647,8 +616,6 @@ public static class PlatformEndpoints
         int? pageSize,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var invoiceService = new InvoiceService();
         var allInvoices = new List<Invoice>();
         await foreach (var i in invoiceService.ListAutoPagingAsync(new InvoiceListOptions(), cancellationToken: token))
@@ -687,7 +654,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var service = new InvoiceService();
         await service.SendInvoiceAsync(invoiceId, cancellationToken: token);
         return Results.NoContent();
@@ -698,7 +664,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var service = new SubscriptionService();
         await service.UpdateAsync(id, new SubscriptionUpdateOptions { CancelAtPeriodEnd = true }, cancellationToken: token);
         return Results.NoContent();
@@ -709,7 +674,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var service = new SubscriptionService();
         await service.UpdateAsync(id, new SubscriptionUpdateOptions
         {
@@ -723,7 +687,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var service = new SubscriptionService();
         await service.UpdateAsync(id, new SubscriptionUpdateOptions
         {
@@ -741,7 +704,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         if (string.IsNullOrWhiteSpace(request.PriceId)) return Results.BadRequest(new { error = "missing_price" });
         var service = new SubscriptionService();
         var subscription = await service.GetAsync(id, cancellationToken: token);
@@ -771,7 +733,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var svc = new CustomerBalanceTransactionService();
         await svc.CreateAsync(
             customerId,
@@ -794,8 +755,6 @@ public static class PlatformEndpoints
         ITenantContextAccessor accessor,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var now = DateTime.UtcNow;
         var sevenDaysAgo = now.Date.AddDays(-6);
 
@@ -918,8 +877,6 @@ public static class PlatformEndpoints
         int? take,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
-
         var limit = Math.Clamp(take ?? 200, 20, 500);
         var query = db.AuditLogs.AsNoTracking();
         if (tenantId.HasValue) query = query.Where(a => a.TenantId == tenantId.Value);
@@ -952,7 +909,6 @@ public static class PlatformEndpoints
         int? take,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var limit = Math.Clamp(take ?? 200, 20, 500);
 
         var query = db.AuditLogs.AsNoTracking().Where(a => a.Action == "auth_login");
@@ -993,7 +949,6 @@ public static class PlatformEndpoints
         IEmailService emailService,
         CancellationToken token)
     {
-        if (!IsSuperAdmin(accessor)) return Results.Forbid();
         var ticket = await db.SupportTickets.FirstOrDefaultAsync(t => t.Id == id, token);
         if (ticket is null) return Results.NotFound();
 

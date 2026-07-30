@@ -77,8 +77,10 @@ services:
       WORKER__DeepSeekApiKey: ${DEEPSEEK_API_KEY:-}
       WORKER__DeepSeekBaseUrl: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       WORKER__ApiBaseUrl: http://api:8080
-      WORKER__DeviceId: 479bf42a-3c3a-411f-9dd8-9d598145c26a
-      WORKER__DeviceToken: 5+4wnaTOkHidVCQTQwoOswO6LRjFf/MW+9vgosfrDpM=
+      # Enroll a device (see README "Docker quickstart") to get a real id/token pair, then set
+      # them in .env as WORKER__DeviceId / WORKER__DeviceToken - do not hardcode real values here.
+      WORKER__DeviceId: ${WORKER__DeviceId:-}
+      WORKER__DeviceToken: ${WORKER__DeviceToken:-}
       WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
       WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
       DOTNET_ENVIRONMENT: Development
