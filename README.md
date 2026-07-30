@@ -1,9 +1,58 @@
 # CertiWatch
 
-CertiWatch is a SaaS certificate-compliance platform for SMBs. It ingests PDFs/scans via local agents or cloud connectors, extracts staff/course metadata, infers expiries with tenant rules, and keeps admins ahead with reminders/digests.
+CertiWatch is a SaaS certificate-compliance platform for SMBs — it tracks who on staff is trained/certified in what, and chases the paperwork before it lapses. A local agent or cloud connector watches for new certificate documents, OCR + parsing pulls out staff/course/issuer/expiry data, a rule engine works out when each certificate actually expires, and admins get a live dashboard plus reminders/digests so nothing quietly goes out of date.
 
-- **Stack**: .NET 8 modular API + worker, cross-platform agent, Next.js 15 admin UI, PostgreSQL 16 + Redis, Azure Container Apps, Cloudflare WAF/Turnstile.
-- **Core flow**: enroll device → watch folders/cloud drives → OCR & parsing → rule engine inference → records dashboard → reminders/digests/export.
+Typical customer: a care home, construction firm, or hospitality business that has to prove (to a regulator, an insurer, or a client) that every member of staff is currently certified in First Aid, Fire Safety, Manual Handling, Safeguarding, and similar — and currently tracks it in a spreadsheet.
+
+## What it does
+
+- **Ingest** — a lightweight local agent watches folders (and, going forward, cloud drives) for new scans/PDFs; staff can also upload directly via a one-time magic link, or an admin can bulk-upload a folder of certificates at once.
+- **Read** — a worker pipeline runs OCR (Tesseract by default, with an optional docTR/PaddleOCR sidecar for better accuracy) and extracts staff name, course, issuer, issue date, and expiry.
+- **Decide** — a rule engine resolves the actual validity period for each course (tenant-specific rules override global defaults; unmatched/low-confidence extractions are flagged for manual review instead of guessed at silently).
+- **Track** — a records dashboard shows every certificate's status at a glance, with CSV/PDF export and an analytics view of compliance across the team.
+- **Remind** — a weekly digest and configurable expiry reminders go out by email so renewals happen before a certificate lapses, not after.
+
+## Features
+
+**Ingestion**
+- Local device agent (Windows/Linux/macOS) that watches folders and pushes new documents to the API — see `docs/agent-install.md`.
+- Manual staff upload via a short-lived, no-login magic link (an admin generates the link, the staff member just drops their file in).
+- Bulk upload for admins clearing a backlog of paper certificates at once.
+- Cloud source connectors (Google Drive, OneDrive, Dropbox) as a source type alongside local folders.
+
+**OCR & extraction**
+- Tesseract + poppler by default; an optional docTR/PaddleOCR FastAPI sidecar for higher-accuracy extraction on harder scans.
+- Keyword- and vendor-aware parsing pipeline that pulls staff name, course, issuer, issue date, and expiry out of raw OCR text.
+- Documents that don't clear a confidence threshold land in a **Needs review** queue instead of being silently accepted or dropped.
+
+**Compliance rules & records**
+- A rule engine resolves course validity with tenant rules taking precedence over global defaults (tenant exact match → tenant vendor/regex → global equivalents → tag → fallback).
+- Records dashboard with search/filter, CSV and PDF export, and a review-count badge for anything needing a human look.
+- Analytics view of certificate status and compliance trends across the organization.
+
+**Notifications**
+- Weekly digest email summarizing what's expiring soon.
+- Configurable expiry reminder emails per course/tenant.
+- Templates live in `/emails` (digest, reminder, magic-link, welcome).
+
+**Team & access**
+- Role-based access: **admin** (full tenant control), **manager** (invites and sees their own team's records), **viewer** (their own uploads only).
+- Email invites for new team members; magic-link login (no passwords) with a "stay signed in" long-lived session option.
+- Per-tenant support tickets for reaching CertiWatch support.
+
+**Billing**
+- Self-serve Stripe Checkout signup with three plans (Starter/Growth/Pro, record-limit based) — see `docs/onboarding.md`.
+- In-app plan page for viewing/changing subscription state.
+
+**Platform console (superadmin)**
+- Cross-tenant admin at `/platform`: tenant list/detail (suspend/resume, API keys, audit trail), Stripe billing operations (subscriptions, invoices, credits, plan moves), usage & health dashboard (queue depth, OCR/worker/Postgres/Redis status), support ticket triage across all tenants, and a security view of audit logs/login activity.
+
+**Devices**
+- Local agents enroll using a short-lived, tenant-scoped enrollment code (minted by a tenant admin) rather than a static shared secret, and authenticate every subsequent call with their own device token.
+
+## Stack
+
+.NET 8 modular API + worker, cross-platform agent, Next.js 15 admin UI, PostgreSQL 16 + Redis, OCR via Tesseract/docTR/PaddleOCR, Stripe billing, Azure Container Apps + Cloudflare in front for production. See `docs/security.md` for the current security posture.
 
 ## Quickstart
 
@@ -27,17 +76,17 @@ npm run dev
 
 See `/docs/setup.md` for environment prep, `/docs/api.md` for endpoints, `/docs/agent-install.md` for agent packaging, and `/docs/onboarding.md` for billing/onboarding.
 
-## Milestone 1 – Stripe Signup & Tenant Provisioning
+## Billing & tenant provisioning
 
-Milestone 1 introduces a real billing flow so customers can self-serve:
+Signup is self-serve via Stripe:
 
 1. **Stripe config** – populate the `Stripe` section in `apps/api/appsettings.json` with secret/publishable/webhook keys and price IDs per plan.
 2. **Frontend env** – set `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (see `apps/frontend/.env.example`).
 3. **Signup page** – visit `http://localhost:3000/signup`, choose a plan, enter company/admin info. The UI calls `POST /api/billing/checkout`, receives a Checkout Session URL, and redirects to Stripe.
 4. **Webhook** – use Stripe CLI locally: `stripe listen --forward-to http://localhost:5001/api/billing/webhook`. On `checkout.session.completed`, the API provisions a tenant + first admin via `TenantProvisioningService`.
-5. **Next steps** – after provisioning, admins receive future magic-link logins (wired up in Milestone 2). Plan metadata is stored on the tenant for enforcement.
+5. **Login** – provisioned admins sign in via magic link (no password). Plan metadata is stored on the tenant and enforced against record limits.
 
-## Architecture Overview
+## Architecture overview
 
 - **Billing**: `/api/billing/checkout` creates Checkout Sessions; `/api/billing/webhook` verifies signatures and provisions tenants.
 - **Rules & records**: global+tenant rule precedence with automatic reprocessing.
@@ -45,12 +94,13 @@ Milestone 1 introduces a real billing flow so customers can self-serve:
 - **Deploy**: Terraform under `/terraform`, CI/CD in `.github/workflows/ci.yml` (lint, tests, docker build, security scans, terraform plan).
 - **OCR defaults**: worker runs Tesseract + poppler and can call a docTR sidecar (FastAPI, `apps/ocr-doctr`) for higher-quality OCR. For host-native runs install `tesseract-ocr` and `poppler-utils`; cloud OCR (Azure/GCP/etc.) is optional via env vars.
 
-## Documentation Index
+## Documentation index
 
 - `docs/setup.md` – local & cloud setup
 - `docs/onboarding.md` – Stripe signup + onboarding sequence
 - `docs/api.md` – endpoint contracts
 - `docs/agent-install.md` – Windows/Linux/macOS service install
+- `docs/security.md` – security posture
 - `docs/troubleshooting.md` – common issues
 
 This README serves as the technical high-level. Feature deep dives, operator guides, and future milestones live under `/docs`.
