@@ -1,24 +1,67 @@
- "use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Fraunces, Work_Sans } from "next/font/google";
+
+const display = Fraunces({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-display"
+});
+
+const body = Work_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body"
+});
+
+const steps = [
+  {
+    n: "01",
+    title: "Enroll",
+    description: "A device agent or cloud connector is registered to a tenant with a short-lived enrollment code."
+  },
+  {
+    n: "02",
+    title: "Ingest",
+    description: "New certificates land from a watched folder, a cloud drive, or a no-login staff upload link."
+  },
+  {
+    n: "03",
+    title: "Extract",
+    description: "OCR reads staff name, course, issuer, and dates. Anything uncertain is queued for a human look."
+  },
+  {
+    n: "04",
+    title: "Remind",
+    description: "Tenant rules resolve the real expiry date, and reminders go out before it becomes a problem."
+  }
+];
 
 const features = [
   {
-    title: "Automated ingestion",
-    description: "Watch local folders or connect cloud drives to capture PDFs and scans in minutes."
+    title: "One inbox for every certificate",
+    description:
+      "Local folders, Google Drive, OneDrive, and Dropbox all feed the same review queue — no more chasing five people for the same PDF.",
+    span: true
   },
   {
-    title: "OCR + rule engine",
-    description: "Extract staff, course, and dates with OCR, then infer expiry with tenant overrides."
+    title: "A rule engine that knows your exceptions",
+    description: "Global defaults per course, overridden per tenant, per vendor, or by regex — not a flat 12-month guess."
   },
   {
-    title: "Reliable reminders",
-    description: "Weekly digests, expiry lead times, and one-click actions keep admins ahead."
+    title: "Nothing goes in unreviewed",
+    description: "Low-confidence extractions land in a review queue instead of being silently accepted or dropped."
   },
   {
-    title: "Hardened devices",
-    description: "Enroll agents securely, monitor heartbeats, and queue offline until back online."
+    title: "Reminders that actually fire",
+    description: "A weekly digest plus configurable lead-time alerts, sent before the renewal window closes."
+  },
+  {
+    title: "Access scoped to the job",
+    description: "Admins see everything, managers see their team, viewers see their own record — set once, enforced everywhere."
   }
 ];
 
@@ -40,34 +83,97 @@ const faqs = [
   {
     question: "Do you support trials?",
     answer:
-      "Yes. We offer a 7-day trial and still collect a payment method up front. One trial per customer; after trial end, billing begins automatically unless cancelled before day 7."
+      "Yes — a 7-day trial, card required up front. One trial per customer; billing begins automatically on day 7 unless you cancel first."
   }
 ];
 
 const plans = [
   {
     name: "Starter",
-    price: "$99/mo",
+    price: "$99",
     blurb: "For small teams getting off spreadsheets.",
-    features: ["50 records/month", "Local folders", "30-day retention"],
+    features: ["50 records / month", "Local folder ingestion", "30-day document retention"],
     cta: "Start 7-day trial"
   },
   {
     name: "Growth",
-    price: "$249/mo",
-    blurb: "For growing orgs with cloud connectors.",
-    features: ["500 records/month", "Google/OneDrive/Dropbox", "1-year retention"],
+    price: "$249",
+    blurb: "For growing orgs bringing cloud drives online.",
+    features: ["500 records / month", "Google Drive, OneDrive, Dropbox", "1-year document retention"],
     cta: "Start 7-day trial",
     highlighted: true
   },
   {
     name: "Pro",
-    price: "$499/mo",
-    blurb: "For ops teams that need everything.",
-    features: ["Unlimited records", "Webhooks/API", "Priority support"],
+    price: "$499",
+    blurb: "For ops teams that need it all wired in.",
+    features: ["Unlimited records", "Webhooks & API access", "Priority support"],
     cta: "Start 7-day trial"
   }
 ];
+
+const certCards = [
+  { initials: "AM", name: "Amara Musa", course: "First Aid at Work", status: "valid", detail: "Valid · 214 days left" },
+  { initials: "JD", name: "Jordan Diaz", course: "Fire Safety", status: "warning", detail: "Renew in 12 days" },
+  { initials: "RS", name: "Ravi Shah", course: "Manual Handling", status: "review", detail: "Needs review" }
+];
+
+function StatusDot({ status }: { status: string }) {
+  const color = status === "valid" ? "bg-[#1F6B45]" : status === "warning" ? "bg-[#B45309]" : "bg-[#6B6A61]";
+  return <span className={`h-1.5 w-1.5 rounded-full ${color}`} />;
+}
+
+function IconInbox() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <path d="M3 12h4.2l1.6 3h6.4l1.6-3H21" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 12 6.6 5.4A2 2 0 0 1 8.5 4h7A2 2 0 0 1 17.4 5.4L19 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconBranch() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <circle cx="6" cy="6" r="2.2" />
+      <circle cx="6" cy="18" r="2.2" />
+      <circle cx="18" cy="12" r="2.2" />
+      <path d="M6 8.2V15.8M8 6.6h4a4 4 0 0 1 4 4v0M8 17.4h4a4 4 0 0 0 4-4v0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconReview() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <rect x="4" y="3.5" width="12" height="17" rx="1.5" />
+      <path d="M7.5 8h5M7.5 11.5h5M7.5 15h3" strokeLinecap="round" />
+      <circle cx="17.5" cy="17.5" r="3" />
+      <path d="m19.8 19.8 1.7 1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconBell() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <path d="M6 10a6 6 0 1 1 12 0c0 3.4 1 5 1.6 5.8H4.4C5 15 6 13.4 6 10Z" strokeLinejoin="round" />
+      <path d="M10 18.5a2 2 0 0 0 4 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconLock() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+      <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+      <circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+const featureIcons = [IconInbox, IconBranch, IconReview, IconBell, IconLock];
 
 export default function LandingPage() {
   const [hasSession, setHasSession] = useState(false);
@@ -77,45 +183,46 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <main className="bg-slate-50 pb-16">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+    <div className={`${display.variable} ${body.variable} font-[family-name:var(--font-body)] bg-[#FAF7F0] text-[#1B1B16]`}>
+      {/* Nav */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#12140F]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-slate-900">CertiWatch</span>
-          </div>
-          <nav className="hidden items-center gap-6 text-sm font-medium text-slate-700 md:flex">
-            <Link href="#home" className="hover:text-slate-900">
-              Home
+          <span className="font-[family-name:var(--font-display)] text-lg font-semibold italic tracking-tight text-[#F5F3EE]">
+            CertiWatch
+          </span>
+          <nav className="hidden items-center gap-8 text-sm text-[#C9C7BC] md:flex">
+            <Link href="#how" className="transition hover:text-white">
+              How it works
             </Link>
-            <Link href="#pricing" className="hover:text-slate-900">
+            <Link href="#pricing" className="transition hover:text-white">
               Pricing
             </Link>
-            <Link href="#faq" className="hover:text-slate-900">
+            <Link href="#faq" className="transition hover:text-white">
               FAQ
             </Link>
-            <Link href="#contact" className="hover:text-slate-900">
+            <Link href="#contact" className="transition hover:text-white">
               Contact
             </Link>
           </nav>
-            <div className="flex items-center gap-3">
-              {hasSession ? (
-                <Link
-                  href="/analytics"
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
-                >
-                  Go to dashboard
-                </Link>
+          <div className="flex items-center gap-3">
+            {hasSession ? (
+              <Link
+                href="/analytics"
+                className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#195939]"
+              >
+                Go to dashboard
+              </Link>
             ) : (
               <>
                 <Link
                   href="/login"
-                  className="hidden rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 md:inline-flex"
+                  className="hidden text-sm font-medium text-[#C9C7BC] transition hover:text-white md:inline-flex"
                 >
-                  Login
+                  Log in
                 </Link>
                 <Link
                   href="/signup"
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                  className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#195939]"
                 >
                   Start 7-day trial
                 </Link>
@@ -125,23 +232,35 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <section id="home" className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-slate-50">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.12),transparent_25%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.12),transparent_20%)]" />
-        <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-6 py-16 md:flex-row md:items-center md:py-24">
-          <div className="flex-1 space-y-6">
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">CertiWatch</p>
-            <h1 className="text-4xl font-bold leading-tight text-slate-900 md:text-5xl">
-              Certificate compliance without the chaos
-            </h1>
-            <p className="text-lg text-slate-600 md:text-xl">
-              CertiWatch ingests certificates from your agents and cloud drives, extracts dates and issuers,
-              applies your rules, and keeps admins ahead with reminders and one-click approvals.
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-[#12140F]">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "linear-gradient(#F5F3EE 1px, transparent 1px), linear-gradient(90deg, #F5F3EE 1px, transparent 1px)",
+            backgroundSize: "48px 48px"
+          }}
+        />
+        <div className="relative mx-auto grid max-w-6xl gap-14 px-6 py-20 md:grid-cols-[1.1fr_0.9fr] md:items-center md:py-28">
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#4E9C74]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#4E9C74]" />
+              Certificate compliance, handled
             </p>
-            <div className="flex flex-wrap gap-3">
+            <h1 className="mt-5 max-w-xl font-[family-name:var(--font-display)] text-4xl font-medium leading-[1.08] text-[#F5F3EE] md:text-[3.25rem]">
+              Stop finding out a certificate lapsed <em className="not-italic text-[#4E9C74]">after</em> the inspector
+              does.
+            </h1>
+            <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#C9C7BC]">
+              CertiWatch watches every folder and cloud drive your staff certificates land in, reads the expiry off
+              the page, and tells you — and only you — before it runs out.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center gap-4">
               {hasSession ? (
                 <Link
                   href="/analytics"
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                  className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
                 >
                   Go to dashboard
                 </Link>
@@ -149,85 +268,175 @@ export default function LandingPage() {
                 <>
                   <Link
                     href="/signup"
-                    className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
+                    className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
                   >
                     Start 7-day trial
                   </Link>
                   <Link
                     href="/login"
-                    className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300"
+                    className="inline-flex items-center justify-center rounded-md border border-white/15 px-6 py-3.5 text-sm font-semibold text-[#F5F3EE] transition hover:border-white/30 hover:bg-white/5"
                   >
-                    Login
+                    Log in
                   </Link>
                 </>
               )}
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-              <span>OCR + rule engine</span>
-              <span className="text-slate-300">|</span>
-              <span>Weekly digests and reminders</span>
-              <span className="text-slate-300">|</span>
-              <span>Secure device enrollment</span>
-            </div>
+            <p className="mt-8 text-sm text-[#8A8A7E]">
+              No card surprises — 7 days free, cancel before it ends. · Built for care, construction &amp; hospitality
+              teams.
+            </p>
           </div>
-          <div className="flex-1">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-500">Demo snapshot</p>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  Sample data
-                </span>
-              </div>
-              <div className="grid gap-4 pt-4 md:grid-cols-2">
-                {[
-                  { label: "New records", value: "--" },
-                  { label: "Expiring soon", value: "--" },
-                  { label: "Expired", value: "--" },
-                  { label: "Low confidence", value: "--" }
-                ].map((stat) => (
-                  <div key={stat.label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">{stat.label}</p>
-                    <p className="text-2xl font-semibold text-slate-900">{stat.value}</p>
+
+          {/* Stacked certificate cards */}
+          <div className="relative h-[360px] md:h-[420px]">
+            {certCards.map((card, i) => (
+              <div
+                key={card.name}
+                className="absolute w-72 rounded-xl border border-black/5 bg-[#FFFDF8] p-5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.45)]"
+                style={{
+                  top: `${i * 104}px`,
+                  left: `${i * 30}px`,
+                  transform: `rotate(${i === 0 ? -4 : i === 1 ? 1.5 : -1}deg)`,
+                  zIndex: certCards.length - i
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#12140F] text-xs font-semibold text-[#F5F3EE]">
+                    {card.initials}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-[#1B1B16]">{card.name}</p>
+                    <p className="text-xs text-[#6B6A61]">{card.course}</p>
                   </div>
-                ))}
+                </div>
+                <div className="mt-4 flex items-center gap-2 border-t border-black/5 pt-3 text-xs font-medium text-[#4B4A42]">
+                  <StatusDot status={card.status} />
+                  {card.detail}
+                </div>
               </div>
-              <p className="mt-4 text-xs text-slate-500">Connect folders to see live metrics.</p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section id="pricing" className="mx-auto max-w-6xl space-y-8 px-6 pt-12">
-        <div className="space-y-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">Pricing</p>
-          <h2 className="text-3xl font-semibold text-slate-900">Transparent plans for every stage</h2>
-          <p className="text-slate-600">All plans include the rule engine, reminders, and secure device enrollment.</p>
+      {/* Trust strip */}
+      <section className="border-b border-[#E5E0D2] bg-[#FAF7F0] py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 text-center md:flex-row md:justify-between md:text-left">
+          <p className="text-sm text-[#6B6A61]">Built for teams that can't afford to guess about compliance</p>
+          <div className="flex flex-wrap justify-center gap-2.5">
+            {["Care homes", "Construction", "Hospitality", "Facilities"].map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-[#E5E0D2] bg-white px-3.5 py-1.5 text-xs font-medium text-[#4B4A42]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
+      </section>
+
+      {/* Features */}
+      <section id="features" className="mx-auto max-w-6xl px-6 py-24">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">What you get</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+            Everything between a scanned certificate and a peaceful audit.
+          </h2>
+        </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-2">
+          {features.map((feature, i) => {
+            const Icon = featureIcons[i];
+            return (
+              <div
+                key={feature.title}
+                className={`rounded-xl border border-[#E5E0D2] bg-white p-7 ${feature.span ? "md:col-span-2" : ""}`}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EDF2EC] text-[#1F6B45]">
+                  <Icon />
+                </div>
+                <h3 className="mt-5 text-lg font-semibold text-[#1B1B16]">{feature.title}</h3>
+                <p className="mt-2 max-w-md text-[15px] leading-relaxed text-[#6B6A61]">{feature.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how" className="bg-[#12140F] py-24">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4E9C74]">How it works</p>
+            <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#F5F3EE] md:text-4xl">
+              Four steps, and none of them are "chase someone over email."
+            </h2>
+          </div>
+          <div className="mt-14 grid gap-x-8 gap-y-12 md:grid-cols-4">
+            {steps.map((step) => (
+              <div key={step.n} className="border-t border-white/10 pt-6">
+                <span className="font-[family-name:var(--font-display)] text-3xl italic text-[#4E9C74]">{step.n}</span>
+                <h3 className="mt-3 text-base font-semibold text-[#F5F3EE]">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#9B9A8E]">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section id="pricing" className="mx-auto max-w-6xl px-6 py-24">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">Pricing</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+            Plans that scale with how many certificates you're tracking.
+          </h2>
+        </div>
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`rounded-2xl border p-6 shadow-sm ${
-                plan.highlighted ? "border-blue-500 ring-2 ring-blue-200 bg-white" : "border-slate-200 bg-white"
+              className={`relative flex flex-col rounded-2xl border p-7 ${
+                plan.highlighted
+                  ? "border-[#1F6B45] bg-[#12140F] text-[#F5F3EE] shadow-xl shadow-black/10 md:-translate-y-3"
+                  : "border-[#E5E0D2] bg-white text-[#1B1B16]"
               }`}
             >
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{plan.name}</p>
-              <p className="text-3xl font-bold text-slate-900">{plan.price}</p>
-              <p className="mt-2 text-sm text-slate-600">{plan.blurb}</p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-700">
+              {plan.highlighted && (
+                <span className="absolute -top-3 left-7 rounded-full bg-[#1F6B45] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+                  Most popular
+                </span>
+              )}
+              <p
+                className={`text-sm font-semibold uppercase tracking-wide ${
+                  plan.highlighted ? "text-[#8FBBA2]" : "text-[#6B6A61]"
+                }`}
+              >
+                {plan.name}
+              </p>
+              <p className="mt-2 flex items-baseline gap-1">
+                <span className="font-[family-name:var(--font-display)] text-4xl font-medium">{plan.price}</span>
+                <span className={plan.highlighted ? "text-[#9B9A8E]" : "text-[#6B6A61]"}>/mo</span>
+              </p>
+              <p className={`mt-3 text-sm ${plan.highlighted ? "text-[#C9C7BC]" : "text-[#6B6A61]"}`}>{plan.blurb}</p>
+              <ul className="mt-6 space-y-2.5 text-sm">
                 {plan.features.map((feat) => (
-                  <li key={feat} className="flex items-center gap-2">
-                    <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
-                    {feat}
+                  <li key={feat} className="flex items-start gap-2.5">
+                    <span
+                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                        plan.highlighted ? "bg-[#4E9C74]" : "bg-[#1F6B45]"
+                      }`}
+                    />
+                    <span className={plan.highlighted ? "text-[#E7E5DA]" : "text-[#4B4A42]"}>{feat}</span>
                   </li>
                 ))}
               </ul>
               <Link
                 href="/signup"
-                className={`mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm ${
+                className={`mt-8 inline-flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
                   plan.highlighted
-                    ? "bg-blue-600 text-white hover:bg-blue-500"
-                    : "border border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                    ? "bg-[#1F6B45] text-white hover:bg-[#195939]"
+                    : "border border-[#E5E0D2] text-[#1B1B16] hover:border-[#1F6B45]"
                 }`}
               >
                 {plan.cta}
@@ -237,68 +446,85 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="why" className="mx-auto max-w-6xl space-y-8 px-6 pt-16">
-        <div className="space-y-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">Why CertiWatch</p>
-          <h2 className="text-3xl font-semibold text-slate-900">Built for compliance-heavy teams</h2>
-          <p className="text-slate-600">
-            From folder agents to cloud connectors, keep every certificate audited with zero spreadsheet drama.
-          </p>
+      {/* FAQ */}
+      <section id="faq" className="mx-auto max-w-3xl px-6 py-24">
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">FAQ</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+            Answers for buyers and admins
+          </h2>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          {features.map((feature) => (
-            <div key={feature.title} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
-              <p className="mt-2 text-sm text-slate-600">{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section id="faq" className="mx-auto max-w-6xl space-y-8 px-6 pt-16">
-        <div className="space-y-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">FAQ</p>
-          <h2 className="text-3xl font-semibold text-slate-900">Answers for buyers and admins</h2>
-          <p className="text-slate-600">Everything you need to know before enrolling your first device.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="mt-12 divide-y divide-[#E5E0D2] border-y border-[#E5E0D2]">
           {faqs.map((item) => (
-            <div key={item.question} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900">{item.question}</h3>
-              <p className="mt-2 text-sm text-slate-600">{item.answer}</p>
-            </div>
+            <details key={item.question} className="group py-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-[#1B1B16]">
+                {item.question}
+                <span className="shrink-0 text-lg text-[#1F6B45] transition group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#6B6A61]">{item.answer}</p>
+            </details>
           ))}
         </div>
       </section>
 
-      <footer id="contact" className="mt-16 border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 md:flex-row md:items-center md:justify-between">
+      {/* Final CTA */}
+      <section className="bg-[#12140F] py-24">
+        <div className="mx-auto max-w-3xl px-6 text-center">
+          <h2 className="font-[family-name:var(--font-display)] text-3xl font-medium text-[#F5F3EE] md:text-4xl">
+            Your next inspection is already on the calendar.
+          </h2>
+          <p className="mx-auto mt-4 max-w-md text-[#C9C7BC]">
+            Give CertiWatch a week to watch your first folder. You'll know exactly what's expiring before anyone
+            asks.
+          </p>
+          {hasSession ? (
+            <Link
+              href="/analytics"
+              className="mt-8 inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+            >
+              Go to dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/signup"
+              className="mt-8 inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+            >
+              Start 7-day trial
+            </Link>
+          )}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer id="contact" className="border-t border-white/10 bg-[#0E100C]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-lg font-bold text-slate-900">CertiWatch</p>
-            <p className="text-sm text-slate-600">Compliance-grade certificate tracking for SMB teams.</p>
+            <p className="font-[family-name:var(--font-display)] text-lg font-semibold italic text-[#F5F3EE]">
+              CertiWatch
+            </p>
+            <p className="mt-1 text-sm text-[#8A8A7E]">Compliance-grade certificate tracking for SMB teams.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
-            <Link href="mailto:hello@certiwatch.com" className="hover:text-slate-900">
+          <div className="flex flex-wrap items-center gap-5 text-sm">
+            <Link href="mailto:hello@certiwatch.com" className="text-[#C9C7BC] transition hover:text-white">
               hello@certiwatch.com
             </Link>
-            <span className="hidden text-slate-300 md:inline">|</span>
             {hasSession ? (
-              <Link href="/analytics" className="font-semibold text-blue-600 hover:text-blue-500">
+              <Link href="/analytics" className="font-semibold text-[#4E9C74] hover:text-[#6FB98F]">
                 Go to dashboard
               </Link>
             ) : (
               <>
-                <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-500">
+                <Link href="/signup" className="font-semibold text-[#4E9C74] hover:text-[#6FB98F]">
                   Start trial
                 </Link>
-                <Link href="/login" className="font-semibold text-slate-800 hover:text-slate-900">
-                  Login
+                <Link href="/login" className="text-[#C9C7BC] transition hover:text-white">
+                  Log in
                 </Link>
               </>
             )}
           </div>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }
