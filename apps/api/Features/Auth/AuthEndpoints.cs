@@ -23,15 +23,28 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> SendMagicLinkAsync(
+        HttpContext http,
         MagicLinkRequest request,
         IOptions<MagicLinkOptions> magicOptions,
         IEmailTemplateRenderer renderer,
         IEmailService emailService,
         AppDbContext db,
-        ITenantContextAccessor tenantAccessor,
         CancellationToken token)
     {
-        var tenantId = tenantAccessor.Current.TenantId;
+        // This endpoint is anonymous by design (the caller isn't logged in yet), so the tenant to
+        // search within has to come from a client-declared hint rather than an authenticated claim.
+        // That's safe here specifically because the only effect of picking a tenant is "which user
+        // list do we search this email against before emailing a login link" - it grants no access
+        // and reveals nothing an attacker didn't already know (the recipient still has to click the
+        // link that lands in their own inbox).
+        if (!Guid.TryParse(http.Request.Headers["X-Tenant-Id"].FirstOrDefault(), out var tenantId))
+        {
+            return Results.Text(
+                "We couldn't find that email. Please sign up to start your trial.",
+                "text/plain",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var existing = await db.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
         if (existing is null)

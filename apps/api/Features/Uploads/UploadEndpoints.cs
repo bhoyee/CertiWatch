@@ -181,7 +181,7 @@ public static class UploadEndpoints
                 createdBy = viewer.Id;
             }
         }
-        createdBy ??= accessor.Current.UserId;
+        createdBy ??= accessor.IsSet ? accessor.Current.UserId : null;
         var source = await EnsureUploadSourceAsync(db, tenantId, clock, token);
         IReadOnlyCollection<IFormFile>? fileCollection = form?.Files;
         if (fileCollection is null || fileCollection.Count == 0)

@@ -16,12 +16,13 @@ public static class DeviceEndpoints
     {
         var group = routes.MapGroup("/api/devices");
         group.MapGet(string.Empty, ListAsync).RequireAuthorization();
-        group.MapPost("/enroll", EnrollAsync);
-        group.MapPost("/heartbeat", HeartbeatAsync);
-        group.MapPost("/events", EventsAsync);
-        group.MapPost("/check-hash", CheckHashAsync);
-        group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync);
-        group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync);
+        group.MapPost("/enrollment-codes", CreateEnrollmentCodeAsync).RequireAuthorization("Admin");
+        group.MapPost("/enroll", EnrollAsync).AllowAnonymous();
+        group.MapPost("/heartbeat", HeartbeatAsync).AllowAnonymous();
+        group.MapPost("/events", EventsAsync).AllowAnonymous();
+        group.MapPost("/check-hash", CheckHashAsync).AllowAnonymous();
+        group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync).AllowAnonymous();
+        group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync).AllowAnonymous();
         return group;
     }
 
@@ -44,38 +45,53 @@ public static class DeviceEndpoints
         }));
     }
 
-    private static async Task<IResult> EnrollAsync(EnrollDeviceRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
+    private static async Task<IResult> CreateEnrollmentCodeAsync(
+        AppDbContext db,
+        ITenantContextAccessor tenantAccessor,
+        IDateTimeProvider clock,
+        CancellationToken token)
     {
         var tenantId = tenantAccessor.Current.TenantId;
-        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        if (tenant is null)
+
+        var activeCodes = await db.DeviceEnrollmentCodes
+            .Where(c => c.TenantId == tenantId && c.RevokedAt == null)
+            .ToListAsync(token);
+        foreach (var existing in activeCodes)
         {
-            tenant = new Tenant
-            {
-                Id = tenantId,
-                Name = request.DeviceName ?? "Local Tenant",
-                Plan = "starter",
-                CreatedAtUtc = clock.UtcNow
-            };
+            existing.RevokedAt = clock.UtcNow;
+        }
 
-            var adminEmail = tenantAccessor.Current.Email ?? "admin@certiwatch.local";
-            tenant.Users.Add(new User
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                Email = adminEmail,
-                Name = adminEmail,
-                Role = "admin"
-            });
+        var plaintext = DeviceSecrets.GenerateEnrollmentCode();
+        var enrollmentCode = new DeviceEnrollmentCode
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            CodeHash = DeviceSecrets.Hash(plaintext),
+            ExpiresAt = clock.UtcNow.AddHours(24),
+            CreatedAt = clock.UtcNow
+        };
+        db.DeviceEnrollmentCodes.Add(enrollmentCode);
+        await db.SaveChangesAsync(token);
 
-            db.Tenants.Add(tenant);
-            await db.SaveChangesAsync(token);
+        return Results.Ok(new DeviceEnrollmentCodeResponse(plaintext, enrollmentCode.ExpiresAt));
+    }
+
+    private static async Task<IResult> EnrollAsync(EnrollDeviceRequest request, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
+    {
+        var codeHash = DeviceSecrets.Hash(request.EnrollmentCode);
+        var enrollmentCode = await db.DeviceEnrollmentCodes
+            .Where(c => c.CodeHash == codeHash && c.RevokedAt == null && c.ExpiresAt > clock.UtcNow)
+            .FirstOrDefaultAsync(token);
+
+        if (enrollmentCode is null)
+        {
+            return Results.Json(new { error = "invalid_enrollment_code" }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
         var device = new Device
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            TenantId = enrollmentCode.TenantId,
             Name = request.DeviceName,
             OperatingSystem = request.OperatingSystem ?? "unknown",
             DeviceToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
@@ -93,9 +109,9 @@ public static class DeviceEndpoints
     private static async Task<IResult> HeartbeatAsync(DeviceHeartbeatRequest request, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
     {
         var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == request.DeviceId, token);
-        if (device is null)
+        if (device is null || !DeviceSecrets.ConstantTimeEquals(device.DeviceToken, request.DeviceToken))
         {
-            return Results.NotFound();
+            return Results.Unauthorized();
         }
 
         device.LastSeenAt = clock.UtcNow;
@@ -106,9 +122,9 @@ public static class DeviceEndpoints
     private static async Task<IResult> EventsAsync(DeviceEventRequest request, AppDbContext db, IIngestionQueue queue, CancellationToken token)
     {
         var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == request.DeviceId, token);
-        if (device is null)
+        if (device is null || !DeviceSecrets.ConstantTimeEquals(device.DeviceToken, request.DeviceToken))
         {
-            return Results.NotFound();
+            return Results.Unauthorized();
         }
 
         foreach (var doc in request.Documents)
@@ -122,9 +138,9 @@ public static class DeviceEndpoints
     private static async Task<IResult> CheckHashAsync(FileHashCheckRequest request, AppDbContext db, CancellationToken token)
     {
         var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == request.DeviceId, token);
-        if (device is null)
+        if (device is null || !DeviceSecrets.ConstantTimeEquals(device.DeviceToken, request.DeviceToken))
         {
-            return Results.NotFound();
+            return Results.Unauthorized();
         }
 
         var record = await db.Records
@@ -152,7 +168,7 @@ public static class DeviceEndpoints
             return Results.NotFound();
         }
 
-        if (!string.Equals(device.DeviceToken, deviceToken, StringComparison.Ordinal))
+        if (!DeviceSecrets.ConstantTimeEquals(device.DeviceToken, deviceToken))
         {
             return Results.Unauthorized();
         }
@@ -195,7 +211,7 @@ public static class DeviceEndpoints
             return Results.NotFound();
         }
 
-        if (!string.Equals(device.DeviceToken, deviceToken, StringComparison.Ordinal))
+        if (!DeviceSecrets.ConstantTimeEquals(device.DeviceToken, deviceToken))
         {
             return Results.Unauthorized();
         }
@@ -224,9 +240,11 @@ public static class DeviceEndpoints
     }
 }
 
-public sealed record FileHashCheckRequest(Guid DeviceId, string FileHash);
+public sealed record FileHashCheckRequest(Guid DeviceId, string DeviceToken, string FileHash);
 
 public sealed record FileHashCheckResponse(bool Exists, bool ShouldReprocess);
+
+public sealed record DeviceEnrollmentCodeResponse(string Code, DateTime ExpiresAt);
 
 internal static class HashCheckExtensions
 {

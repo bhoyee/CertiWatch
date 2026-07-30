@@ -56,6 +56,22 @@ export async function patchJson<TResponse, TBody extends Record<string, unknown>
   return JSON.parse(text) as TResponse;
 }
 
+export async function postVoid(path: string, body: Record<string, unknown> = {}): Promise<void> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+}
+
 export async function deleteJson(path: string): Promise<void> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const response = await fetch(url, {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { fetchJson } from "../../../lib/api";
+import { fetchJson } from "@/lib/api";
 
 type TenantDetail = {
   id: string;

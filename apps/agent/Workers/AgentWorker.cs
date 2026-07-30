@@ -119,6 +119,7 @@ public sealed class AgentWorker : BackgroundService
         var request = new DeviceEventRequest
         {
             DeviceId = _deviceId,
+            DeviceToken = _deviceToken,
             Documents = pending.ToList()
         };
 
