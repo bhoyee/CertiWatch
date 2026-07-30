@@ -146,6 +146,8 @@ one is minted, and expires after 24 hours.
 
 Copy the returned `deviceId`/`deviceToken` into `.env` (`WORKER__DeviceId` / `WORKER__DeviceToken`) and re-run `docker compose up` to bring the worker online.
 
+**Keeping your local Docker stack in sync with `main`:** `git push` only updates GitHub — it doesn't touch anything running on your machine, since `docker-compose.yml` builds images from your local checkout rather than pulling from a registry. Run `scripts/update-local.sh` to pull the latest `main`, apply any new EF Core migrations, and rebuild/restart the containers in one step. It refuses to run if you have uncommitted local changes, so it won't clobber work in progress.
+
 Billing in Docker:
 - Frontend: http://localhost:3300, API: http://localhost:5002.
 - Set Stripe envs in `.env` (`Stripe__SecretKey`, `Stripe__WebhookSecret`, plan price IDs) and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
