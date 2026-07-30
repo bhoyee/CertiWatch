@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update \
+RUN apt-get -o Acquire::Retries=5 update \
     && apt-get install -y --no-install-recommends build-essential libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

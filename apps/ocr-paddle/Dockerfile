@@ -3,7 +3,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Needed for opencv headless and healthcheck curl
-RUN apt-get update \
+RUN apt-get -o Acquire::Retries=5 update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 build-essential swig curl \
     && rm -rf /var/lib/apt/lists/*
 
