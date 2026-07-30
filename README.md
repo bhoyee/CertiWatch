@@ -56,56 +56,7 @@ Typical customer: a care home, construction firm, or hospitality business that h
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph Clients["Clients"]
-        TenantUser["Tenant admin / staff<br/>(Next.js dashboard)"]
-        SuperAdmin["Superadmin<br/>(/platform console)"]
-        Agent["Local agent<br/>(Win / Linux / macOS)"]
-    end
-
-    subgraph Ingest["Ways documents get in"]
-        MagicUpload["Magic-link upload<br/>(staff, no login)"]
-        BulkUpload["Bulk upload<br/>(admin)"]
-        CloudDrives["Cloud sources<br/>Google Drive / OneDrive / Dropbox"]
-    end
-
-    subgraph Api["API — .NET 8"]
-        Auth["Auth<br/>magic link + cw_session"]
-        Endpoints["Records / Rules / Devices<br/>Billing / Platform endpoints"]
-        Queue[["Ingestion queue"]]
-    end
-
-    subgraph WorkerSvc["Worker — .NET 8"]
-        Ocr["OCR<br/>Tesseract (default) or<br/>docTR / PaddleOCR sidecar"]
-        Parse["Parsing pipeline"]
-        Rules["Rule engine<br/>tenant + global course rules"]
-    end
-
-    subgraph Data["Data"]
-        Postgres[("PostgreSQL 16")]
-        Redis[("Redis")]
-    end
-
-    subgraph Ext["External services"]
-        StripeSvc["Stripe<br/>billing"]
-        EmailSvc["SMTP / Resend<br/>magic links, reminders, digest"]
-    end
-
-    TenantUser --> Endpoints
-    SuperAdmin --> Endpoints
-    Agent --> Endpoints
-    MagicUpload --> Endpoints
-    BulkUpload --> Endpoints
-    CloudDrives --> Endpoints
-
-    Endpoints --> Queue --> Ocr --> Parse --> Rules --> Postgres
-    Endpoints --> Postgres
-    Endpoints --> Redis
-    Endpoints --> StripeSvc
-    Rules --> EmailSvc
-    Auth --> EmailSvc
-```
+![CertiWatch system architecture](docs/assets/architecture.svg)
 
 **Components**
 

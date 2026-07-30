@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 570" width="1200" height="570" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" class="arrowhead-gray" />
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" class="arrowhead-accent" />
+    </marker>
+  </defs>
+
+  <style>
+    .bg { fill: #ffffff; }
+    .title-label { fill: #64748b; font-size: 11px; font-weight: 600; letter-spacing: 2px; }
+
+    .box-neutral { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.25; }
+    .box-core { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; }
+    .box-data { fill: #eef2ff; stroke: #c7d2fe; stroke-width: 1.25; }
+    .box-ext { fill: #fafaf9; stroke: #e7e5e4; stroke-width: 1.25; }
+
+    .box-title { fill: #0f172a; font-size: 14.5px; font-weight: 700; }
+    .box-line { fill: #475569; font-size: 11.5px; font-weight: 400; }
+
+    .edge-gray { fill: none; stroke: #94a3b8; stroke-width: 1.5; marker-end: url(#arrowGray); }
+    .edge-accent { fill: none; stroke: #4338ca; stroke-width: 2; marker-end: url(#arrowAccent); }
+    .arrowhead-gray { fill: #94a3b8; }
+    .arrowhead-accent { fill: #4338ca; }
+    .legend-label { fill: #64748b; font-size: 11px; }
+
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .title-label { fill: #8b949e; }
+
+      .box-neutral { fill: #161b22; stroke: #30363d; }
+      .box-core { fill: #161b22; stroke: #4b5563; }
+      .box-data { fill: #171b2e; stroke: #363c58; }
+      .box-ext { fill: #161b1a; stroke: #2d332f; }
+
+      .box-title { fill: #e6edf3; }
+      .box-line { fill: #9198a1; }
+
+      .edge-gray { stroke: #6e7681; }
+      .edge-accent { stroke: #818cf8; }
+      .arrowhead-gray { fill: #6e7681; }
+      .arrowhead-accent { fill: #818cf8; }
+      .legend-label { fill: #8b949e; }
+    }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1200" height="570" />
+  <text class="title-label" x="40" y="28">CERTIWATCH — SYSTEM ARCHITECTURE</text>
+
+  <!-- Arrows (drawn first so boxes sit cleanly on top of line ends) -->
+  <path class="edge-gray" d="M270,110 L300,110 L300,140 L326,140" />
+  <path class="edge-gray" d="M270,270 L300,270 L300,230 L326,230" />
+  <path class="edge-accent" d="M560,175 L616,175" />
+  <path class="edge-accent" d="M850,175 L880,175 L880,105 L906,105" />
+  <path class="edge-gray" d="M370,290 L370,396" />
+  <path class="edge-gray" d="M520,290 L520,396" />
+
+  <!-- A1 Clients -->
+  <rect class="box-neutral" x="40" y="60" width="230" height="100" rx="8" />
+  <text class="box-title" x="58" y="86">Clients</text>
+  <text class="box-line" x="58" y="110">Tenant admin / staff — browser</text>
+  <text class="box-line" x="58" y="128">Superadmin — /platform console</text>
+
+  <!-- A2 Ingestion channels -->
+  <rect class="box-neutral" x="40" y="200" width="230" height="140" rx="8" />
+  <text class="box-title" x="58" y="226">Ingestion channels</text>
+  <text class="box-line" x="58" y="250">Local agent — folder watch</text>
+  <text class="box-line" x="58" y="268">Magic-link upload — staff, no login</text>
+  <text class="box-line" x="58" y="286">Bulk upload — admin</text>
+  <text class="box-line" x="58" y="304">Cloud sources — Drive / OneDrive / Dropbox</text>
+
+  <!-- B API -->
+  <rect class="box-core" x="330" y="60" width="230" height="230" rx="8" />
+  <text class="box-title" x="348" y="86">API — .NET 8</text>
+  <text class="box-line" x="348" y="112">Auth — magic link + cw_session</text>
+  <text class="box-line" x="348" y="134">Tenant, records, rules &amp; device endpoints</text>
+  <text class="box-line" x="348" y="156">Billing &amp; platform (superadmin) endpoints</text>
+  <text class="box-line" x="348" y="178">Ingestion queue</text>
+  <text class="box-line" x="348" y="200">Reminder &amp; digest scheduler</text>
+
+  <!-- C Worker -->
+  <rect class="box-core" x="620" y="90" width="230" height="170" rx="8" />
+  <text class="box-title" x="638" y="116">Worker — .NET 8</text>
+  <text class="box-line" x="638" y="142">OCR call — Tesseract, or docTR /</text>
+  <text class="box-line" x="638" y="158">PaddleOCR sidecar</text>
+  <text class="box-line" x="638" y="182">Parsing pipeline</text>
+  <text class="box-line" x="638" y="204">Rule engine — tenant + global rules</text>
+
+  <!-- D1 Postgres -->
+  <rect class="box-data" x="910" y="60" width="230" height="90" rx="8" />
+  <text class="box-title" x="928" y="86">PostgreSQL 16</text>
+  <text class="box-line" x="928" y="112">Tenants, users, records, rules, audit log</text>
+
+  <!-- D2 Redis -->
+  <rect class="box-data" x="910" y="200" width="230" height="90" rx="8" />
+  <text class="box-title" x="928" y="226">Redis</text>
+  <text class="box-line" x="928" y="252">Cache / queue support (provisioned)</text>
+
+  <!-- E1 Stripe -->
+  <rect class="box-ext" x="320" y="400" width="150" height="80" rx="8" />
+  <text class="box-title" x="336" y="428">Stripe</text>
+  <text class="box-line" x="336" y="450">Checkout &amp;</text>
+  <text class="box-line" x="336" y="465">subscriptions</text>
+
+  <!-- E2 Email -->
+  <rect class="box-ext" x="480" y="400" width="150" height="80" rx="8" />
+  <text class="box-title" x="496" y="428">SMTP / Resend</text>
+  <text class="box-line" x="496" y="450">Magic links, reminders,</text>
+  <text class="box-line" x="496" y="465">weekly digest</text>
+
+  <!-- Legend -->
+  <line x1="40" y1="513" x2="72" y2="513" class="edge-accent" />
+  <text class="legend-label" x="80" y="517">Core document pipeline — ingest → OCR → parse → rules → stored</text>
+  <line x1="40" y1="538" x2="72" y2="538" class="edge-gray" />
+  <text class="legend-label" x="80" y="542">Other application calls</text>
+</svg>
