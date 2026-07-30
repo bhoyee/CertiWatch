@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
 WORKDIR /app
-RUN apt-get update && \
+RUN apt-get -o Acquire::Retries=5 update && \
     apt-get install -y --no-install-recommends tesseract-ocr poppler-utils && \
     rm -rf /var/lib/apt/lists/*
 

@@ -9,9 +9,13 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -n "$(git status --porcelain)" ]; then
-  echo "You have uncommitted local changes - commit, stash, or discard them first:" >&2
-  git status --short
+# Ignore whitespace/line-ending-only diffs here (Windows checkouts without a normalized
+# .gitattributes history can otherwise show the whole repo as "modified" with nothing real
+# changed) - only block on genuine content differences, staged or unstaged.
+if ! git diff -w --quiet || ! git diff -w --cached --quiet; then
+  echo "You have real uncommitted changes - commit, stash, or discard them first:" >&2
+  git diff -w --stat
+  git diff -w --cached --stat
   exit 1
 fi
 
@@ -34,7 +38,11 @@ ConnectionStrings__postgres="Host=localhost;Port=15432;Username=postgres;Passwor
   scripts/migrate.sh
 
 echo "==> Rebuilding and restarting containers..."
-docker compose up --build -d
+# COMPOSE_BAKE=false keeps builds scoped per-service instead of batching every image into one
+# buildx bake call - otherwise an unrelated failure in one service (e.g. the worker/paddleocr
+# apt-get steps hitting a transient network blip) cancels every other image's build too,
+# including the frontend, even though nothing was actually wrong with it.
+COMPOSE_BAKE=false docker compose up --build -d
 
 echo "==> Done. Recent logs:"
 docker compose logs --tail=30
