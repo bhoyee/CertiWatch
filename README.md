@@ -54,6 +54,80 @@ Typical customer: a care home, construction firm, or hospitality business that h
 
 .NET 8 modular API + worker, cross-platform agent, Next.js 15 admin UI, PostgreSQL 16 + Redis, OCR via Tesseract/docTR/PaddleOCR, Stripe billing, Azure Container Apps + Cloudflare in front for production. See `docs/security.md` for the current security posture.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients["Clients"]
+        TenantUser["Tenant admin / staff<br/>(Next.js dashboard)"]
+        SuperAdmin["Superadmin<br/>(/platform console)"]
+        Agent["Local agent<br/>(Win / Linux / macOS)"]
+    end
+
+    subgraph Ingest["Ways documents get in"]
+        MagicUpload["Magic-link upload<br/>(staff, no login)"]
+        BulkUpload["Bulk upload<br/>(admin)"]
+        CloudDrives["Cloud sources<br/>Google Drive / OneDrive / Dropbox"]
+    end
+
+    subgraph Api["API — .NET 8"]
+        Auth["Auth<br/>magic link + cw_session"]
+        Endpoints["Records / Rules / Devices<br/>Billing / Platform endpoints"]
+        Queue[["Ingestion queue"]]
+    end
+
+    subgraph WorkerSvc["Worker — .NET 8"]
+        Ocr["OCR<br/>Tesseract (default) or<br/>docTR / PaddleOCR sidecar"]
+        Parse["Parsing pipeline"]
+        Rules["Rule engine<br/>tenant + global course rules"]
+    end
+
+    subgraph Data["Data"]
+        Postgres[("PostgreSQL 16")]
+        Redis[("Redis")]
+    end
+
+    subgraph Ext["External services"]
+        StripeSvc["Stripe<br/>billing"]
+        EmailSvc["SMTP / Resend<br/>magic links, reminders, digest"]
+    end
+
+    TenantUser --> Endpoints
+    SuperAdmin --> Endpoints
+    Agent --> Endpoints
+    MagicUpload --> Endpoints
+    BulkUpload --> Endpoints
+    CloudDrives --> Endpoints
+
+    Endpoints --> Queue --> Ocr --> Parse --> Rules --> Postgres
+    Endpoints --> Postgres
+    Endpoints --> Redis
+    Endpoints --> StripeSvc
+    Rules --> EmailSvc
+    Auth --> EmailSvc
+```
+
+**Components**
+
+| Component | Role |
+|---|---|
+| **Frontend** (`apps/frontend`) | Next.js 15 app — the tenant dashboard (records, rules, team, billing, etc.) and the `/platform` superadmin console. |
+| **API** (`apps/api`) | .NET 8 minimal API — auth, tenant/records/rules/device/billing/platform endpoints, and the ingestion queue. Vertical-slice layout under `Features/`. |
+| **Worker** (`apps/worker`) | .NET 8 background service — pulls queued documents, calls OCR, runs the parsing pipeline, resolves the rule engine, and writes records. |
+| **Agent** (`apps/agent`) | Cross-platform local service — watches folders on a staff machine/NAS and pushes new documents to the API using a per-device token. |
+| **OCR** (`apps/ocr-doctr`, `apps/ocr-paddle`) | FastAPI sidecars used when higher-accuracy extraction is needed than the worker's built-in Tesseract. |
+| **Postgres** | Primary data store — tenants, users, devices, documents, records, rules, audit log. |
+| **Redis** | Cache/queue support alongside Postgres. |
+| **Stripe** | Checkout + subscription billing. |
+| **SMTP/Resend** | Delivers magic-link logins, expiry reminders, and the weekly digest. |
+
+**Implementation notes**
+- **Billing**: `/api/billing/checkout` creates Checkout Sessions; `/api/billing/webhook` verifies signatures and provisions tenants.
+- **Rules & records**: global+tenant rule precedence with automatic reprocessing.
+- **Notifications**: weekly digest + configurable expiry reminders (mail templates live in `/emails`).
+- **Deploy**: Terraform under `/terraform` targets Azure Container Apps behind Cloudflare; CI/CD in `.github/workflows/ci.yml` (lint, tests, docker build, security scans, terraform plan).
+- **OCR defaults**: worker runs Tesseract + poppler and can call a docTR sidecar (FastAPI, `apps/ocr-doctr`) for higher-quality OCR. For host-native runs install `tesseract-ocr` and `poppler-utils`; cloud OCR (Azure/GCP/etc.) is optional via env vars.
+
 ## Quickstart
 
 ```bash
@@ -85,14 +159,6 @@ Signup is self-serve via Stripe:
 3. **Signup page** – visit `http://localhost:3000/signup`, choose a plan, enter company/admin info. The UI calls `POST /api/billing/checkout`, receives a Checkout Session URL, and redirects to Stripe.
 4. **Webhook** – use Stripe CLI locally: `stripe listen --forward-to http://localhost:5001/api/billing/webhook`. On `checkout.session.completed`, the API provisions a tenant + first admin via `TenantProvisioningService`.
 5. **Login** – provisioned admins sign in via magic link (no password). Plan metadata is stored on the tenant and enforced against record limits.
-
-## Architecture overview
-
-- **Billing**: `/api/billing/checkout` creates Checkout Sessions; `/api/billing/webhook` verifies signatures and provisions tenants.
-- **Rules & records**: global+tenant rule precedence with automatic reprocessing.
-- **Notifications**: weekly digest + configurable expiry reminders (mail templates live in `/emails`).
-- **Deploy**: Terraform under `/terraform`, CI/CD in `.github/workflows/ci.yml` (lint, tests, docker build, security scans, terraform plan).
-- **OCR defaults**: worker runs Tesseract + poppler and can call a docTR sidecar (FastAPI, `apps/ocr-doctr`) for higher-quality OCR. For host-native runs install `tesseract-ocr` and `poppler-utils`; cloud OCR (Azure/GCP/etc.) is optional via env vars.
 
 ## Documentation index
 
