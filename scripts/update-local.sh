@@ -46,12 +46,35 @@ else
   echo "  .NET 8 SDK there, or re-run this from Git Bash instead, to enable this step." >&2
 fi
 
-echo "==> Rebuilding and restarting containers..."
-# COMPOSE_BAKE=false keeps builds scoped per-service instead of batching every image into one
-# buildx bake call - otherwise an unrelated failure in one service (e.g. the worker/paddleocr
-# apt-get steps hitting a transient network blip) cancels every other image's build too,
-# including the frontend, even though nothing was actually wrong with it.
-COMPOSE_BAKE=false docker compose up --build -d
+echo "==> Rebuilding and restarting containers (one service at a time)..."
+# Building services one at a time - rather than a single `docker compose up --build` - is the
+# real fix for a recurring problem: Compose's build graph (bake or not, COMPOSE_BAKE=false isn't
+# honored on every Compose version) treats the whole file as one unit, so an unrelated failure in
+# one image cancels every other image's build too. The worker/paddleocr images run `apt-get
+# install` against deb.debian.org at build time, which has repeatedly failed on flaky/blocked
+# Docker networking here - that has nothing to do with api/frontend, which don't hit apt-get at
+# all, so there's no reason a Debian mirror hiccup should stop them from updating.
+# api/frontend first since they're what you actually look at day to day; worker/paddleocr after.
+FAILED=""
+for svc in api frontend worker paddleocr; do
+  echo "--- $svc ---"
+  if docker compose build "$svc" && docker compose up -d "$svc"; then
+    echo "$svc: OK"
+  else
+    echo "WARNING: $svc failed to build/start - leaving its previous container (if any) running." >&2
+    FAILED="$FAILED $svc"
+  fi
+done
 
-echo "==> Done. Recent logs:"
+echo "==> Recent logs:"
 docker compose logs --tail=30
+
+if [ -n "$FAILED" ]; then
+  echo "==> Done, but these services did NOT update:$FAILED" >&2
+  echo "  If that includes worker/paddleocr, it's almost certainly deb.debian.org being" >&2
+  echo "  unreachable from Docker's network again - not a code problem. Try restarting Docker" >&2
+  echo "  Desktop (or 'wsl --shutdown' then reopen it) and re-running this script." >&2
+  exit 1
+fi
+
+echo "==> Done. Everything rebuilt successfully."
