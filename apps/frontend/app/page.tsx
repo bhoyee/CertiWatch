@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { display, body } from "@/lib/fonts";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const steps = [
   {
@@ -171,53 +173,7 @@ export default function LandingPage() {
 
   return (
     <div className={`${display.variable} ${body.variable} font-[family-name:var(--font-body)] bg-[#FAF7F0] text-[#1B1B16]`}>
-      {/* Nav */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#12140F]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <span className="font-[family-name:var(--font-display)] text-lg font-semibold italic tracking-tight text-[#F5F3EE]">
-            CertiWatch
-          </span>
-          <nav className="hidden items-center gap-8 text-sm text-[#C9C7BC] md:flex">
-            <Link href="#how" className="transition hover:text-white">
-              How it works
-            </Link>
-            <Link href="#pricing" className="transition hover:text-white">
-              Pricing
-            </Link>
-            <Link href="#faq" className="transition hover:text-white">
-              FAQ
-            </Link>
-            <Link href="#contact" className="transition hover:text-white">
-              Contact
-            </Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            {hasSession ? (
-              <Link
-                href="/analytics"
-                className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#195939]"
-              >
-                Go to dashboard
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="hidden text-sm font-medium text-[#C9C7BC] transition hover:text-white md:inline-flex"
-                >
-                  Log in
-                </Link>
-                <Link
-                  href="/signup"
-                  className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#195939]"
-                >
-                  Start 7-day trial
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-[#12140F]">
@@ -482,36 +438,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer id="contact" className="border-t border-white/10 bg-[#0E100C]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-[family-name:var(--font-display)] text-lg font-semibold italic text-[#F5F3EE]">
-              CertiWatch
-            </p>
-            <p className="mt-1 text-sm text-[#8A8A7E]">Compliance-grade certificate tracking for SMB teams.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-5 text-sm">
-            <Link href="mailto:hello@certiwatch.com" className="text-[#C9C7BC] transition hover:text-white">
-              hello@certiwatch.com
-            </Link>
-            {hasSession ? (
-              <Link href="/analytics" className="font-semibold text-[#4E9C74] hover:text-[#6FB98F]">
-                Go to dashboard
-              </Link>
-            ) : (
-              <>
-                <Link href="/signup" className="font-semibold text-[#4E9C74] hover:text-[#6FB98F]">
-                  Start trial
-                </Link>
-                <Link href="/login" className="text-[#C9C7BC] transition hover:text-white">
-                  Log in
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
