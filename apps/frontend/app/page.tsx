@@ -2,20 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Fraunces, Work_Sans } from "next/font/google";
-
-const display = Fraunces({
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-display"
-});
-
-const body = Work_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-body"
-});
+import { display, body } from "@/lib/fonts";
 
 const steps = [
   {
