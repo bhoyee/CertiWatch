@@ -23,7 +23,6 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> SendMagicLinkAsync(
-        HttpContext http,
         MagicLinkRequest request,
         IOptions<MagicLinkOptions> magicOptions,
         IEmailTemplateRenderer renderer,
@@ -31,28 +30,22 @@ public static class AuthEndpoints
         AppDbContext db,
         CancellationToken token)
     {
-        // This endpoint is anonymous by design (the caller isn't logged in yet), so the tenant to
-        // search within has to come from a client-declared hint rather than an authenticated claim.
-        // That's safe here specifically because the only effect of picking a tenant is "which user
-        // list do we search this email against before emailing a login link" - it grants no access
-        // and reveals nothing an attacker didn't already know (the recipient still has to click the
-        // link that lands in their own inbox).
-        if (!Guid.TryParse(http.Request.Headers["X-Tenant-Id"].FirstOrDefault(), out var tenantId))
-        {
-            return Results.Text(
-                "We couldn't find that email. Please sign up to start your trial.",
-                "text/plain",
-                statusCode: StatusCodes.Status400BadRequest);
-        }
-
+        // This endpoint is anonymous by design (the caller isn't logged in yet) and the frontend has
+        // no "which company" field for the user to fill in - so the tenant is resolved purely from a
+        // server-side lookup by email, never from client input. If the same email is somehow
+        // registered under more than one tenant, we pick the most recently created membership; that's
+        // a rare edge case for this product (one user, one tenant, in practice), not the common path.
         var existing = await db.Users.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, token);
+            .Where(u => u.Email == request.Email)
+            .OrderByDescending(u => u.CreatedAt)
+            .FirstOrDefaultAsync(token);
         if (existing is null)
         {
             const string message = "We couldn't find that email. Please sign up to start your trial.";
             return Results.Text(message, "text/plain", statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var tenantId = existing.TenantId;
         var options = magicOptions.Value;
         var tokenString = MagicLinkTokenService.CreateToken(
             request.Email,
