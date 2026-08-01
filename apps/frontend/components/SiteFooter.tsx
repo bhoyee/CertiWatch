@@ -17,7 +17,9 @@ export function SiteFooter() {
           <p className="font-[family-name:var(--font-display)] text-lg font-semibold italic text-[#F5F3EE]">
             CertiWatch
           </p>
-          <p className="mt-1 text-sm text-[#8A8A7E]">Compliance-grade certificate tracking for SMB teams.</p>
+          <p className="mt-1 text-sm text-[#8A8A7E]">
+            Compliance-grade renewal tracking for SMB teams — certificates, licenses, insurance &amp; more.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-5 text-sm">
           <Link href="mailto:hello@certiwatch.com" className="text-[#C9C7BC] transition hover:text-white">

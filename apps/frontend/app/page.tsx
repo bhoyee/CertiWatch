@@ -15,12 +15,12 @@ const steps = [
   {
     n: "02",
     title: "Ingest",
-    description: "New certificates land from a watched folder, a cloud drive, or a no-login staff upload link."
+    description: "New documents land from a watched folder, a cloud drive, or a no-login upload link."
   },
   {
     n: "03",
     title: "Extract",
-    description: "OCR reads staff name, course, issuer, and dates. Anything uncertain is queued for a human look."
+    description: "OCR reads who or what it covers, the issuer, and the dates. Anything uncertain is queued for a human look."
   },
   {
     n: "04",
@@ -31,14 +31,14 @@ const steps = [
 
 const features = [
   {
-    title: "One inbox for every certificate",
+    title: "One inbox for everything that expires",
     description:
       "Local folders, Google Drive, OneDrive, and Dropbox all feed the same review queue — no more chasing five people for the same PDF.",
     span: true
   },
   {
     title: "A rule engine that knows your exceptions",
-    description: "Global defaults per course, overridden per tenant, per vendor, or by regex — not a flat 12-month guess."
+    description: "Global defaults per document type, overridden per tenant, per vendor, or by regex — not a flat 12-month guess."
   },
   {
     title: "Nothing goes in unreviewed",
@@ -58,7 +58,7 @@ const faqs = [
   {
     question: "How does onboarding work?",
     answer:
-      "Pick a plan, complete Stripe checkout, and your tenant is provisioned automatically. You can invite admins, enroll a device, and start ingesting certificates right away."
+      "Pick a plan, complete Stripe checkout, and your tenant is provisioned automatically. You can invite admins, enroll a device, and start ingesting documents right away."
   },
   {
     question: "Where are documents stored?",
@@ -80,14 +80,14 @@ const plans = [
   {
     name: "Starter",
     price: "$99",
-    blurb: "For small teams getting off spreadsheets.",
+    blurb: "For small teams tracking their first few renewal dates.",
     features: ["50 records / month", "Local folder ingestion", "30-day document retention"],
     cta: "Start 7-day trial"
   },
   {
     name: "Growth",
     price: "$249",
-    blurb: "For growing orgs bringing cloud drives online.",
+    blurb: "For growing orgs juggling certs, licenses, and insurance.",
     features: ["500 records / month", "Google Drive, OneDrive, Dropbox", "1-year document retention"],
     cta: "Start 7-day trial",
     highlighted: true
@@ -95,16 +95,16 @@ const plans = [
   {
     name: "Pro",
     price: "$499",
-    blurb: "For ops teams that need it all wired in.",
+    blurb: "For ops teams tracking everything that could lapse.",
     features: ["Unlimited records", "Webhooks & API access", "Priority support"],
     cta: "Start 7-day trial"
   }
 ];
 
 const certCards = [
-  { initials: "AM", name: "Amara Musa", course: "First Aid at Work", status: "valid", detail: "Valid · 214 days left" },
-  { initials: "JD", name: "Jordan Diaz", course: "Fire Safety", status: "warning", detail: "Renew in 12 days" },
-  { initials: "RS", name: "Ravi Shah", course: "Manual Handling", status: "review", detail: "Needs review" }
+  { initials: "AM", title: "Amara Musa", subtitle: "First Aid at Work", status: "valid", detail: "Valid · 214 days left" },
+  { initials: "FV", title: "Fleet Van 04", subtitle: "MOT & service", status: "warning", detail: "Renew in 12 days" },
+  { initials: "PL", title: "Public Liability", subtitle: "Insurance policy", status: "review", detail: "Needs review" }
 ];
 
 function StatusDot({ status }: { status: string }) {
@@ -189,15 +189,15 @@ export default function LandingPage() {
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#4E9C74]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#4E9C74]" />
-              Certificate compliance, handled
+              Every renewal, handled
             </p>
             <h1 className="mt-5 max-w-xl font-[family-name:var(--font-display)] text-4xl font-medium leading-[1.08] text-[#F5F3EE] md:text-[3.25rem]">
-              Stop finding out a certificate lapsed <em className="not-italic text-[#4E9C74]">after</em> the inspector
+              Stop finding out something's expired <em className="not-italic text-[#4E9C74]">after</em> the inspector
               does.
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#C9C7BC]">
-              CertiWatch watches every folder and cloud drive your staff certificates land in, reads the expiry off
-              the page, and tells you — and only you — before it runs out.
+              CertiWatch watches every folder and cloud drive your certificates, licenses, insurance, and inspection
+              documents land in, reads the expiry off the page, and tells you — and only you — before it runs out.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               {hasSession ? (
@@ -230,11 +230,11 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Stacked certificate cards */}
+          {/* Stacked compliance-item cards */}
           <div className="relative h-[360px] md:h-[420px]">
             {certCards.map((card, i) => (
               <div
-                key={card.name}
+                key={card.title}
                 className="absolute w-72 rounded-xl border border-black/5 bg-[#FFFDF8] p-5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.45)]"
                 style={{
                   top: `${i * 104}px`,
@@ -248,8 +248,8 @@ export default function LandingPage() {
                     {card.initials}
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-[#1B1B16]">{card.name}</p>
-                    <p className="text-xs text-[#6B6A61]">{card.course}</p>
+                    <p className="text-sm font-semibold text-[#1B1B16]">{card.title}</p>
+                    <p className="text-xs text-[#6B6A61]">{card.subtitle}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center gap-2 border-t border-black/5 pt-3 text-xs font-medium text-[#4B4A42]">
@@ -284,7 +284,7 @@ export default function LandingPage() {
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">What you get</p>
           <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            Everything between a scanned certificate and a peaceful audit.
+            Everything between a scanned document and a peaceful audit.
           </h2>
         </div>
         <div className="mt-12 grid gap-5 md:grid-cols-2">
@@ -332,7 +332,7 @@ export default function LandingPage() {
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">Pricing</p>
           <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            Plans that scale with how many certificates you're tracking.
+            Plans that scale with how many things you're tracking.
           </h2>
         </div>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
