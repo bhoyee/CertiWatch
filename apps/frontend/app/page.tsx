@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { display, body } from "@/lib/fonts";
-import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
+import { Zilla_Slab, Courier_Prime, IBM_Plex_Sans } from "next/font/google";
+
+// This page intentionally does not use the shared SiteHeader/SiteFooter or lib/fonts - it commits
+// to its own visual language (a compliance ledger/document, not another dark-hero SaaS template)
+// and stays scoped to this one route so /login and /signup are unaffected.
+const display = Zilla_Slab({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display" });
+const mono = Courier_Prime({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-mono" });
+const body = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-body" });
 
 const steps = [
   {
@@ -33,8 +38,7 @@ const features = [
   {
     title: "One inbox for everything that expires",
     description:
-      "Local folders, Google Drive, OneDrive, and Dropbox all feed the same review queue — no more chasing five people for the same PDF.",
-    span: true
+      "Local folders, Google Drive, OneDrive, and Dropbox all feed the same review queue — no more chasing five people for the same PDF."
   },
   {
     title: "A rule engine that knows your exceptions",
@@ -101,101 +105,71 @@ const plans = [
   }
 ];
 
-const certCards = [
-  { initials: "AM", title: "Amara Musa", subtitle: "First Aid at Work", status: "valid", detail: "Valid · 214 days left" },
-  { initials: "FV", title: "Fleet Van 04", subtitle: "MOT & service", status: "warning", detail: "Renew in 12 days" },
-  { initials: "PL", title: "Public Liability", subtitle: "Insurance policy", status: "review", detail: "Needs review" }
-];
-
-function StatusDot({ status }: { status: string }) {
-  const color = status === "valid" ? "bg-[#1F6B45]" : status === "warning" ? "bg-[#B45309]" : "bg-[#6B6A61]";
-  return <span className={`h-1.5 w-1.5 rounded-full ${color}`} />;
-}
-
-function IconInbox() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-      <path d="M3 12h4.2l1.6 3h6.4l1.6-3H21" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 12 6.6 5.4A2 2 0 0 1 8.5 4h7A2 2 0 0 1 17.4 5.4L19 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6Z" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconBranch() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-      <circle cx="6" cy="6" r="2.2" />
-      <circle cx="6" cy="18" r="2.2" />
-      <circle cx="18" cy="12" r="2.2" />
-      <path d="M6 8.2V15.8M8 6.6h4a4 4 0 0 1 4 4v0M8 17.4h4a4 4 0 0 0 4-4v0" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconReview() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-      <rect x="4" y="3.5" width="12" height="17" rx="1.5" />
-      <path d="M7.5 8h5M7.5 11.5h5M7.5 15h3" strokeLinecap="round" />
-      <circle cx="17.5" cy="17.5" r="3" />
-      <path d="m19.8 19.8 1.7 1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconBell() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-      <path d="M6 10a6 6 0 1 1 12 0c0 3.4 1 5 1.6 5.8H4.4C5 15 6 13.4 6 10Z" strokeLinejoin="round" />
-      <path d="M10 18.5a2 2 0 0 0 4 0" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconLock() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-      <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
-      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
-      <circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-const featureIcons = [IconInbox, IconBranch, IconReview, IconBell, IconLock];
+const industries = ["Care homes", "Construction", "Hospitality", "Facilities"];
 
 export default function LandingPage() {
   const [hasSession, setHasSession] = useState(false);
+  const year = new Date().getFullYear();
 
   useEffect(() => {
     setHasSession(document.cookie.includes("cw_session="));
   }, []);
 
   return (
-    <div className={`${display.variable} ${body.variable} font-[family-name:var(--font-body)] bg-[#FAF7F0] text-[#1B1B16]`}>
-      <SiteHeader />
+    <div
+      className={`${display.variable} ${mono.variable} ${body.variable} font-[family-name:var(--font-body)] bg-[#FAFAF6] text-[#16140F]`}
+    >
+      {/* Masthead */}
+      <header className="border-b border-[#16140F] bg-[#FAFAF6]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <Link href="/" className="font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-[0.15em]">
+            CertiWatch <span className="hidden text-[#57534A] sm:inline">/ Compliance Register</span>
+          </Link>
+          <nav className="hidden items-center gap-8 font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide text-[#57534A] md:flex">
+            <Link href="#how" className="hover:text-[#16140F]">How it works</Link>
+            <Link href="#pricing" className="hover:text-[#16140F]">Pricing</Link>
+            <Link href="#faq" className="hover:text-[#16140F]">FAQ</Link>
+            <Link href="#contact" className="hover:text-[#16140F]">Contact</Link>
+          </nav>
+          <div className="flex items-center gap-4">
+            {hasSession ? (
+              <Link
+                href="/analytics"
+                className="border border-[#16140F] px-4 py-2 font-[family-name:var(--font-mono)] text-xs font-bold uppercase tracking-wide transition hover:bg-[#16140F] hover:text-[#FAFAF6]"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="hidden font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide text-[#57534A] hover:text-[#16140F] md:inline"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="border border-[#16140F] bg-[#16140F] px-4 py-2 font-[family-name:var(--font-mono)] text-xs font-bold uppercase tracking-wide text-[#FAFAF6] transition hover:bg-[#1E3A5F] hover:border-[#1E3A5F]"
+                >
+                  Start trial
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-[#12140F]">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "linear-gradient(#F5F3EE 1px, transparent 1px), linear-gradient(90deg, #F5F3EE 1px, transparent 1px)",
-            backgroundSize: "48px 48px"
-          }}
-        />
-        <div className="relative mx-auto grid max-w-6xl gap-14 px-6 py-20 md:grid-cols-[1.1fr_0.9fr] md:items-center md:py-28">
+      <section className="border-b border-[#16140F]">
+        <div className="mx-auto grid max-w-6xl gap-16 px-6 py-16 md:grid-cols-[1.1fr_0.9fr] md:items-center md:py-24">
           <div>
-            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#4E9C74]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#4E9C74]" />
-              Every renewal, handled
+            <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">
+              §1 — Every renewal, handled
             </p>
-            <h1 className="mt-5 max-w-xl font-[family-name:var(--font-display)] text-4xl font-medium leading-[1.08] text-[#F5F3EE] md:text-[3.25rem]">
-              Stop finding out something's expired <em className="not-italic text-[#4E9C74]">after</em> the inspector
-              does.
+            <h1 className="mt-4 max-w-xl font-[family-name:var(--font-display)] text-4xl font-bold leading-[1.05] md:text-[3.4rem]">
+              Stop finding out something's expired <span className="text-[#B3271E]">after</span> the inspector does.
             </h1>
-            <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#C9C7BC]">
+            <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#3F3D35]">
               CertiWatch watches every folder and cloud drive your certificates, licenses, insurance, and inspection
               documents land in, reads the expiry off the page, and tells you — and only you — before it runs out.
             </p>
@@ -203,7 +177,7 @@ export default function LandingPage() {
               {hasSession ? (
                 <Link
                   href="/analytics"
-                  className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+                  className="inline-flex items-center justify-center border-2 border-[#16140F] bg-[#16140F] px-6 py-3 font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wide text-[#FAFAF6] transition hover:bg-[#1E3A5F] hover:border-[#1E3A5F]"
                 >
                   Go to dashboard
                 </Link>
@@ -211,66 +185,68 @@ export default function LandingPage() {
                 <>
                   <Link
                     href="/signup"
-                    className="inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+                    className="inline-flex items-center justify-center border-2 border-[#16140F] bg-[#16140F] px-6 py-3 font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wide text-[#FAFAF6] transition hover:bg-[#1E3A5F] hover:border-[#1E3A5F]"
                   >
                     Start 7-day trial
                   </Link>
                   <Link
                     href="/login"
-                    className="inline-flex items-center justify-center rounded-md border border-white/15 px-6 py-3.5 text-sm font-semibold text-[#F5F3EE] transition hover:border-white/30 hover:bg-white/5"
+                    className="inline-flex items-center justify-center border-2 border-[#16140F] px-6 py-3 font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wide text-[#16140F] transition hover:bg-[#16140F] hover:text-[#FAFAF6]"
                   >
                     Log in
                   </Link>
                 </>
               )}
             </div>
-            <p className="mt-8 text-sm text-[#8A8A7E]">
-              No card surprises — 7 days free, cancel before it ends. · Built for care, construction &amp; hospitality
-              teams.
+            <p className="mt-8 font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide text-[#8A887C]">
+              No card surprises — 7 days free · Built for care, construction &amp; hospitality teams
             </p>
           </div>
 
-          {/* Stacked compliance-item cards */}
-          <div className="relative h-[360px] md:h-[420px]">
-            {certCards.map((card, i) => (
-              <div
-                key={card.title}
-                className="absolute w-72 rounded-xl border border-black/5 bg-[#FFFDF8] p-5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.45)]"
-                style={{
-                  top: `${i * 104}px`,
-                  left: `${i * 30}px`,
-                  transform: `rotate(${i === 0 ? -4 : i === 1 ? 1.5 : -1}deg)`,
-                  zIndex: certCards.length - i
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#12140F] text-xs font-semibold text-[#F5F3EE]">
-                    {card.initials}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-[#1B1B16]">{card.title}</p>
-                    <p className="text-xs text-[#6B6A61]">{card.subtitle}</p>
+          {/* Certificate + stamp visual */}
+          <div className="relative mx-auto w-full max-w-sm">
+            <div className="relative border-2 border-[#16140F] bg-white p-8">
+              <div className="pointer-events-none absolute inset-[6px] border border-[#16140F]/25" />
+              <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-[#8A887C]">
+                Ref. CW-2026-0412
+              </p>
+              <h3 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-bold">Certificate Record</h3>
+              <div className="mt-6 space-y-3 border-t border-[#16140F]/15 pt-6 font-[family-name:var(--font-mono)] text-xs">
+                {[
+                  ["Issued to", "Jordan Diaz"],
+                  ["Course", "Fire Safety Level 2"],
+                  ["Issued", "14 Jan 2025"],
+                  ["Expires", "14 Jan 2026"]
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-baseline justify-between gap-4">
+                    <span className="uppercase tracking-wide text-[#8A887C]">{label}</span>
+                    <span className="text-right">{value}</span>
                   </div>
-                </div>
-                <div className="mt-4 flex items-center gap-2 border-t border-black/5 pt-3 text-xs font-medium text-[#4B4A42]">
-                  <StatusDot status={card.status} />
-                  {card.detail}
-                </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <div className="absolute -right-7 -top-7 flex h-28 w-28 rotate-[-14deg] items-center justify-center rounded-full border-[3px] border-double border-[#B3271E] bg-[#FAFAF6] mix-blend-multiply">
+              <span className="text-center font-[family-name:var(--font-mono)] text-[10px] font-bold uppercase leading-[1.35] tracking-wide text-[#B3271E]">
+                12 days
+                <br />
+                left
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Trust strip */}
-      <section className="border-b border-[#E5E0D2] bg-[#FAF7F0] py-8">
+      <section className="border-b border-[#16140F] bg-white py-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 text-center md:flex-row md:justify-between md:text-left">
-          <p className="text-sm text-[#6B6A61]">Built for teams that can't afford to guess about compliance</p>
-          <div className="flex flex-wrap justify-center gap-2.5">
-            {["Care homes", "Construction", "Hospitality", "Facilities"].map((tag) => (
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide text-[#57534A]">
+            Built for teams that can't afford to guess
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {industries.map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-[#E5E0D2] bg-white px-3.5 py-1.5 text-xs font-medium text-[#4B4A42]"
+                className="border border-[#16140F]/30 px-3 py-1 font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-wide"
               >
                 {tag}
               </span>
@@ -280,47 +256,46 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-6xl px-6 py-24">
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">What you get</p>
-          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+      <section id="features" className="border-b border-[#16140F] bg-[#FAFAF6] py-20">
+        <div className="mx-auto max-w-5xl px-6">
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">§2 — What you get</p>
+          <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">
             Everything between a scanned document and a peaceful audit.
           </h2>
-        </div>
-        <div className="mt-12 grid gap-5 md:grid-cols-2">
-          {features.map((feature, i) => {
-            const Icon = featureIcons[i];
-            return (
+          <div className="mt-10 border border-[#16140F]">
+            {features.map((feature, i) => (
               <div
                 key={feature.title}
-                className={`rounded-xl border border-[#E5E0D2] bg-white p-7 ${feature.span ? "md:col-span-2" : ""}`}
+                className={`grid gap-2 px-6 py-6 sm:grid-cols-[3rem_1fr] sm:gap-8 sm:px-8 ${i !== 0 ? "border-t border-[#16140F]/20" : ""}`}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EDF2EC] text-[#1F6B45]">
-                  <Icon />
+                <span className="font-[family-name:var(--font-mono)] text-xs text-[#8A887C]">{String(i + 1).padStart(2, "0")}</span>
+                <div>
+                  <h3 className="font-[family-name:var(--font-display)] text-lg font-bold">{feature.title}</h3>
+                  <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-[#57534A]">{feature.description}</p>
                 </div>
-                <h3 className="mt-5 text-lg font-semibold text-[#1B1B16]">{feature.title}</h3>
-                <p className="mt-2 max-w-md text-[15px] leading-relaxed text-[#6B6A61]">{feature.description}</p>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* How it works */}
-      <section id="how" className="bg-[#12140F] py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4E9C74]">How it works</p>
-            <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#F5F3EE] md:text-4xl">
-              Four steps, and none of them are "chase someone over email."
-            </h2>
-          </div>
-          <div className="mt-14 grid gap-x-8 gap-y-12 md:grid-cols-4">
+      <section id="how" className="border-b border-[#16140F] bg-white py-20">
+        <div className="mx-auto max-w-5xl px-6">
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">§3 — How it works</p>
+          <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">
+            Four steps, and none of them are "chase someone over email."
+          </h2>
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
             {steps.map((step) => (
-              <div key={step.n} className="border-t border-white/10 pt-6">
-                <span className="font-[family-name:var(--font-display)] text-3xl italic text-[#4E9C74]">{step.n}</span>
-                <h3 className="mt-3 text-base font-semibold text-[#F5F3EE]">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#9B9A8E]">{step.description}</p>
+              <div key={step.n} className="flex gap-4 border border-[#16140F] p-6">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#16140F] font-[family-name:var(--font-mono)] text-xs font-bold">
+                  {step.n}
+                </span>
+                <div>
+                  <h3 className="font-[family-name:var(--font-display)] text-base font-bold">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-[#57534A]">{step.description}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -328,109 +303,100 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="mx-auto max-w-6xl px-6 py-24">
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">Pricing</p>
-          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+      <section id="pricing" className="border-b border-[#16140F] bg-[#FAFAF6] py-20">
+        <div className="mx-auto max-w-5xl px-6">
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">§4 — Pricing</p>
+          <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">
             Plans that scale with how many things you're tracking.
           </h2>
-        </div>
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative flex flex-col rounded-2xl border p-7 ${
-                plan.highlighted
-                  ? "border-[#1F6B45] bg-[#12140F] text-[#F5F3EE] shadow-xl shadow-black/10 md:-translate-y-3"
-                  : "border-[#E5E0D2] bg-white text-[#1B1B16]"
-              }`}
-            >
-              {plan.highlighted && (
-                <span className="absolute -top-3 left-7 rounded-full bg-[#1F6B45] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
-                  Most popular
-                </span>
-              )}
-              <p
-                className={`text-sm font-semibold uppercase tracking-wide ${
-                  plan.highlighted ? "text-[#8FBBA2]" : "text-[#6B6A61]"
+          <div className="mt-10 grid border border-[#16140F] md:grid-cols-3">
+            {plans.map((plan, i) => (
+              <div
+                key={plan.name}
+                className={`flex flex-col p-7 ${i !== 0 ? "border-t border-[#16140F] md:border-t-0 md:border-l" : ""} ${
+                  plan.highlighted ? "bg-[#16140F] text-[#FAFAF6]" : "bg-white"
                 }`}
               >
-                {plan.name}
-              </p>
-              <p className="mt-2 flex items-baseline gap-1">
-                <span className="font-[family-name:var(--font-display)] text-4xl font-medium">{plan.price}</span>
-                <span className={plan.highlighted ? "text-[#9B9A8E]" : "text-[#6B6A61]"}>/mo</span>
-              </p>
-              <p className={`mt-3 text-sm ${plan.highlighted ? "text-[#C9C7BC]" : "text-[#6B6A61]"}`}>{plan.blurb}</p>
-              <ul className="mt-6 space-y-2.5 text-sm">
-                {plan.features.map((feat) => (
-                  <li key={feat} className="flex items-start gap-2.5">
-                    <span
-                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                        plan.highlighted ? "bg-[#4E9C74]" : "bg-[#1F6B45]"
-                      }`}
-                    />
-                    <span className={plan.highlighted ? "text-[#E7E5DA]" : "text-[#4B4A42]"}>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/signup"
-                className={`mt-8 inline-flex items-center justify-center rounded-md px-4 py-3 text-sm font-semibold transition ${
-                  plan.highlighted
-                    ? "bg-[#1F6B45] text-white hover:bg-[#195939]"
-                    : "border border-[#E5E0D2] text-[#1B1B16] hover:border-[#1F6B45]"
-                }`}
-              >
-                {plan.cta}
-              </Link>
-            </div>
-          ))}
+                {plan.highlighted && (
+                  <span className="mb-4 inline-flex w-fit items-center border border-[#FAFAF6]/40 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-bold uppercase tracking-wide text-[#FAFAF6]">
+                    Most popular
+                  </span>
+                )}
+                <p className={`font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide ${plan.highlighted ? "text-[#B7C6D8]" : "text-[#57534A]"}`}>
+                  {plan.name}
+                </p>
+                <p className="mt-2 flex items-baseline gap-1">
+                  <span className="font-[family-name:var(--font-display)] text-4xl font-bold">{plan.price}</span>
+                  <span className={plan.highlighted ? "text-[#B7C6D8]" : "text-[#57534A]"}>/mo</span>
+                </p>
+                <p className={`mt-3 text-sm ${plan.highlighted ? "text-[#D7DEE7]" : "text-[#57534A]"}`}>{plan.blurb}</p>
+                <ul className="mt-6 space-y-2.5 font-[family-name:var(--font-mono)] text-xs">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-start gap-2.5">
+                      <span className={plan.highlighted ? "text-[#8FA8C7]" : "text-[#B3271E]"}>·</span>
+                      <span className={plan.highlighted ? "text-[#D7DEE7]" : "text-[#3F3D35]"}>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/signup"
+                  className={`mt-8 inline-flex items-center justify-center border-2 px-4 py-3 font-[family-name:var(--font-mono)] text-xs font-bold uppercase tracking-wide transition ${
+                    plan.highlighted
+                      ? "border-[#FAFAF6] bg-[#FAFAF6] text-[#16140F] hover:bg-transparent hover:text-[#FAFAF6]"
+                      : "border-[#16140F] text-[#16140F] hover:bg-[#16140F] hover:text-[#FAFAF6]"
+                  }`}
+                >
+                  {plan.cta}
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="mx-auto max-w-3xl px-6 py-24">
-        <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">FAQ</p>
-          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            Answers for buyers and admins
-          </h2>
-        </div>
-        <div className="mt-12 divide-y divide-[#E5E0D2] border-y border-[#E5E0D2]">
-          {faqs.map((item) => (
-            <details key={item.question} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-[#1B1B16]">
-                {item.question}
-                <span className="shrink-0 text-lg text-[#1F6B45] transition group-open:rotate-45">+</span>
-              </summary>
-              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#6B6A61]">{item.answer}</p>
-            </details>
-          ))}
+      <section id="faq" className="border-b border-[#16140F] bg-white py-20">
+        <div className="mx-auto max-w-3xl px-6">
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">§5 — FAQ</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">Answers for buyers and admins</h2>
+          <div className="mt-10 border border-[#16140F]">
+            {faqs.map((item, i) => (
+              <details key={item.question} className={`group px-6 py-5 ${i !== 0 ? "border-t border-[#16140F]/20" : ""}`}>
+                <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+                  <span className="flex items-baseline gap-4">
+                    <span className="font-[family-name:var(--font-mono)] text-xs text-[#8A887C]">Q{String(i + 1).padStart(2, "0")}</span>
+                    <span className="font-[family-name:var(--font-display)] text-base font-bold">{item.question}</span>
+                  </span>
+                  <span className="shrink-0 font-[family-name:var(--font-mono)] text-[#8A887C] transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 pl-[3.1rem] text-[15px] leading-relaxed text-[#57534A]">{item.answer}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="bg-[#12140F] py-24">
+      <section className="bg-[#1E3A5F] py-20">
         <div className="mx-auto max-w-3xl px-6 text-center">
-          <h2 className="font-[family-name:var(--font-display)] text-3xl font-medium text-[#F5F3EE] md:text-4xl">
+          <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#8FA8C7]">§6 — Get started</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold text-[#FAFAF6] md:text-4xl">
             Your next inspection is already on the calendar.
           </h2>
-          <p className="mx-auto mt-4 max-w-md text-[#C9C7BC]">
-            Give CertiWatch a week to watch your first folder. You'll know exactly what's expiring before anyone
-            asks.
+          <p className="mx-auto mt-4 max-w-md text-[#C3D2E3]">
+            Give CertiWatch a week to watch your first folder. You'll know exactly what's expiring before anyone asks.
           </p>
           {hasSession ? (
             <Link
               href="/analytics"
-              className="mt-8 inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+              className="mt-8 inline-flex items-center justify-center border-2 border-[#FAFAF6] bg-[#FAFAF6] px-7 py-3 font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wide text-[#1E3A5F] transition hover:bg-transparent hover:text-[#FAFAF6]"
             >
               Go to dashboard
             </Link>
           ) : (
             <Link
               href="/signup"
-              className="mt-8 inline-flex items-center justify-center rounded-md bg-[#1F6B45] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-[#195939]"
+              className="mt-8 inline-flex items-center justify-center border-2 border-[#FAFAF6] bg-[#FAFAF6] px-7 py-3 font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wide text-[#1E3A5F] transition hover:bg-transparent hover:text-[#FAFAF6]"
             >
               Start 7-day trial
             </Link>
@@ -438,7 +404,41 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <SiteFooter />
+      {/* Footer */}
+      <footer id="contact" className="bg-[#FAFAF6] py-10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-[0.15em]">CertiWatch</p>
+            <p className="mt-1 max-w-sm text-sm text-[#57534A]">
+              Compliance-grade renewal tracking for SMB teams — certificates, licenses, insurance &amp; more.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-5 font-[family-name:var(--font-mono)] text-xs uppercase tracking-wide">
+            <Link href="mailto:hello@certiwatch.com" className="text-[#57534A] hover:text-[#16140F]">
+              hello@certiwatch.com
+            </Link>
+            {hasSession ? (
+              <Link href="/analytics" className="font-bold text-[#1E3A5F] hover:text-[#16140F]">
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/signup" className="font-bold text-[#1E3A5F] hover:text-[#16140F]">
+                  Start trial
+                </Link>
+                <Link href="/login" className="text-[#57534A] hover:text-[#16140F]">
+                  Log in
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="mx-auto mt-8 max-w-6xl border-t border-[#16140F]/15 px-6 pt-6">
+          <p className="font-[family-name:var(--font-mono)] text-[11px] text-[#8A887C]">
+            © {year} CertiWatch. Not actually a government form.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
