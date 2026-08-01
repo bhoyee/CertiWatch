@@ -1,0 +1,14 @@
+# apps/api, apps/worker, and apps/agent all build with the repo root as their context (so their
+# Dockerfiles can COPY multiple projects' .csproj files for restore caching) - without this file,
+# every build sends the *entire* monorepo to the Docker daemon, including apps/frontend's
+# node_modules (several hundred MB) and every project's local bin/obj output.
+**/bin
+**/obj
+**/node_modules
+**/.next
+.git
+uploads
+samples
+**/*.user
+.vs
+.vscode
