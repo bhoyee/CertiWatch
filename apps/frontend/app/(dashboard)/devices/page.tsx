@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchJson, postJson } from "../../../lib/api";
 
@@ -18,7 +18,25 @@ type EnrollmentCode = {
   expiresAt: string;
 };
 
+type Os = "linux" | "macos" | "windows";
+
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+
+function detectOs(): Os {
+  if (typeof navigator === "undefined") return "linux";
+  const platform = `${navigator.userAgent} ${navigator.platform ?? ""}`.toLowerCase();
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("mac")) return "macos";
+  return "linux";
+}
+
+function installCommand(os: Os, code: string): string {
+  if (os === "windows") {
+    return `$s = irm ${API_BASE}/api/devices/install.ps1; & ([scriptblock]::Create($s)) -Code '${code}' -Name $env:COMPUTERNAME`;
+  }
+  return `curl -fsSL ${API_BASE}/api/devices/install.sh | sudo bash -s -- --code ${code} --name "$(hostname)"`;
+}
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[] | null>(null);
@@ -27,6 +45,12 @@ export default function DevicesPage() {
   const [minting, setMinting] = useState(false);
   const [mintError, setMintError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [commandCopied, setCommandCopied] = useState(false);
+  const [os, setOs] = useState<Os>("linux");
+
+  useEffect(() => {
+    setOs(detectOs());
+  }, []);
 
   const load = () => {
     fetchJson<Device[]>("/api/devices")
@@ -60,6 +84,19 @@ export default function DevicesPage() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // clipboard access can be denied by the browser; the code is still visible to copy manually
+    }
+  };
+
+  const command = useMemo(() => (enrollment ? installCommand(os, enrollment.code) : ""), [os, enrollment]);
+
+  const copyCommand = async () => {
+    if (!command) return;
+    try {
+      await navigator.clipboard.writeText(command);
+      setCommandCopied(true);
+      setTimeout(() => setCommandCopied(false), 2000);
+    } catch {
+      // clipboard access can be denied by the browser; the command is still visible to copy manually
     }
   };
 
@@ -101,20 +138,46 @@ export default function DevicesPage() {
           {enrollment && (
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                Shown once — copy it now
+                Shown once — run this on the machine watching the folder
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900">
-                  {enrollment.code}
-                </code>
-                <button
-                  onClick={copyCode}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
-                >
-                  {copied ? "Copied" : "Copy"}
-                </button>
+
+              <div className="mt-2 flex gap-1">
+                {(["linux", "macos", "windows"] as Os[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setOs(tab)}
+                    className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                      os === tab ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {tab === "linux" ? "Linux" : tab === "macos" ? "macOS" : "Windows"}
+                  </button>
+                ))}
               </div>
-              <p className="mt-2 text-xs text-amber-800">Expires {formatDate(enrollment.expiresAt)}.</p>
+
+              <div className="relative mt-2">
+                <button
+                  onClick={copyCommand}
+                  className="absolute right-2 top-2 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                >
+                  {commandCopied ? "Copied" : "Copy"}
+                </button>
+                <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-16 text-xs text-slate-100">
+                  <code>{command}</code>
+                </pre>
+              </div>
+              {os === "windows" && (
+                <p className="mt-1 text-xs text-amber-800">Run in PowerShell as Administrator.</p>
+              )}
+              {os !== "windows" && <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>}
+
+              <p className="mt-3 text-xs text-amber-800">
+                Expires {formatDate(enrollment.expiresAt)}. Raw code:{" "}
+                <code className="rounded bg-white px-1 py-0.5 font-mono">{enrollment.code}</code>{" "}
+                <button onClick={copyCode} className="font-semibold underline">
+                  {copied ? "Copied" : "copy"}
+                </button>
+              </p>
             </div>
           )}
         </div>

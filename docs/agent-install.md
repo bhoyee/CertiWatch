@@ -4,25 +4,31 @@ The agent is a local service that watches one or more folders on a staff machine
 certificate files (`.pdf`, `.png`, `.jpg`, `.jpeg`, up to 20MB each) and uploads them to CertiWatch,
 where the existing OCR pipeline extracts staff name, course, issuer, and dates automatically.
 
-## 1. Get an enrollment code
+## The quick way
 
-From the CertiWatch dashboard, go to **Devices** and click **Generate enrollment code**. The code is
-shown once, is tenant-scoped, and expires after 24 hours (minting a new one revokes the previous
-one) — treat it like a password for the duration it's valid.
+1. From the CertiWatch dashboard, go to **Devices** and click **Generate enrollment code**.
+2. Copy the one-line command shown for your OS and run it (as Administrator on Windows, with
+   `sudo` on Linux/macOS). It downloads the agent, installs it as a service, and starts it — no
+   SDK, no source checkout, no manual configuration.
 
-## 2. Configuration
+That's it for most installs. The rest of this doc covers what that command does under the hood
+and the manual/build-from-source path for unsupported platforms.
 
-The agent reads config from environment variables prefixed with `Agent__` (double underscore — this
-is standard .NET configuration binding, not a typo):
+**Not code-signed yet** — Windows/macOS will show an "unknown publisher" warning the first run.
+That's expected until paid code-signing certs are added; it isn't a sign anything's wrong.
+
+## Manual install / configuration reference
+
+The agent reads config from environment variables prefixed with `Agent__` (double underscore —
+this is standard .NET configuration binding, not a typo), or from a single `agent.settings.json`
+file next to the binary (this is what the one-line installer writes for you):
 
 | Variable | Required | Description |
 |---|---|---|
 | `Agent__ApiBaseUrl` | Yes | The CertiWatch API URL, e.g. `https://api.yourcompany.com` |
-| `Agent__EnrollmentCode` | Yes (first run only) | The code from step 1. Only needed until the agent enrolls and saves its device token; can be removed after. |
+| `Agent__EnrollmentCode` | Yes (first run only) | An enrollment code from the Devices page. Only needed until the agent enrolls and saves its device credentials to disk (`device-credentials.json`) - subsequent restarts reuse those and never re-enroll. |
 | `Agent__DeviceName` | No | Defaults to the machine's hostname |
 | `Agent__WatchPaths__0` | No | Folder to watch. Defaults to the current user's Documents folder. Add `__1`, `__2`, etc. for additional folders |
-
-## 3. Install as a service
 
 ### Windows Service
 ```powershell
@@ -42,6 +48,7 @@ Description=CertiWatch Local Agent
 After=network.target
 
 [Service]
+Type=notify
 Environment=Agent__ApiBaseUrl=https://api.yourcompany.com
 Environment=Agent__EnrollmentCode=TENANT-CODE
 Environment=Agent__DeviceName=%H
@@ -58,8 +65,22 @@ sudo systemctl enable --now certiwatch-agent
 Provide a `.plist` referencing the agent binary with the same `Agent__*` environment variables under
 an `<EnvironmentVariables>` dict.
 
+## Releases
+
+`dotnet publish -r <win-x64|linux-x64|osx-x64|osx-arm64> --self-contained true
+-p:PublishSingleFile=true` builds a standalone binary per platform (no .NET runtime needed on the
+target machine). `.github/workflows/agent-release.yml` builds all four on every push to `main`
+that touches `apps/agent/**` and publishes them to a rolling `agent-latest` GitHub Release - this
+is what the one-line install scripts (served from `GET /api/devices/install.sh` /
+`/install.ps1`) download.
+
 ## How it behaves
 
+- On first run, enrolls once using the code and persists the resulting device credentials to
+  `device-credentials.json` next to the binary; every subsequent start reuses them instead of
+  re-enrolling (enrollment codes are one-time and expire, so re-enrolling on every restart would
+  break the service after 24h and would create a duplicate Device entry on every restart in the
+  meantime).
 - Watches the configured folder(s) via both a live filesystem watcher and a 60-second re-scan (the
   re-scan also acts as the retry mechanism for anything that failed to upload).
 - Skips files by extension/size before doing any work, then dedupes by SHA-256 hash against a local
