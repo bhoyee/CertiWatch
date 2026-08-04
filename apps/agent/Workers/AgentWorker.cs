@@ -39,11 +39,21 @@ public sealed class AgentWorker : BackgroundService
 
         foreach (var path in _options.WatchPaths)
         {
-            if (!Directory.Exists(path))
+            try
             {
-                Directory.CreateDirectory(path);
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                }
+                AttachWatcher(path);
             }
-            AttachWatcher(path);
+            catch (Exception ex)
+            {
+                // A single unwatchable path (bad permissions, doesn't exist and can't be created,
+                // etc.) must not take the whole service down - the 60s re-scan loop still covers
+                // any other configured paths, and this one just logs instead of crashing the host.
+                _logger.LogError(ex, "Failed to watch {Path} - check the path exists and is accessible to the account running the service", path);
+            }
         }
 
         while (!stoppingToken.IsCancellationRequested)
