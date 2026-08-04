@@ -27,7 +27,32 @@ public static class DeviceEndpoints
         group.MapPost("/upload", UploadAsync).AllowAnonymous().DisableAntiforgery();
         group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync).AllowAnonymous();
         group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync).AllowAnonymous();
+        group.MapGet("/install.sh", InstallScriptAsync).AllowAnonymous();
+        group.MapGet("/install.ps1", InstallScriptAsync).AllowAnonymous();
         return group;
+    }
+
+    // Serves the one-line installer scripts (see apps/api/Infrastructure/AgentInstall/Scripts/) -
+    // they're generic/public (no secrets embedded), with the API base URL substituted from the
+    // incoming request itself so it's always correct for whatever environment is serving it. The
+    // enrollment code is never embedded here; it's only ever a script argument in the copy-paste
+    // command the Devices page generates.
+    private static async Task<IResult> InstallScriptAsync(HttpContext httpContext, CancellationToken token)
+    {
+        var fileName = httpContext.Request.Path.Value!.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase)
+            ? "install.ps1"
+            : "install.sh";
+        var scriptPath = Path.Combine(AppContext.BaseDirectory, "Infrastructure", "AgentInstall", "Scripts", fileName);
+        if (!File.Exists(scriptPath))
+        {
+            return Results.NotFound();
+        }
+
+        var script = await File.ReadAllTextAsync(scriptPath, token);
+        var apiBaseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+        script = script.Replace("__API_BASE_URL__", apiBaseUrl);
+
+        return Results.Text(script, "text/plain");
     }
 
     private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)

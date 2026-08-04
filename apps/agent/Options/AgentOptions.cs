@@ -9,6 +9,7 @@ public sealed class AgentOptions
     public string DeviceName { get; set; } = Environment.MachineName;
     public IReadOnlyList<string> WatchPaths { get; set; } = new[] { Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
     public string ProcessedFilesPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "processed-files.json");
+    public string CredentialsPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "device-credentials.json");
     public long MaxUploadSizeBytes { get; set; } = 20 * 1024 * 1024;
     public IReadOnlyList<string> AllowedExtensions { get; set; } = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
 }

@@ -13,30 +13,29 @@ public sealed class AgentWorker : BackgroundService
     private readonly AgentOptions _options;
     private readonly IAgentClient _client;
     private readonly IProcessedFileStore _processedFiles;
+    private readonly IDeviceCredentialStore _credentialStore;
     private readonly ILogger<AgentWorker> _logger;
     private readonly ConcurrentDictionary<string, byte> _inFlight = new(StringComparer.OrdinalIgnoreCase);
     private Guid _deviceId;
     private string _deviceToken = string.Empty;
 
-    public AgentWorker(IOptions<AgentOptions> options, IAgentClient client, IProcessedFileStore processedFiles, ILogger<AgentWorker> logger)
+    public AgentWorker(
+        IOptions<AgentOptions> options,
+        IAgentClient client,
+        IProcessedFileStore processedFiles,
+        IDeviceCredentialStore credentialStore,
+        ILogger<AgentWorker> logger)
     {
         _options = options.Value;
         _client = client;
         _processedFiles = processedFiles;
+        _credentialStore = credentialStore;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enrollment = await _client.EnrollAsync(stoppingToken);
-        if (enrollment is null)
-        {
-            _logger.LogError("Agent enrollment failed; the agent cannot upload documents until it is re-enrolled with a valid enrollment code");
-        }
-
-        _deviceId = enrollment?.DeviceId ?? Guid.Empty;
-        _deviceToken = enrollment?.DeviceToken ?? string.Empty;
-        _logger.LogInformation("Agent enrolled as {DeviceId}", _deviceId);
+        await EnsureEnrolledAsync(stoppingToken);
 
         foreach (var path in _options.WatchPaths)
         {
@@ -56,6 +55,34 @@ public sealed class AgentWorker : BackgroundService
             }
             await Task.Delay(RescanInterval, stoppingToken);
         }
+    }
+
+    // Enrollment only ever needs to happen once per install - enrollment codes are one-time and
+    // expire in 24h / get revoked when a new one is minted, so re-enrolling on every restart would
+    // break the service permanently once the code is gone, and would silently create a new Device
+    // row server-side on every restart in the meantime. Reuse persisted credentials if present.
+    private async Task EnsureEnrolledAsync(CancellationToken token)
+    {
+        var saved = await _credentialStore.LoadAsync(token);
+        if (saved is not null)
+        {
+            _deviceId = saved.DeviceId;
+            _deviceToken = saved.DeviceToken;
+            _logger.LogInformation("Using previously enrolled device {DeviceId}", _deviceId);
+            return;
+        }
+
+        var enrollment = await _client.EnrollAsync(token);
+        if (enrollment is null)
+        {
+            _logger.LogError("Agent enrollment failed; the agent cannot upload documents until it is re-enrolled with a valid enrollment code");
+            return;
+        }
+
+        _deviceId = enrollment.DeviceId;
+        _deviceToken = enrollment.DeviceToken;
+        await _credentialStore.SaveAsync(new DeviceCredentials(_deviceId, _deviceToken), token);
+        _logger.LogInformation("Agent enrolled as {DeviceId}", _deviceId);
     }
 
     private void AttachWatcher(string path)

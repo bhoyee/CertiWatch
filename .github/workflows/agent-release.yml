@@ -1,0 +1,68 @@
+name: agent-release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/agent/**"
+      - "packages/contracts/**"
+      - ".github/workflows/agent-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish win-x64
+        run: |
+          dotnet publish apps/agent/CertiWatch.Agent.csproj -c Release -r win-x64 \
+            --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o dist/win-x64
+          cd dist/win-x64 && zip -r ../certiwatch-agent-win-x64.zip . && cd ../..
+
+      - name: Publish linux-x64
+        run: |
+          dotnet publish apps/agent/CertiWatch.Agent.csproj -c Release -r linux-x64 \
+            --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o dist/linux-x64
+          tar -czf dist/certiwatch-agent-linux-x64.tar.gz -C dist/linux-x64 .
+
+      - name: Publish osx-x64
+        run: |
+          dotnet publish apps/agent/CertiWatch.Agent.csproj -c Release -r osx-x64 \
+            --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o dist/osx-x64
+          tar -czf dist/certiwatch-agent-osx-x64.tar.gz -C dist/osx-x64 .
+
+      - name: Publish osx-arm64
+        run: |
+          dotnet publish apps/agent/CertiWatch.Agent.csproj -c Release -r osx-arm64 \
+            --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o dist/osx-arm64
+          tar -czf dist/certiwatch-agent-osx-arm64.tar.gz -C dist/osx-arm64 .
+
+      - name: Replace agent-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete agent-latest --yes --cleanup-tag || true
+          gh release create agent-latest \
+            dist/certiwatch-agent-win-x64.zip \
+            dist/certiwatch-agent-linux-x64.tar.gz \
+            dist/certiwatch-agent-osx-x64.tar.gz \
+            dist/certiwatch-agent-osx-arm64.tar.gz \
+            --title "Agent (latest)" \
+            --notes "Automated build from ${{ github.sha }}. Unsigned - see docs/agent-install.md." \
+            --prerelease
