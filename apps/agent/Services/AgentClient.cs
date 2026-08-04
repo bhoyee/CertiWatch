@@ -17,26 +17,48 @@ public interface IAgentClient
     Task<bool> HeartbeatAsync(Guid deviceId, string deviceToken, CancellationToken token);
 }
 
+/// <summary>
+/// Represents a sealed client for interacting with the Agent API.
+/// Implements the IAgentClient interface to provide device enrollment,
+/// file hash checking, file uploading, and heartbeat functionality.
+/// </summary>
 public sealed class AgentClient(HttpClient httpClient, IOptions<AgentOptions> options, ILogger<AgentClient> logger) : IAgentClient
 {
     private readonly AgentOptions _options = options.Value;
 
+    /// <summary>
+    /// Enrolls the device with the Agent API.
+    /// </summary>
+    /// <param name="token">Cancellation token to cancel the operation.</param>
+    /// <returns>A DeviceEnrollmentResponse if successful, otherwise null.</returns>
     public async Task<DeviceEnrollmentResponse?> EnrollAsync(CancellationToken token)
     {
-        var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/enroll", new EnrollDeviceRequest
+        try
         {
-            DeviceName = _options.DeviceName,
-            OperatingSystem = Environment.OSVersion.Platform.ToString(),
-            EnrollmentCode = _options.EnrollmentCode
-        }, token);
+            var response = await httpClient.PostAsJsonAsync($"{_options.ApiBaseUrl}/api/devices/enroll", new EnrollDeviceRequest
+            {
+                DeviceName = _options.DeviceName,
+                OperatingSystem = Environment.OSVersion.Platform.ToString(),
+                EnrollmentCode = _options.EnrollmentCode
+            }, token);
 
-        if (!response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Enrollment failed with status {Status}", response.StatusCode);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<DeviceEnrollmentResponse>(cancellationToken: token);
+        }
+        catch (Exception ex)
         {
-            logger.LogWarning("Enrollment failed with status {Status}", response.StatusCode);
+            // Unlike the other calls here, this one used to be unguarded - a network hiccup during
+            // enrollment (DNS, firewall, API not reachable yet) would throw out of ExecuteAsync
+            // unhandled, which stops the entire BackgroundService host - on a Windows Service that
+            // shows up as the service going straight to "Stopped" with no obvious cause.
+            logger.LogError(ex, "Enrollment request failed");
             return null;
         }
-
-        return await response.Content.ReadFromJsonAsync<DeviceEnrollmentResponse>(cancellationToken: token);
     }
 
     public async Task<FileHashCheckResponse?> CheckHashAsync(Guid deviceId, string deviceToken, string fileHash, CancellationToken token)
