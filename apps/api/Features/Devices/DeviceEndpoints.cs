@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
+using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
+using CertiWatch.Contracts.Dtos;
 using CertiWatch.Contracts.Events;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CertiWatch.Api.Features.Devices;
 
@@ -21,6 +24,7 @@ public static class DeviceEndpoints
         group.MapPost("/heartbeat", HeartbeatAsync).AllowAnonymous();
         group.MapPost("/events", EventsAsync).AllowAnonymous();
         group.MapPost("/check-hash", CheckHashAsync).AllowAnonymous();
+        group.MapPost("/upload", UploadAsync).AllowAnonymous().DisableAntiforgery();
         group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync).AllowAnonymous();
         group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync).AllowAnonymous();
         return group;
@@ -35,14 +39,7 @@ public static class DeviceEndpoints
 
         var tenantId = tenantAccessor.Current.TenantId;
         var devices = await db.Devices.AsNoTracking().Where(d => d.TenantId == tenantId).ToListAsync(token);
-        return Results.Ok(devices.Select(d => new
-        {
-            d.Id,
-            d.Name,
-            d.OperatingSystem,
-            d.Status,
-            d.LastSeenAt
-        }));
+        return Results.Ok(devices.Select(d => new DeviceDto(d.Id, d.Name, d.OperatingSystem, d.Status, d.EnrolledAt, d.LastSeenAt)));
     }
 
     private static async Task<IResult> CreateEnrollmentCodeAsync(
@@ -158,6 +155,165 @@ public static class DeviceEndpoints
         var shouldReprocess = HashCheckExtensions.IsIncomplete(record);
 
         return Results.Ok(new FileHashCheckResponse(true, shouldReprocess));
+    }
+
+    private static async Task<IResult> UploadAsync(
+        HttpContext httpContext,
+        AppDbContext db,
+        IDateTimeProvider clock,
+        IOptions<StorageOptions> storageOptions,
+        IIngestionQueue queue,
+        IDeviceUploadRateLimiter rateLimiter,
+        CancellationToken token)
+    {
+        var form = await httpContext.Request.ReadFormAsync(token);
+
+        if (!Guid.TryParse(form["deviceId"], out var deviceId))
+        {
+            return Results.BadRequest(new { error = "invalid_device_id" });
+        }
+
+        var deviceToken = form["deviceToken"].ToString();
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deviceId, token);
+        if (device is null || !DeviceSecrets.ConstantTimeEquals(device.DeviceToken, deviceToken))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!await rateLimiter.TryAcquireAsync(deviceId, token))
+        {
+            return Results.Json(new { error = "rate_limited" }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        var file = form.Files["file"];
+        if (file is null || file.Length == 0)
+        {
+            return Results.BadRequest(new { error = "no_file" });
+        }
+
+        // Server-side re-validation: never trust the client, even though the agent already filters
+        // these before uploading.
+        if (!DeviceUploadPolicy.IsAllowedExtension(file.FileName))
+        {
+            return Results.BadRequest(new { error = "unsupported_file_type" });
+        }
+
+        if (DeviceUploadPolicy.ExceedsMaxSize(file.Length))
+        {
+            return Results.BadRequest(new { error = "file_too_large" });
+        }
+
+        var tenantId = device.TenantId;
+        Guid.TryParse(form["sourceId"], out var requestedSourceId);
+        var source = await ResolveSourceAsync(db, tenantId, requestedSourceId, clock, token);
+
+        var root = GetUploadsRoot(storageOptions.Value);
+        var deviceDir = Path.Combine(root, tenantId.ToString(), "agent", deviceId.ToString("N"));
+        Directory.CreateDirectory(deviceDir);
+
+        var fileName = Path.GetFileName(file.FileName);
+        var tempPath = Path.Combine(deviceDir, $"{Guid.NewGuid():N}_{fileName}");
+        await using (var stream = File.Create(tempPath))
+        {
+            await file.CopyToAsync(stream, token);
+        }
+
+        var fileHash = ComputeHash(tempPath);
+
+        var alreadyExists = await db.Documents.AsNoTracking()
+            .AnyAsync(d => d.TenantId == tenantId && d.FileHash == fileHash, token);
+        if (alreadyExists)
+        {
+            TryDeleteFile(tempPath);
+            return Results.Conflict(new { error = "duplicate", message = "Document already uploaded for this tenant." });
+        }
+
+        var destPath = Path.Combine(deviceDir, $"{fileHash}_{fileName}");
+        if (!string.Equals(tempPath, destPath, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Move(tempPath, destPath, overwrite: true);
+        }
+
+        await queue.EnqueueAsync(new DocumentDetectedEvent(
+            tenantId,
+            source.Id,
+            deviceToken,
+            null,
+            fileName,
+            destPath,
+            fileHash,
+            file.ContentType ?? "application/octet-stream",
+            file.Length,
+            Array.Empty<string>(),
+            new Dictionary<string, string>(),
+            Contracts.Enums.ProcessingStatus.Pending,
+            clock.UtcNow), token);
+
+        device.LastSeenAt = clock.UtcNow;
+        await db.SaveChangesAsync(token);
+
+        return Results.Ok(new { success = true });
+    }
+
+    private static async Task<Source> ResolveSourceAsync(AppDbContext db, Guid tenantId, Guid requestedSourceId, IDateTimeProvider clock, CancellationToken token)
+    {
+        if (requestedSourceId != Guid.Empty)
+        {
+            var requested = await db.Sources.FirstOrDefaultAsync(s => s.Id == requestedSourceId && s.TenantId == tenantId, token);
+            if (requested is not null)
+            {
+                return requested;
+            }
+        }
+
+        const string agentSourceName = "Local Agent";
+        var existing = await db.Sources.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.DisplayName == agentSourceName, token);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var created = new Source
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = agentSourceName,
+            Type = Contracts.Enums.SourceType.Local,
+            ConfigJson = "{}",
+            CreatedAt = clock.UtcNow
+        };
+        db.Sources.Add(created);
+        await db.SaveChangesAsync(token);
+        return created;
+    }
+
+    private static string GetUploadsRoot(StorageOptions options)
+    {
+        var root = string.IsNullOrWhiteSpace(options.UploadsRoot) ? "/uploads" : options.UploadsRoot;
+        return root.TrimEnd(Path.DirectorySeparatorChar);
+    }
+
+    private static string ComputeHash(string path)
+    {
+        using var sha = SHA256.Create();
+        using var stream = File.OpenRead(path);
+        var hash = sha.ComputeHash(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // swallow cleanup errors
+        }
     }
 
     private static async Task<IResult> ListSourcesForDeviceAsync(Guid deviceId, string? deviceToken, AppDbContext db, CancellationToken token)

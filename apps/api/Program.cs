@@ -44,6 +44,14 @@ builder.Services.AddAppDbContext(builder.Configuration);
 
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 builder.Services.AddSingleton<IIngestionQueue, InMemoryIngestionQueue>();
+builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(_ =>
+{
+    var connectionString = builder.Configuration["Redis:ConnectionString"] ?? "redis:6379";
+    var config = StackExchange.Redis.ConfigurationOptions.Parse(connectionString);
+    config.AbortOnConnectFail = false;
+    return StackExchange.Redis.ConnectionMultiplexer.Connect(config);
+});
+builder.Services.AddSingleton<IDeviceUploadRateLimiter, DeviceUploadRateLimiter>();
 builder.Services.AddScoped<IRuleInferenceService, RuleInferenceService>();
 builder.Services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();
 builder.Services.AddSingleton<IEmailService, EmailService>();

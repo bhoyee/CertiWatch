@@ -8,5 +8,7 @@ public sealed class AgentOptions
     public string EnrollmentCode { get; set; } = "DEV-000000";
     public string DeviceName { get; set; } = Environment.MachineName;
     public IReadOnlyList<string> WatchPaths { get; set; } = new[] { Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
-    public string QueuePath { get; set; } = Path.Combine(AppContext.BaseDirectory, "queue.json");
+    public string ProcessedFilesPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "processed-files.json");
+    public long MaxUploadSizeBytes { get; set; } = 20 * 1024 * 1024;
+    public IReadOnlyList<string> AllowedExtensions { get; set; } = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
 }

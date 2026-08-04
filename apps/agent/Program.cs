@@ -12,10 +12,10 @@ builder.Services.AddHttpClient<IAgentClient, AgentClient>()
     {
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
-builder.Services.AddSingleton<IAgentQueue>(sp =>
+builder.Services.AddSingleton<IProcessedFileStore>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
-    return new FileAgentQueue(options.QueuePath);
+    return new ProcessedFileStore(options.ProcessedFilesPath);
 });
 builder.Services.AddHostedService<AgentWorker>();
 
