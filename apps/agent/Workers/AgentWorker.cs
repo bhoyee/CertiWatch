@@ -1,38 +1,41 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Text;
 using CertiWatch.Agent.Options;
 using CertiWatch.Agent.Services;
-using CertiWatch.Contracts.Enums;
-using CertiWatch.Contracts.Events;
-using CertiWatch.Contracts.Requests;
 using Microsoft.Extensions.Options;
 
 namespace CertiWatch.Agent.Workers;
 
 public sealed class AgentWorker : BackgroundService
 {
+    private static readonly TimeSpan RescanInterval = TimeSpan.FromSeconds(60);
+
     private readonly AgentOptions _options;
     private readonly IAgentClient _client;
-    private readonly IAgentQueue _queue;
+    private readonly IProcessedFileStore _processedFiles;
     private readonly ILogger<AgentWorker> _logger;
-    private readonly ConcurrentDictionary<string, DateTime> _seen = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _inFlight = new(StringComparer.OrdinalIgnoreCase);
     private Guid _deviceId;
     private string _deviceToken = string.Empty;
 
-    public AgentWorker(IOptions<AgentOptions> options, IAgentClient client, IAgentQueue queue, ILogger<AgentWorker> logger)
+    public AgentWorker(IOptions<AgentOptions> options, IAgentClient client, IProcessedFileStore processedFiles, ILogger<AgentWorker> logger)
     {
         _options = options.Value;
         _client = client;
-        _queue = queue;
+        _processedFiles = processedFiles;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var enrollment = await _client.EnrollAsync(stoppingToken);
+        if (enrollment is null)
+        {
+            _logger.LogError("Agent enrollment failed; the agent cannot upload documents until it is re-enrolled with a valid enrollment code");
+        }
+
         _deviceId = enrollment?.DeviceId ?? Guid.Empty;
-        _deviceToken = enrollment?.DeviceToken ?? _options.DeviceName;
+        _deviceToken = enrollment?.DeviceToken ?? string.Empty;
         _logger.LogInformation("Agent enrolled as {DeviceId}", _deviceId);
 
         foreach (var path in _options.WatchPaths)
@@ -46,8 +49,12 @@ public sealed class AgentWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await FlushQueueAsync(stoppingToken);
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            if (_deviceId != Guid.Empty)
+            {
+                await _client.HeartbeatAsync(_deviceId, _deviceToken, stoppingToken);
+                await RescanAsync(stoppingToken);
+            }
+            await Task.Delay(RescanInterval, stoppingToken);
         }
     }
 
@@ -59,100 +66,151 @@ public sealed class AgentWorker : BackgroundService
             EnableRaisingEvents = true
         };
 
-        watcher.Created += (_, args) => _ = HandleFileAsync(args.FullPath);
-        watcher.Changed += (_, args) => _ = HandleFileAsync(args.FullPath);
+        watcher.Created += (_, args) => _ = HandleFileAsync(args.FullPath, CancellationToken.None);
+        watcher.Changed += (_, args) => _ = HandleFileAsync(args.FullPath, CancellationToken.None);
         _logger.LogInformation("Watching {Path}", path);
     }
 
-    private async Task HandleFileAsync(string file)
+    private async Task RescanAsync(CancellationToken token)
     {
+        foreach (var watchPath in _options.WatchPaths)
+        {
+            if (!Directory.Exists(watchPath))
+            {
+                continue;
+            }
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(watchPath, "*", SearchOption.AllDirectories);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to scan {Path}", watchPath);
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                await HandleFileAsync(file, token);
+            }
+        }
+    }
+
+    // Handles both watcher events and the periodic re-scan; a file that failed to upload is never
+    // marked processed, so the next re-scan pass retries it - this doubles as the retry mechanism.
+    private async Task HandleFileAsync(string file, CancellationToken token)
+    {
+        if (!_inFlight.TryAdd(file, 0))
+        {
+            return;
+        }
+
         try
         {
-            if (!_seen.TryAdd(file, DateTime.UtcNow))
+            if (!IsAllowedExtension(file))
             {
                 return;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(2));
-            if (!File.Exists(file))
+            if (!await WaitForFileToSettleAsync(file, token))
             {
                 return;
             }
 
-            var text = await TryReadTextAsync(file);
-            var hash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(file))); // best effort
-            var payload = new DocumentDetectedEvent(
-                _options.TenantId,
-                _options.SourceId,
-                _deviceToken,
-                null,
-                Path.GetFileName(file),
-                file,
-                hash,
-                MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/octet-stream"),
-                new FileInfo(file).Length,
-                Array.Empty<string>(),
-                new Dictionary<string, string>
-                {
-                    ["raw_text"] = text,
-                    ["file_name"] = Path.GetFileName(file)
-                },
-                ProcessingStatus.Pending,
-                DateTime.UtcNow);
+            if (_deviceId == Guid.Empty)
+            {
+                return;
+            }
 
-            await _queue.EnqueueAsync(payload, CancellationToken.None);
+            var fileInfo = new FileInfo(file);
+            if (fileInfo.Length > _options.MaxUploadSizeBytes)
+            {
+                _logger.LogWarning("Skipping {File}: {Size} bytes exceeds the {Max} byte limit", file, fileInfo.Length, _options.MaxUploadSizeBytes);
+                return;
+            }
+
+            var hash = await ComputeHashAsync(file, token);
+            if (hash is null)
+            {
+                return;
+            }
+
+            if (await _processedFiles.HasProcessedAsync(hash, token))
+            {
+                return;
+            }
+
+            var hashCheck = await _client.CheckHashAsync(_deviceId, _deviceToken, hash, token);
+            if (hashCheck is { Exists: true, ShouldReprocess: false })
+            {
+                await _processedFiles.MarkProcessedAsync(hash, token);
+                return;
+            }
+
+            var uploaded = await _client.UploadAsync(_deviceId, _deviceToken, _options.SourceId, file, token);
+            if (uploaded)
+            {
+                await _processedFiles.MarkProcessedAsync(hash, token);
+                _logger.LogInformation("Uploaded {File}", file);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to handle file {File}", file);
         }
+        finally
+        {
+            _inFlight.TryRemove(file, out _);
+        }
     }
 
-    private async Task FlushQueueAsync(CancellationToken token)
+    private bool IsAllowedExtension(string file)
     {
-        var pending = await _queue.FlushAsync(token);
-        if (!pending.Any())
-        {
-            return;
-        }
-
-        var request = new DeviceEventRequest
-        {
-            DeviceId = _deviceId,
-            DeviceToken = _deviceToken,
-            Documents = pending.ToList()
-        };
-
-        if (await _client.PushAsync(request, token))
-        {
-            _logger.LogInformation("Uploaded {Count} documents", pending.Count);
-        }
-        else
-        {
-            foreach (var item in pending)
-            {
-                await _queue.EnqueueAsync(item, token);
-            }
-        }
+        var extension = Path.GetExtension(file);
+        return _options.AllowedExtensions.Any(a => a.Equals(extension, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static async Task<string> TryReadTextAsync(string file)
+    // Compares file size across two reads ~1s apart instead of a fixed sleep, so large files on
+    // slow drives (network shares, USB) don't get read mid-write.
+    private static async Task<bool> WaitForFileToSettleAsync(string file, CancellationToken token)
     {
         try
         {
-            return await File.ReadAllTextAsync(file);
+            if (!File.Exists(file))
+            {
+                return false;
+            }
+
+            var initialSize = new FileInfo(file).Length;
+            await Task.Delay(TimeSpan.FromSeconds(1), token);
+
+            if (!File.Exists(file))
+            {
+                return false;
+            }
+
+            var settledSize = new FileInfo(file).Length;
+            return initialSize == settledSize;
         }
         catch
         {
-            return Convert.ToBase64String(await File.ReadAllBytesAsync(file));
+            return false;
         }
     }
 
-    private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static async Task<string?> ComputeHashAsync(string file, CancellationToken token)
     {
-        [".pdf"] = "application/pdf",
-        [".png"] = "image/png",
-        [".jpg"] = "image/jpeg",
-        [".jpeg"] = "image/jpeg"
-    };
+        try
+        {
+            await using var stream = File.OpenRead(file);
+            var hash = await SHA256.HashDataAsync(stream, token);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
