@@ -11,6 +11,7 @@ type Device = {
   status: string | number;
   enrolledAt: string;
   lastSeenAt: string | null;
+  watchPaths: string[];
 };
 
 type EnrollmentCode = {
@@ -31,11 +32,17 @@ function detectOs(): Os {
   return "linux";
 }
 
-function installCommand(os: Os, code: string): string {
+const PATH_PLACEHOLDERS: Record<Os, string> = {
+  windows: "C:\\CertiWatch\\Watch",
+  linux: "/mnt/certificates",
+  macos: "/Volumes/CertiWatch"
+};
+
+function installCommand(os: Os, code: string, folderPath: string): string {
   if (os === "windows") {
-    return `$s = irm ${API_BASE}/api/devices/install.ps1; & ([scriptblock]::Create($s)) -Code '${code}' -Name $env:COMPUTERNAME`;
+    return `$s = irm ${API_BASE}/api/devices/install.ps1; & ([scriptblock]::Create($s)) -Code '${code}' -Path '${folderPath}' -Name $env:COMPUTERNAME`;
   }
-  return `curl -fsSL ${API_BASE}/api/devices/install.sh | sudo bash -s -- --code ${code} --name "$(hostname)"`;
+  return `curl -fsSL ${API_BASE}/api/devices/install.sh | sudo bash -s -- --code ${code} --path "${folderPath}" --name "$(hostname)"`;
 }
 
 export default function DevicesPage() {
@@ -47,6 +54,7 @@ export default function DevicesPage() {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
   const [os, setOs] = useState<Os>("linux");
+  const [folderPath, setFolderPath] = useState("");
 
   useEffect(() => {
     setOs(detectOs());
@@ -87,7 +95,10 @@ export default function DevicesPage() {
     }
   };
 
-  const command = useMemo(() => (enrollment ? installCommand(os, enrollment.code) : ""), [os, enrollment]);
+  const command = useMemo(
+    () => (enrollment && folderPath.trim() ? installCommand(os, enrollment.code, folderPath.trim()) : ""),
+    [os, enrollment, folderPath]
+  );
 
   const copyCommand = async () => {
     if (!command) return;
@@ -116,10 +127,23 @@ export default function DevicesPage() {
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <h2 className="text-md font-semibold text-slate-900">Enroll a device</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Generate a one-time enrollment code, then install the agent on the machine watching the folder and
-            paste the code in when it asks. Minting a new code revokes the previous one, and unused codes expire
-            after 24 hours.
+            Tell it which folder to watch, then generate a one-time code — the install command below will have
+            both baked in. Minting a new code revokes the previous one, and unused codes expire after 24 hours.
           </p>
+
+          <div className="mt-3 max-w-md">
+            <label className="text-sm font-medium text-slate-700">Folder to watch</label>
+            <input
+              value={folderPath}
+              onChange={(e) => setFolderPath(e.target.value)}
+              placeholder={PATH_PLACEHOLDERS[os]}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              The full path on the machine running the agent — a local folder, a mapped drive, or a NAS mount.
+              Created automatically if it doesn't exist yet.
+            </p>
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
@@ -155,21 +179,29 @@ export default function DevicesPage() {
                 ))}
               </div>
 
-              <div className="relative mt-2">
-                <button
-                  onClick={copyCommand}
-                  className="absolute right-2 top-2 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-                >
-                  {commandCopied ? "Copied" : "Copy"}
-                </button>
-                <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-16 text-xs text-slate-100">
-                  <code>{command}</code>
-                </pre>
-              </div>
-              {os === "windows" && (
-                <p className="mt-1 text-xs text-amber-800">Run in PowerShell as Administrator.</p>
+              {!command ? (
+                <p className="mt-2 rounded-lg border border-dashed border-amber-400 bg-white p-3 text-xs text-amber-800">
+                  Enter a folder to watch above to generate the install command.
+                </p>
+              ) : (
+                <>
+                  <div className="relative mt-2">
+                    <button
+                      onClick={copyCommand}
+                      className="absolute right-2 top-2 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                    >
+                      {commandCopied ? "Copied" : "Copy"}
+                    </button>
+                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-16 text-xs text-slate-100">
+                      <code>{command}</code>
+                    </pre>
+                  </div>
+                  {os === "windows" && (
+                    <p className="mt-1 text-xs text-amber-800">Run in PowerShell as Administrator.</p>
+                  )}
+                  {os !== "windows" && <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>}
+                </>
               )}
-              {os !== "windows" && <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>}
 
               <p className="mt-3 text-xs text-amber-800">
                 Expires {formatDate(enrollment.expiresAt)}. Raw code:{" "}
@@ -199,6 +231,7 @@ export default function DevicesPage() {
                 <tr>
                   <Header>Name</Header>
                   <Header>OS</Header>
+                  <Header>Watching</Header>
                   <Header>Status</Header>
                   <Header>Online</Header>
                   <Header>Enrolled</Header>
@@ -210,6 +243,13 @@ export default function DevicesPage() {
                   <tr key={d.id} className="hover:bg-slate-50">
                     <Cell>{d.name}</Cell>
                     <Cell>{d.operatingSystem ?? "—"}</Cell>
+                    <Cell>
+                      {d.watchPaths.length === 0 ? (
+                        <span className="text-slate-400">Not reported yet</span>
+                      ) : (
+                        <span className="font-mono text-xs">{d.watchPaths.join(", ")}</span>
+                      )}
+                    </Cell>
                     <Cell className="capitalize">{formatStatus(d.status)}</Cell>
                     <Cell>
                       <OnlinePill lastSeenAt={d.lastSeenAt} />

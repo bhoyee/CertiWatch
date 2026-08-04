@@ -123,7 +123,8 @@ public sealed class AgentClient(HttpClient httpClient, IOptions<AgentOptions> op
             {
                 DeviceId = deviceId,
                 DeviceToken = deviceToken,
-                Version = "1.0"
+                Version = "1.0",
+                WatchPaths = _options.WatchPaths
             }, token);
 
             return response.IsSuccessStatusCode;

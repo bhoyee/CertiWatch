@@ -6,4 +6,5 @@ public sealed class DeviceHeartbeatRequest
     public required string DeviceToken { get; init; }
     public required string Version { get; init; }
     public IReadOnlyDictionary<string, string>? Sources { get; init; }
+    public IReadOnlyList<string>? WatchPaths { get; init; }
 }

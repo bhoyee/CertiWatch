@@ -11,5 +11,8 @@ public sealed class Device : BaseEntity
     public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastSeenAt { get; set; }
     public string DeviceToken { get; set; } = string.Empty;
+    // JSON array of folder paths this device's agent reports watching, updated on every
+    // heartbeat - null/empty until the agent's first heartbeat after enrollment.
+    public string? WatchPathsJson { get; set; }
     public Tenant? Tenant { get; set; }
 }

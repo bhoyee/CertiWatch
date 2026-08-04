@@ -64,7 +64,7 @@ public static class DeviceEndpoints
 
         var tenantId = tenantAccessor.Current.TenantId;
         var devices = await db.Devices.AsNoTracking().Where(d => d.TenantId == tenantId).ToListAsync(token);
-        return Results.Ok(devices.Select(d => new DeviceDto(d.Id, d.Name, d.OperatingSystem, d.Status, d.EnrolledAt, d.LastSeenAt)));
+        return Results.Ok(devices.Select(d => new DeviceDto(d.Id, d.Name, d.OperatingSystem, d.Status, d.EnrolledAt, d.LastSeenAt, DeserializeWatchPaths(d.WatchPathsJson))));
     }
 
     private static async Task<IResult> CreateEnrollmentCodeAsync(
@@ -137,8 +137,29 @@ public static class DeviceEndpoints
         }
 
         device.LastSeenAt = clock.UtcNow;
+        if (request.WatchPaths is { Count: > 0 })
+        {
+            device.WatchPathsJson = System.Text.Json.JsonSerializer.Serialize(request.WatchPaths);
+        }
         await db.SaveChangesAsync(token);
         return Results.Ok(new { status = device.Status.ToString() });
+    }
+
+    private static IReadOnlyList<string> DeserializeWatchPaths(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static async Task<IResult> EventsAsync(DeviceEventRequest request, AppDbContext db, IIngestionQueue queue, CancellationToken token)

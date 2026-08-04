@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CertiWatch agent installer for Linux/macOS.
-# Usage: curl -fsSL <api-base-url>/api/devices/install.sh | sudo bash -s -- --code YOUR-CODE --name "device name"
+# Usage: curl -fsSL <api-base-url>/api/devices/install.sh | sudo bash -s -- --code YOUR-CODE --path /path/to/watch --name "device name"
 set -euo pipefail
 
 API_BASE_URL="__API_BASE_URL__"
@@ -8,11 +8,13 @@ GITHUB_REPO="bhoyee/CertiWatch"
 INSTALL_DIR="/opt/certiwatch-agent"
 
 CODE=""
+WATCH_PATH=""
 NAME="$(hostname)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --code) CODE="$2"; shift 2 ;;
+    --path) WATCH_PATH="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -23,10 +25,20 @@ if [ -z "$CODE" ]; then
   exit 1
 fi
 
+if [ -z "$WATCH_PATH" ]; then
+  echo "Missing --path. Specify the folder this agent should watch for new certificates, e.g. --path /mnt/certificates" >&2
+  exit 1
+fi
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "This installer needs to run as root (it registers a system service)." >&2
-  echo "Re-run with: curl -fsSL $API_BASE_URL/api/devices/install.sh | sudo bash -s -- --code $CODE --name \"$NAME\"" >&2
+  echo "Re-run with: curl -fsSL $API_BASE_URL/api/devices/install.sh | sudo bash -s -- --code $CODE --path \"$WATCH_PATH\" --name \"$NAME\"" >&2
   exit 1
+fi
+
+if [ ! -d "$WATCH_PATH" ]; then
+  echo "Creating watch folder: $WATCH_PATH"
+  mkdir -p "$WATCH_PATH"
 fi
 
 OS="$(uname -s)"
@@ -70,7 +82,8 @@ cat > "$INSTALL_DIR/agent.settings.json" <<SETTINGS
   "Agent": {
     "ApiBaseUrl": "${API_BASE_URL}",
     "EnrollmentCode": "${CODE}",
-    "DeviceName": "${NAME}"
+    "DeviceName": "${NAME}",
+    "WatchPaths": ["${WATCH_PATH}"]
   }
 }
 SETTINGS
