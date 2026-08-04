@@ -1,10 +1,13 @@
 # CertiWatch agent installer for Windows.
 # Usage (run as Administrator):
 #   $s = irm __API_BASE_URL__/api/devices/install.ps1
-#   & ([scriptblock]::Create($s)) -Code 'YOUR-CODE' -Name 'device name'
+#   & ([scriptblock]::Create($s)) -Code 'YOUR-CODE' -Path 'C:\CertiWatch\Watch' -Name 'device name'
 param(
     [Parameter(Mandatory = $true)]
     [string]$Code,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
 
     [string]$Name = $env:COMPUTERNAME
 )
@@ -44,11 +47,17 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Expand-Archive -Path $tempZip -DestinationPath $InstallDir -Force
 Remove-Item $tempZip
 
+if (-not (Test-Path $Path)) {
+    Write-Host "Creating watch folder: $Path"
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+}
+
 $settings = @{
     Agent = @{
         ApiBaseUrl     = $ApiBaseUrl
         EnrollmentCode = $Code
         DeviceName     = $Name
+        WatchPaths     = @($Path)
     }
 } | ConvertTo-Json -Depth 3
 Set-Content -Path (Join-Path $InstallDir "agent.settings.json") -Value $settings -Encoding UTF8

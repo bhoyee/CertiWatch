@@ -8,5 +8,6 @@ public sealed record DeviceDto(
     string OperatingSystem,
     DeviceStatus Status,
     DateTime EnrolledAt,
-    DateTime? LastSeenAt
+    DateTime? LastSeenAt,
+    IReadOnlyList<string> WatchPaths
 );

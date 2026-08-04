@@ -37,6 +37,11 @@ public sealed class AgentWorker : BackgroundService
     {
         await EnsureEnrolledAsync(stoppingToken);
 
+        if (_options.WatchPaths.Count == 0)
+        {
+            _logger.LogWarning("No folder configured to watch - set Agent__WatchPaths__0 (or WatchPaths in agent.settings.json) to the folder this agent should monitor");
+        }
+
         foreach (var path in _options.WatchPaths)
         {
             try
