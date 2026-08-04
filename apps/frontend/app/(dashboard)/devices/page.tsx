@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchJson, postJson } from "../../../lib/api";
 
 type Device = {
@@ -78,18 +79,23 @@ export default function DevicesPage() {
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <h2 className="text-md font-semibold text-slate-900">Enroll a device</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Generate a one-time enrollment code, then install the agent on the machine watching the folder (see{" "}
-            <code className="rounded bg-slate-200 px-1 py-0.5 text-xs">docs/agent-install.md</code>) and paste the code
-            in when it asks. Minting a new code revokes the previous one, and unused codes expire after 24 hours.
+            Generate a one-time enrollment code, then install the agent on the machine watching the folder and
+            paste the code in when it asks. Minting a new code revokes the previous one, and unused codes expire
+            after 24 hours.
           </p>
 
-          <button
-            onClick={mintCode}
-            disabled={minting}
-            className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-          >
-            {minting ? "Generating..." : "Generate enrollment code"}
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              onClick={mintCode}
+              disabled={minting}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            >
+              {minting ? "Generating..." : "Generate enrollment code"}
+            </button>
+            <Link href="/devices/install" className="text-sm font-medium text-blue-600 hover:underline">
+              How do I install the agent?
+            </Link>
+          </div>
           {mintError && <p className="mt-2 text-sm text-rose-700">{mintError}</p>}
 
           {enrollment && (
