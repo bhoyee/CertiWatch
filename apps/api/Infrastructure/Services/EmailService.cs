@@ -19,7 +19,10 @@ public sealed class EmailService(IOptions<EmailOptions> options, ILogger<EmailSe
         if (string.IsNullOrWhiteSpace(_options.SmtpHost))
         {
             logger.LogInformation("[Email] (debug) To: {To} Subject: {Subject}", to, subject);
-            logger.LogDebug("Email body: {Body}", htmlBody);
+            // Logged at Information (not Debug) specifically so the magic link is actually visible
+            // via `docker compose logs api` without needing to reconfigure Serilog's minimum level -
+            // this is the only way to get the link when no real SMTP provider is configured.
+            logger.LogInformation("[Email] (debug) Body: {Body}", htmlBody);
             return;
         }
 

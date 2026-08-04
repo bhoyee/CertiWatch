@@ -158,3 +158,4 @@ Auth defaults:
 - Magic links are short-lived; the session cookie is long-lived (30 days) when “stay signed in” is checked.
 - Links can be sent to a fallback org email; the session is bound to a device identifier cookie (`cw_device`).
 - Login flow requires an existing user; unknown emails return a friendly 400 (“We couldn't find that email. Please sign up to start your trial.”). New users join via signup (Stripe) or admin invite.
+- **No real emails without real SMTP credentials.** With `Email__SmtpHost` unset (the default), magic links, invites, and reminders are logged instead of sent — run `docker compose logs -f api` and grab the `/magic?token=...` link out of the `[Email] (debug) Body:` line. Set `Email__SmtpHost` / `Email__SmtpUsername` / `Email__SmtpPassword` in `.env` once you have a real Resend (or other SMTP) account to actually receive them.
