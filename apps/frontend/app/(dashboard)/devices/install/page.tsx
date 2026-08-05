@@ -38,7 +38,8 @@ export default function AgentInstallPage() {
           </Link>
           , click <span className="font-medium">Generate enrollment code</span>. That panel shows a single
           copy-paste command with the code already filled in — it downloads the agent, installs it as a service,
-          and starts it, all in one step.
+          and starts it, all in one step. Didn't specify a folder? The command opens a native folder picker on
+          the machine you run it on, so you never have to type a path by hand.
         </p>
       </div>
 

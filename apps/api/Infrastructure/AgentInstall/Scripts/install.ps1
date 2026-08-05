@@ -1,12 +1,12 @@
 # CertiWatch agent installer for Windows.
 # Usage (run as Administrator):
 #   $s = irm __API_BASE_URL__/api/devices/install.ps1
-#   & ([scriptblock]::Create($s)) -Code 'YOUR-CODE' -Path 'C:\CertiWatch\Watch' -Name 'device name'
+#   & ([scriptblock]::Create($s)) -Code 'YOUR-CODE' -Name 'device name'
+#   (omit -Path to pick the folder interactively; pass it to skip the prompt for unattended installs)
 param(
     [Parameter(Mandatory = $true)]
     [string]$Code,
 
-    [Parameter(Mandatory = $true)]
     [string]$Path,
 
     [string]$Name = $env:COMPUTERNAME
@@ -22,6 +22,36 @@ $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Pri
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Error "This installer needs to run as Administrator (it registers a Windows Service). Re-open PowerShell as Administrator and try again."
     exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($Path)) {
+    # A browser can never hand back a real filesystem path (sandboxed by design), and the folder
+    # only exists on whichever machine actually runs this script - so the only place a real
+    # "browse" experience can happen is right here, interactively, at install time.
+    $pickedPath = $null
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Choose the folder CertiWatch should watch for new certificates"
+        $dialog.ShowNewFolderButton = $true
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $pickedPath = $dialog.SelectedPath
+        }
+    } catch {
+        # No desktop session available (e.g. running over SSH/headless) - System.Windows.Forms
+        # can't show a dialog there, so fall through to a plain text prompt below.
+    }
+
+    if ($pickedPath) {
+        $Path = $pickedPath
+    } else {
+        $Path = Read-Host "Folder to watch for new certificates (e.g. C:\CertiWatch\Watch)"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Write-Error "No folder selected. Re-run and either pick a folder or pass -Path explicitly."
+        exit 1
+    }
 }
 
 $arch = $env:PROCESSOR_ARCHITECTURE

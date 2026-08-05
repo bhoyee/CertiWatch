@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { fetchJson, postJson } from "../../../lib/api";
+import { deleteJson, fetchJson, postJson } from "../../../lib/api";
 
 type Device = {
   id: string;
@@ -39,10 +39,13 @@ const PATH_PLACEHOLDERS: Record<Os, string> = {
 };
 
 function installCommand(os: Os, code: string, folderPath: string): string {
+  const path = folderPath.trim();
   if (os === "windows") {
-    return `$s = irm ${API_BASE}/api/devices/install.ps1; & ([scriptblock]::Create($s)) -Code '${code}' -Path '${folderPath}' -Name $env:COMPUTERNAME`;
+    const pathArg = path ? ` -Path '${path}'` : "";
+    return `$s = irm ${API_BASE}/api/devices/install.ps1; & ([scriptblock]::Create($s)) -Code '${code}'${pathArg} -Name $env:COMPUTERNAME`;
   }
-  return `curl -fsSL ${API_BASE}/api/devices/install.sh | sudo bash -s -- --code ${code} --path "${folderPath}" --name "$(hostname)"`;
+  const pathArg = path ? ` --path "${path}"` : "";
+  return `curl -fsSL ${API_BASE}/api/devices/install.sh | sudo bash -s -- --code ${code}${pathArg} --name "$(hostname)"`;
 }
 
 export default function DevicesPage() {
@@ -55,6 +58,8 @@ export default function DevicesPage() {
   const [commandCopied, setCommandCopied] = useState(false);
   const [os, setOs] = useState<Os>("linux");
   const [folderPath, setFolderPath] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     setOs(detectOs());
@@ -96,7 +101,7 @@ export default function DevicesPage() {
   };
 
   const command = useMemo(
-    () => (enrollment && folderPath.trim() ? installCommand(os, enrollment.code, folderPath.trim()) : ""),
+    () => (enrollment ? installCommand(os, enrollment.code, folderPath) : ""),
     [os, enrollment, folderPath]
   );
 
@@ -108,6 +113,22 @@ export default function DevicesPage() {
       setTimeout(() => setCommandCopied(false), 2000);
     } catch {
       // clipboard access can be denied by the browser; the command is still visible to copy manually
+    }
+  };
+
+  const deleteDevice = async (device: Device) => {
+    if (!window.confirm(`Remove "${device.name}"? Its device token stops working immediately, and it'll need a new enrollment code to reconnect.`)) {
+      return;
+    }
+    setDeleteError(null);
+    setDeletingId(device.id);
+    try {
+      await deleteJson(`/api/devices/${device.id}`);
+      setDevices((prev) => prev?.filter((d) => d.id !== device.id) ?? prev);
+    } catch (err: any) {
+      setDeleteError(err?.message ?? "Failed to remove device");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -132,7 +153,7 @@ export default function DevicesPage() {
           </p>
 
           <div className="mt-3 max-w-md">
-            <label className="text-sm font-medium text-slate-700">Folder to watch</label>
+            <label className="text-sm font-medium text-slate-700">Folder to watch (optional)</label>
             <input
               value={folderPath}
               onChange={(e) => setFolderPath(e.target.value)}
@@ -140,8 +161,11 @@ export default function DevicesPage() {
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none"
             />
             <p className="mt-1 text-xs text-slate-500">
-              The full path on the machine running the agent — a local folder, a mapped drive, or a NAS mount.
-              Created automatically if it doesn't exist yet.
+              A local folder, mapped drive, or NAS mount — created automatically if it doesn't exist. Fill it in
+              here only if you already know the exact path on the machine that will run the agent (e.g. it's the
+              same machine you're using right now, or you're scripting an unattended install). Otherwise leave
+              this blank — the install command will open a folder picker on that machine instead, so you never
+              have to type the path by hand.
             </p>
           </div>
 
@@ -179,28 +203,26 @@ export default function DevicesPage() {
                 ))}
               </div>
 
-              {!command ? (
-                <p className="mt-2 rounded-lg border border-dashed border-amber-400 bg-white p-3 text-xs text-amber-800">
-                  Enter a folder to watch above to generate the install command.
-                </p>
+              <div className="relative mt-2">
+                <button
+                  onClick={copyCommand}
+                  className="absolute right-2 top-2 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                >
+                  {commandCopied ? "Copied" : "Copy"}
+                </button>
+                <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-16 text-xs text-slate-100">
+                  <code>{command}</code>
+                </pre>
+              </div>
+              {os === "windows" ? (
+                <p className="mt-1 text-xs text-amber-800">Run in PowerShell as Administrator.</p>
               ) : (
-                <>
-                  <div className="relative mt-2">
-                    <button
-                      onClick={copyCommand}
-                      className="absolute right-2 top-2 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-                    >
-                      {commandCopied ? "Copied" : "Copy"}
-                    </button>
-                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 pr-16 text-xs text-slate-100">
-                      <code>{command}</code>
-                    </pre>
-                  </div>
-                  {os === "windows" && (
-                    <p className="mt-1 text-xs text-amber-800">Run in PowerShell as Administrator.</p>
-                  )}
-                  {os !== "windows" && <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>}
-                </>
+                <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>
+              )}
+              {!folderPath.trim() && (
+                <p className="mt-1 text-xs text-amber-800">
+                  No folder specified — this will open a folder picker on the target machine during install.
+                </p>
               )}
 
               <p className="mt-3 text-xs text-amber-800">
@@ -220,6 +242,7 @@ export default function DevicesPage() {
           <h2 className="text-md font-semibold text-slate-900">Enrolled devices</h2>
           <p className="text-sm text-slate-600">Agents enrolled for this tenant.</p>
         </div>
+        {deleteError && <p className="mb-3 text-sm text-rose-700">{deleteError}</p>}
         {!devices ? (
           <p className="text-sm text-slate-600">Loading devices...</p>
         ) : devices.length === 0 ? (
@@ -236,6 +259,7 @@ export default function DevicesPage() {
                   <Header>Online</Header>
                   <Header>Enrolled</Header>
                   <Header>Last seen</Header>
+                  <Header>&nbsp;</Header>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -256,6 +280,15 @@ export default function DevicesPage() {
                     </Cell>
                     <Cell>{formatDate(d.enrolledAt)}</Cell>
                     <Cell>{formatRelative(d.lastSeenAt)}</Cell>
+                    <Cell>
+                      <button
+                        onClick={() => deleteDevice(d)}
+                        disabled={deletingId === d.id}
+                        className="text-xs font-semibold text-rose-600 hover:underline disabled:opacity-50"
+                      >
+                        {deletingId === d.id ? "Removing..." : "Remove"}
+                      </button>
+                    </Cell>
                   </tr>
                 ))}
               </tbody>

@@ -19,6 +19,7 @@ public static class DeviceEndpoints
     {
         var group = routes.MapGroup("/api/devices");
         group.MapGet(string.Empty, ListAsync).RequireAuthorization();
+        group.MapDelete("/{deviceId:guid}", DeleteAsync).RequireAuthorization("Admin");
         group.MapPost("/enrollment-codes", CreateEnrollmentCodeAsync).RequireAuthorization("Admin");
         group.MapPost("/enroll", EnrollAsync).AllowAnonymous();
         group.MapPost("/heartbeat", HeartbeatAsync).AllowAnonymous();
@@ -65,6 +66,31 @@ public static class DeviceEndpoints
         var tenantId = tenantAccessor.Current.TenantId;
         var devices = await db.Devices.AsNoTracking().Where(d => d.TenantId == tenantId).ToListAsync(token);
         return Results.Ok(devices.Select(d => new DeviceDto(d.Id, d.Name, d.OperatingSystem, d.Status, d.EnrolledAt, d.LastSeenAt, DeserializeWatchPaths(d.WatchPathsJson))));
+    }
+
+    // No other table has a foreign key to Devices, so this is a plain, isolated delete - it
+    // doesn't touch any Records/Documents the device has already uploaded (those live on
+    // independently, tied to the tenant/source, not the device). The agent itself keeps running
+    // with its now-orphaned device token, but every authenticated call it makes (heartbeat,
+    // check-hash, upload) re-validates the token against the Devices table, so a deleted device
+    // is immediately and completely cut off - not just hidden from the list.
+    private static async Task<IResult> DeleteAsync(Guid deviceId, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(tenantAccessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = tenantAccessor.Current.TenantId;
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId && d.TenantId == tenantId, token);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        db.Devices.Remove(device);
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> CreateEnrollmentCodeAsync(
