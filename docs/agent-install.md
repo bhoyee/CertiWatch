@@ -7,9 +7,12 @@ where the existing OCR pipeline extracts staff name, course, issuer, and dates a
 ## The quick way
 
 1. From the CertiWatch dashboard, go to **Devices** and click **Generate enrollment code**.
+   Optionally fill in the folder to watch if you already know the exact path.
 2. Copy the one-line command shown for your OS and run it (as Administrator on Windows, with
    `sudo` on Linux/macOS). It downloads the agent, installs it as a service, and starts it — no
-   SDK, no source checkout, no manual configuration.
+   SDK, no source checkout, no manual configuration. If you didn't specify a folder in step 1,
+   the script opens a native folder picker on the machine you run it on (falls back to a typed
+   prompt on headless machines with no desktop session, e.g. over SSH).
 
 That's it for most installs. The rest of this doc covers what that command does under the hood
 and the manual/build-from-source path for unsupported platforms.
@@ -28,7 +31,7 @@ file next to the binary (this is what the one-line installer writes for you):
 | `Agent__ApiBaseUrl` | Yes | The CertiWatch API URL, e.g. `https://api.yourcompany.com` |
 | `Agent__EnrollmentCode` | Yes (first run only) | An enrollment code from the Devices page. Only needed until the agent enrolls and saves its device credentials to disk (`device-credentials.json`) - subsequent restarts reuse those and never re-enroll. |
 | `Agent__DeviceName` | No | Defaults to the machine's hostname |
-| `Agent__WatchPaths__0` | No | Folder to watch. Defaults to the current user's Documents folder. Add `__1`, `__2`, etc. for additional folders |
+| `Agent__WatchPaths__0` | Yes | Folder to watch. No default — an agent started with no watch paths configured logs a warning and watches nothing. Add `__1`, `__2`, etc. for additional folders |
 
 ### Windows Service
 ```powershell
@@ -88,4 +91,8 @@ is what the one-line install scripts (served from `GET /api/devices/install.sh` 
   and a server-side check.
 - Uploads the real file — not extracted text — so the server's OCR pipeline does the actual reading;
   the agent itself never parses documents.
-- Sends a heartbeat every 60 seconds so the Devices page's "last seen" / online status stays accurate.
+- Sends a heartbeat every 60 seconds so the Devices page's "last seen" / online status stays accurate,
+  including the folder(s) it's currently watching (shown in the Devices table).
+- Removing a device from the Devices page immediately invalidates its device token server-side -
+  the agent process keeps running until stopped locally, but every call it makes gets rejected from
+  that point on. Re-enrolling it means installing again with a fresh code.

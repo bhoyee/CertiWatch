@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CertiWatch agent installer for Linux/macOS.
-# Usage: curl -fsSL <api-base-url>/api/devices/install.sh | sudo bash -s -- --code YOUR-CODE --path /path/to/watch --name "device name"
+# Usage: curl -fsSL <api-base-url>/api/devices/install.sh | sudo bash -s -- --code YOUR-CODE --name "device name"
+#   (omit --path to pick the folder interactively; pass it to skip the prompt for unattended installs)
 set -euo pipefail
 
 API_BASE_URL="__API_BASE_URL__"
@@ -25,24 +26,45 @@ if [ -z "$CODE" ]; then
   exit 1
 fi
 
-if [ -z "$WATCH_PATH" ]; then
-  echo "Missing --path. Specify the folder this agent should watch for new certificates, e.g. --path /mnt/certificates" >&2
+if [ "$(id -u)" -ne 0 ]; then
+  echo "This installer needs to run as root (it registers a system service)." >&2
+  echo "Re-run with: curl -fsSL $API_BASE_URL/api/devices/install.sh | sudo bash -s -- --code $CODE --name \"$NAME\"" >&2
   exit 1
 fi
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "This installer needs to run as root (it registers a system service)." >&2
-  echo "Re-run with: curl -fsSL $API_BASE_URL/api/devices/install.sh | sudo bash -s -- --code $CODE --path \"$WATCH_PATH\" --name \"$NAME\"" >&2
-  exit 1
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+if [ -z "$WATCH_PATH" ]; then
+  # A browser can never hand back a real filesystem path (sandboxed by design), and the folder
+  # only exists on whichever machine actually runs this script - so the only place a real
+  # "browse" experience can happen is right here, interactively, at install time.
+  PICKED=""
+  if [ "$OS" = "Darwin" ] && command -v osascript >/dev/null 2>&1; then
+    PICKED="$(osascript -e 'POSIX path of (choose folder with prompt "Choose the folder CertiWatch should watch for new certificates")' 2>/dev/null || true)"
+  elif [ "$OS" = "Linux" ] && command -v zenity >/dev/null 2>&1; then
+    PICKED="$(zenity --file-selection --directory --title="Choose the folder CertiWatch should watch for new certificates" 2>/dev/null || true)"
+  fi
+
+  if [ -n "$PICKED" ]; then
+    WATCH_PATH="$PICKED"
+  elif [ -r /dev/tty ]; then
+    # No GUI session available (headless server, SSH, NAS) - fall back to a plain prompt. This
+    # script is normally run as `curl ... | sudo bash`, which occupies stdin with the piped
+    # script itself, so the prompt has to read from the controlling terminal directly instead.
+    read -r -p "Folder to watch for new certificates (e.g. /mnt/certificates): " WATCH_PATH < /dev/tty
+  fi
+
+  if [ -z "$WATCH_PATH" ]; then
+    echo "No folder selected. Re-run and either pick a folder or pass --path explicitly." >&2
+    exit 1
+  fi
 fi
 
 if [ ! -d "$WATCH_PATH" ]; then
   echo "Creating watch folder: $WATCH_PATH"
   mkdir -p "$WATCH_PATH"
 fi
-
-OS="$(uname -s)"
-ARCH="$(uname -m)"
 
 case "$OS" in
   Linux)
