@@ -1,6 +1,11 @@
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
 WORKDIR /app
-RUN apt-get -o Acquire::Retries=5 update && \
+# Some networks block/time out plain HTTP (port 80) to deb.debian.org while HTTPS works fine -
+# switch the mirror URIs to https before updating so the build doesn't depend on port 80 being open.
+# Debian 12 (bookworm) images use the newer deb822 format at /etc/apt/sources.list.d/*.sources,
+# not the classic /etc/apt/sources.list - find/sed covers both layouts.
+RUN find /etc/apt -type f \( -name "*.list" -o -name "*.sources" \) -exec sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' {} + && \
+    apt-get -o Acquire::Retries=5 update && \
     apt-get install -y --no-install-recommends tesseract-ocr poppler-utils && \
     rm -rf /var/lib/apt/lists/*
 

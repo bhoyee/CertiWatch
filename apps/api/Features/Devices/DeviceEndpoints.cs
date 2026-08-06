@@ -198,10 +198,28 @@ public static class DeviceEndpoints
 
         foreach (var doc in request.Documents)
         {
-            await queue.EnqueueAsync(doc with { TenantId = device.TenantId }, token);
+            // Prefer the tenant encoded in the file's own path (/uploads/<tenantId>/...) over the
+            // calling device's tenant. The OCR worker is a single trusted process that scans the
+            // entire shared /uploads root across every tenant - it authenticates with one fixed
+            // device identity, so device.TenantId alone can't tell us which tenant a given file
+            // actually belongs to. The path is set server-side when the file is first saved and
+            // never caller-controlled, so it's the authoritative source of truth here; falling
+            // back to device.TenantId keeps this safe for anything that doesn't follow that layout.
+            var tenantId = ExtractTenantIdFromPath(doc.PathOrUrl) ?? device.TenantId;
+            await queue.EnqueueAsync(doc with { TenantId = tenantId }, token);
         }
 
         return Results.Accepted();
+    }
+
+    private static Guid? ExtractTenantIdFromPath(string pathOrUrl)
+    {
+        var parts = pathOrUrl.Replace('\\', '/').TrimStart('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            && parts[0].Equals("uploads", StringComparison.OrdinalIgnoreCase)
+            && Guid.TryParse(parts[1], out var tenantId)
+            ? tenantId
+            : null;
     }
 
     private static async Task<IResult> CheckHashAsync(FileHashCheckRequest request, AppDbContext db, CancellationToken token)

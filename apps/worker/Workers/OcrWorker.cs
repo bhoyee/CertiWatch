@@ -211,7 +211,7 @@ public sealed class OcrWorker : BackgroundService
 
                 _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                 var payload = new DocumentDetectedEvent(
-                    _options.TenantId,
+                    ExtractTenantIdFromPath(file) ?? _options.TenantId,
                     _options.SourceId,
                     _options.DeviceToken,
                     null, // createdByUserId unknown for filesystem watcher
@@ -827,6 +827,21 @@ public sealed class OcrWorker : BackgroundService
     using var stream = File.OpenRead(path);
     var hash = SHA256.HashData(stream);
     return Convert.ToHexString(hash).ToLowerInvariant();
+  }
+
+  // Uploaded files always live under /uploads/<tenantId>/... - deriving the tenant from the
+  // file's own path (rather than this container's single configured _options.TenantId) is what
+  // lets one worker correctly OCR files across every tenant instead of only the one it's pinned
+  // to. Falls back to _options.TenantId for paths that don't follow that layout (e.g. the sample
+  // documents folder).
+  private static Guid? ExtractTenantIdFromPath(string path)
+  {
+    var parts = path.Replace('\\', '/').TrimStart('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+    return parts.Length >= 2
+      && parts[0].Equals("uploads", StringComparison.OrdinalIgnoreCase)
+      && Guid.TryParse(parts[1], out var tenantId)
+      ? tenantId
+      : null;
   }
 
   private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
