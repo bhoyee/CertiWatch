@@ -214,6 +214,126 @@ export default function StaffPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-md font-semibold text-slate-900">Import from CSV</h2>
+            <p className="text-sm text-slate-600">
+              A "name" column is required — "job title" and "start date" are optional. Excel: File → Save As → CSV.
+            </p>
+          </div>
+          <a
+            href={`data:text/csv;charset=utf-8,${encodeURIComponent("name,job title,start date\nJane Doe,Carer,2024-03-01\n")}`}
+            download="staff-template.csv"
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
+            Download template
+          </a>
+        </div>
+
+        <div className="mt-4">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileSelect(file);
+              e.target.value = "";
+            }}
+            className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-100"
+          />
+          {importError && <p className="mt-2 text-sm text-rose-700">{importError}</p>}
+
+          {importRows && (
+            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold">{importFileName}</span> — found {importRows.length} row
+                {importRows.length === 1 ? "" : "s"} ready to import.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={confirmImport}
+                  disabled={importing}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                >
+                  {importing ? "Importing..." : `Import ${importRows.length} staff member${importRows.length === 1 ? "" : "s"}`}
+                </button>
+                <button
+                  onClick={() => {
+                    setImportRows(null);
+                    setImportFileName(null);
+                  }}
+                  disabled={importing}
+                  className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {importResult && (
+            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <p className="font-semibold">Imported {importResult.imported} staff member{importResult.imported === 1 ? "" : "s"}.</p>
+              {importResult.skipped.length > 0 && (
+                <>
+                  <p className="mt-2 font-semibold text-slate-700">
+                    Skipped {importResult.skipped.length} row{importResult.skipped.length === 1 ? "" : "s"}:
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">
+                    {importResult.skipped.map((s, i) => (
+                      <li key={i}>
+                        Row {s.row}: {s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-md font-semibold text-slate-900">Add a staff member</h2>
+        <p className="text-sm text-slate-600">Just a name to start — everything else is optional.</p>
+        <form
+          className="mt-4 grid gap-4 md:grid-cols-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setCreating(true);
+            setError(null);
+            try {
+              await postJson("/api/staff", {
+                name: form.name.trim(),
+                jobTitle: form.jobTitle.trim() || null,
+                startDate: form.startDate || null
+              });
+              load();
+              setForm(emptyForm);
+            } catch (err: any) {
+              setError(err?.message ?? "Failed to add staff member");
+            } finally {
+              setCreating(false);
+            }
+          }}
+        >
+          <Field label="Name" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Jane Doe" />
+          <Field label="Job title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="Carer" />
+          <Field label="Start date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
+          <div className="md:col-span-3">
+            <button
+              type="submit"
+              disabled={creating || !form.name.trim()}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            >
+              {creating ? "Adding..." : "Add staff member"}
+            </button>
+            {error && <span className="ml-3 text-sm text-rose-700">{error}</span>}
+          </div>
+        </form>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">Staff</h1>
@@ -385,126 +505,6 @@ export default function StaffPage() {
             </div>
           </div>
         )}
-      </div>
-
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-md font-semibold text-slate-900">Import from CSV</h2>
-            <p className="text-sm text-slate-600">
-              A "name" column is required — "job title" and "start date" are optional. Excel: File → Save As → CSV.
-            </p>
-          </div>
-          <a
-            href={`data:text/csv;charset=utf-8,${encodeURIComponent("name,job title,start date\nJane Doe,Carer,2024-03-01\n")}`}
-            download="staff-template.csv"
-            className="text-sm font-medium text-blue-600 hover:underline"
-          >
-            Download template
-          </a>
-        </div>
-
-        <div className="mt-4">
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileSelect(file);
-              e.target.value = "";
-            }}
-            className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-100"
-          />
-          {importError && <p className="mt-2 text-sm text-rose-700">{importError}</p>}
-
-          {importRows && (
-            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm text-slate-700">
-                <span className="font-semibold">{importFileName}</span> — found {importRows.length} row
-                {importRows.length === 1 ? "" : "s"} ready to import.
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  onClick={confirmImport}
-                  disabled={importing}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-                >
-                  {importing ? "Importing..." : `Import ${importRows.length} staff member${importRows.length === 1 ? "" : "s"}`}
-                </button>
-                <button
-                  onClick={() => {
-                    setImportRows(null);
-                    setImportFileName(null);
-                  }}
-                  disabled={importing}
-                  className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {importResult && (
-            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              <p className="font-semibold">Imported {importResult.imported} staff member{importResult.imported === 1 ? "" : "s"}.</p>
-              {importResult.skipped.length > 0 && (
-                <>
-                  <p className="mt-2 font-semibold text-slate-700">
-                    Skipped {importResult.skipped.length} row{importResult.skipped.length === 1 ? "" : "s"}:
-                  </p>
-                  <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">
-                    {importResult.skipped.map((s, i) => (
-                      <li key={i}>
-                        Row {s.row}: {s.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-md font-semibold text-slate-900">Add a staff member</h2>
-        <p className="text-sm text-slate-600">Just a name to start — everything else is optional.</p>
-        <form
-          className="mt-4 grid gap-4 md:grid-cols-3"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setCreating(true);
-            setError(null);
-            try {
-              await postJson("/api/staff", {
-                name: form.name.trim(),
-                jobTitle: form.jobTitle.trim() || null,
-                startDate: form.startDate || null
-              });
-              load();
-              setForm(emptyForm);
-            } catch (err: any) {
-              setError(err?.message ?? "Failed to add staff member");
-            } finally {
-              setCreating(false);
-            }
-          }}
-        >
-          <Field label="Name" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Jane Doe" />
-          <Field label="Job title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="Carer" />
-          <Field label="Start date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
-          <div className="md:col-span-3">
-            <button
-              type="submit"
-              disabled={creating || !form.name.trim()}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-            >
-              {creating ? "Adding..." : "Add staff member"}
-            </button>
-            {error && <span className="ml-3 text-sm text-rose-700">{error}</span>}
-          </div>
-        </form>
       </div>
 
       {editing && editForm && (
