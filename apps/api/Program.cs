@@ -6,6 +6,8 @@ using CertiWatch.Api.Features.Documents;
 using CertiWatch.Api.Features.Notifications;
 using CertiWatch.Api.Features.Records;
 using CertiWatch.Api.Features.Reports;
+using CertiWatch.Api.Features.Requirements;
+using CertiWatch.Api.Features.Requirements.Validators;
 using CertiWatch.Api.Features.Rules;
 using CertiWatch.Api.Features.Rules.Validators;
 using CertiWatch.Api.Features.Uploads;
@@ -90,6 +92,8 @@ if (!string.IsNullOrWhiteSpace(stripeConfig?.SecretKey))
 
 builder.Services.AddScoped<IValidator<CreateCourseRuleRequest>, CreateCourseRuleValidator>();
 builder.Services.AddScoped<IValidator<UpdateCourseRuleRequest>, UpdateCourseRuleValidator>();
+builder.Services.AddScoped<IValidator<CreateRequirementTypeRequest>, CreateRequirementTypeValidator>();
+builder.Services.AddScoped<IValidator<UpdateRequirementTypeRequest>, UpdateRequirementTypeValidator>();
 builder.Services.AddScoped<IValidator<CreateStaffMemberRequest>, CreateStaffMemberValidator>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 
@@ -158,6 +162,7 @@ app.MapDeviceEndpoints();
 app.MapSourceEndpoints();
 app.MapRecordEndpoints();
 app.MapCourseRuleEndpoints();
+app.MapRequirementTypeEndpoints();
 app.MapReportEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();

@@ -23,6 +23,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<DeviceEnrollmentCode> DeviceEnrollmentCodes => Set<DeviceEnrollmentCode>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+    public DbSet<RequirementType> RequirementTypes => Set<RequirementType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<CourseRule>(entity =>
         {
             entity.HasIndex(r => new { r.TenantId, r.CourseName }).IsUnique(false);
+        });
+
+        modelBuilder.Entity<RequirementType>(entity =>
+        {
+            entity.HasIndex(r => new { r.TenantId, r.Name }).IsUnique(false);
         });
 
         modelBuilder.Entity<AuditLog>(entity =>
@@ -126,6 +132,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
 
         SeedGlobalRules(modelBuilder);
+        SeedGlobalRequirementTypes(modelBuilder);
     }
 
     private static void SeedGlobalRules(ModelBuilder modelBuilder)
@@ -149,6 +156,37 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             Id = seed.Id,
             TenantId = null,
             CourseName = seed.Course,
+            DefaultValidityMonths = seed.Months,
+            IsRenewable = seed.Renewable,
+            CreatedAt = DateTime.UtcNow
+        }));
+    }
+
+    // The staff compliance checklist catalog - what every care worker in the UK sector is
+    // typically required to hold. Separate ID range (...0101-...0111) from SeedGlobalRules'
+    // (...0001-...0010) so the two seeded tables never collide.
+    private static void SeedGlobalRequirementTypes(ModelBuilder modelBuilder)
+    {
+        var seeds = new (Guid Id, string Name, int? Months, bool Renewable)[]
+        {
+            (Guid.Parse("00000000-0000-0000-0000-000000000101"), "DBS Check", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000102"), "Care Certificate", null, false),
+            (Guid.Parse("00000000-0000-0000-0000-000000000103"), "Safeguarding", 24, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000104"), "Moving & Handling", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000105"), "Medication Competency", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000106"), "Fire Safety", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000107"), "First Aid", 36, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000108"), "Infection Control", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000109"), "Food Hygiene", 36, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000110"), "Right to Work", null, false),
+            (Guid.Parse("00000000-0000-0000-0000-000000000111"), "NMC Registration", 12, true)
+        };
+
+        modelBuilder.Entity<RequirementType>().HasData(seeds.Select(seed => new RequirementType
+        {
+            Id = seed.Id,
+            TenantId = null,
+            Name = seed.Name,
             DefaultValidityMonths = seed.Months,
             IsRenewable = seed.Renewable,
             CreatedAt = DateTime.UtcNow
