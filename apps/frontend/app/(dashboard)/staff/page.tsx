@@ -98,7 +98,13 @@ export default function StaffPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [sort, setSort] = useState<{ key: "name" | "jobTitle" | "startDate" | "status"; dir: "asc" | "desc" }>({
+    key: "name",
+    dir: "asc"
+  });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [editing, setEditing] = useState<StaffMemberDto | null>(null);
   const [editForm, setEditForm] = useState<StaffForm | null>(null);
@@ -124,11 +130,41 @@ export default function StaffPage() {
     if (!staff) return [];
     const term = search.trim().toLowerCase();
     return staff.filter((s) => {
-      if (!showInactive && !s.isActive) return false;
+      if (statusFilter === "active" && !s.isActive) return false;
+      if (statusFilter === "inactive" && s.isActive) return false;
       if (!term) return true;
       return s.name.toLowerCase().includes(term) || (s.jobTitle ?? "").toLowerCase().includes(term);
     });
-  }, [staff, search, showInactive]);
+  }, [staff, search, statusFilter]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      switch (sort.key) {
+        case "name":
+          return a.name.localeCompare(b.name) * dir;
+        case "jobTitle":
+          return (a.jobTitle ?? "").localeCompare(b.jobTitle ?? "") * dir;
+        case "startDate":
+          return ((a.startDate ?? "") > (b.startDate ?? "") ? 1 : (a.startDate ?? "") < (b.startDate ?? "") ? -1 : 0) * dir;
+        case "status":
+          return (a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1) * dir;
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const visible = sorted.slice(pageStart, pageStart + pageSize);
+
+  const setSortKey = (key: typeof sort.key) => {
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  };
 
   const handleFileSelect = async (file: File) => {
     setImportError(null);
@@ -188,87 +224,92 @@ export default function StaffPage() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search name, role..."
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
             />
-            <label className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              Show inactive
-            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as any);
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="active">Active only</option>
+              <option value="inactive">Inactive only</option>
+              <option value="all">All statuses</option>
+            </select>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              {[10, 25, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Table: md and up */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <Header>Name</Header>
-                <Header>Job title</Header>
-                <Header>Start date</Header>
-                <Header>Status</Header>
+                <Header onClick={() => setSortKey("name")} sorted={sort.key === "name"} dir={sort.dir}>
+                  Name
+                </Header>
+                <Header onClick={() => setSortKey("jobTitle")} sorted={sort.key === "jobTitle"} dir={sort.dir}>
+                  Job title
+                </Header>
+                <Header onClick={() => setSortKey("startDate")} sorted={sort.key === "startDate"} dir={sort.dir}>
+                  Start date
+                </Header>
+                <Header onClick={() => setSortKey("status")} sorted={sort.key === "status"} dir={sort.dir}>
+                  Status
+                </Header>
                 <Header>Actions</Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filtered.map((s) => (
+              {visible.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <Cell>{s.name}</Cell>
                   <Cell>{s.jobTitle ?? "—"}</Cell>
                   <Cell>{formatDate(s.startDate)}</Cell>
                   <Cell>
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                        s.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {s.isActive ? "Active" : "Inactive"}
-                    </span>
+                    <StatusPill isActive={s.isActive} />
                   </Cell>
                   <Cell>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          setEditing(s);
-                          setEditForm({
-                            name: s.name,
-                            jobTitle: s.jobTitle ?? "",
-                            startDate: s.startDate ?? ""
-                          });
-                        }}
-                        className="text-xs font-semibold text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await patchStaff(s.id, { isActive: !s.isActive });
-                            load();
-                          } catch (err: any) {
-                            setError(err?.message ?? "Failed to update staff member");
-                          }
-                        }}
-                        className="text-xs font-semibold text-slate-600 hover:underline"
-                      >
-                        {s.isActive ? "Deactivate" : "Reactivate"}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(s)}
-                        className="text-xs font-semibold text-rose-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions
+                      staff={s}
+                      onEdit={() => {
+                        setEditing(s);
+                        setEditForm({ name: s.name, jobTitle: s.jobTitle ?? "", startDate: s.startDate ?? "" });
+                      }}
+                      onToggleActive={async () => {
+                        try {
+                          await patchStaff(s.id, { isActive: !s.isActive });
+                          load();
+                        } catch (err: any) {
+                          setError(err?.message ?? "Failed to update staff member");
+                        }
+                      }}
+                      onDelete={() => setConfirmDelete(s)}
+                    />
                   </Cell>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {visible.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-4 text-center text-sm text-slate-500">
                     {staff.length === 0 ? "No staff added yet — add your first one below." : "No staff match your filters."}
@@ -278,6 +319,72 @@ export default function StaffPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Cards: below md */}
+        <div className="space-y-3 md:hidden">
+          {visible.map((s) => (
+            <div key={s.id} className="rounded-lg border border-slate-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-slate-900">{s.name}</p>
+                  <p className="text-sm text-slate-600">{s.jobTitle ?? "—"}</p>
+                </div>
+                <StatusPill isActive={s.isActive} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Started {formatDate(s.startDate)}</p>
+              <div className="mt-3">
+                <RowActions
+                  staff={s}
+                  onEdit={() => {
+                    setEditing(s);
+                    setEditForm({ name: s.name, jobTitle: s.jobTitle ?? "", startDate: s.startDate ?? "" });
+                  }}
+                  onToggleActive={async () => {
+                    try {
+                      await patchStaff(s.id, { isActive: !s.isActive });
+                      load();
+                    } catch (err: any) {
+                      setError(err?.message ?? "Failed to update staff member");
+                    }
+                  }}
+                  onDelete={() => setConfirmDelete(s)}
+                />
+              </div>
+            </div>
+          ))}
+          {visible.length === 0 && (
+            <p className="px-1 py-4 text-center text-sm text-slate-500">
+              {staff.length === 0 ? "No staff added yet — add your first one below." : "No staff match your filters."}
+            </p>
+          )}
+        </div>
+
+        {sorted.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+            <span>
+              Showing {pageStart + 1}–{Math.min(sorted.length, pageStart + pageSize)} of {sorted.length} staff
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span className="text-slate-700">
+                Page {currentPage} / {totalPages}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -515,12 +622,73 @@ function formatDate(value: string | null) {
   return isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString();
 }
 
-function Header({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</th>;
+function Header({
+  children,
+  onClick,
+  sorted,
+  dir
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  sorted?: boolean;
+  dir?: "asc" | "desc";
+}) {
+  return (
+    <th
+      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
+        onClick ? "cursor-pointer select-none" : ""
+      }`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+    >
+      <div className="flex items-center gap-1">
+        <span>{children}</span>
+        {sorted && <span className="text-slate-400">{dir === "asc" ? "▲" : "▼"}</span>}
+      </div>
+    </th>
+  );
 }
 
 function Cell({ children }: { children: React.ReactNode }) {
   return <td className="px-3 py-2 text-slate-800">{children}</td>;
+}
+
+function StatusPill({ isActive }: { isActive: boolean }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+        isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+      }`}
+    >
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+function RowActions({
+  staff,
+  onEdit,
+  onToggleActive,
+  onDelete
+}: {
+  staff: StaffMemberDto;
+  onEdit: () => void;
+  onToggleActive: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <button onClick={onEdit} className="text-xs font-semibold text-blue-600 hover:underline">
+        Edit
+      </button>
+      <button onClick={onToggleActive} className="text-xs font-semibold text-slate-600 hover:underline">
+        {staff.isActive ? "Deactivate" : "Reactivate"}
+      </button>
+      <button onClick={onDelete} className="text-xs font-semibold text-rose-600 hover:underline">
+        Delete
+      </button>
+    </div>
+  );
 }
 
 function Field({
