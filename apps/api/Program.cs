@@ -11,6 +11,8 @@ using CertiWatch.Api.Features.Rules.Validators;
 using CertiWatch.Api.Features.Uploads;
 using CertiWatch.Api.Features.Support;
 using CertiWatch.Api.Features.Sources;
+using CertiWatch.Api.Features.Staff;
+using CertiWatch.Api.Features.Staff.Validators;
 using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Jobs;
 using CertiWatch.Api.Infrastructure.Persistence;
@@ -88,6 +90,7 @@ if (!string.IsNullOrWhiteSpace(stripeConfig?.SecretKey))
 
 builder.Services.AddScoped<IValidator<CreateCourseRuleRequest>, CreateCourseRuleValidator>();
 builder.Services.AddScoped<IValidator<UpdateCourseRuleRequest>, UpdateCourseRuleValidator>();
+builder.Services.AddScoped<IValidator<CreateStaffMemberRequest>, CreateStaffMemberValidator>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 
 builder.Services.AddMediatR(typeof(Program));
@@ -164,6 +167,7 @@ app.MapProfileEndpoints();
 app.MapUserManagementEndpoints();
 app.MapUploadEndpoints();
 app.MapSupportEndpoints();
+app.MapStaffEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
