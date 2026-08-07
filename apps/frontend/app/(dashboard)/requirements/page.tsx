@@ -156,7 +156,9 @@ export default function RequirementsPage() {
               {visible.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50">
                   <Cell>{t.name}</Cell>
-                  <Cell>{t.defaultValidityMonths ?? "One-time"}</Cell>
+                  <Cell>
+                    {t.defaultValidityMonths ?? (t.isRenewable ? "Varies per person" : "One-time")}
+                  </Cell>
                   <Cell>{t.isRenewable ? "Yes" : "No"}</Cell>
                   <Cell>
                     <span
@@ -283,7 +285,7 @@ export default function RequirementsPage() {
             label="Validity (months)"
             value={form.defaultValidityMonths}
             onChange={(v) => setForm({ ...form, defaultValidityMonths: v })}
-            placeholder="Leave blank for one-time"
+            placeholder="Leave blank if there's no fixed renewal period"
             type="number"
           />
           <Checkbox
@@ -348,7 +350,7 @@ export default function RequirementsPage() {
               label="Validity (months)"
               value={editForm.defaultValidityMonths}
               onChange={(v) => setEditForm({ ...editForm, defaultValidityMonths: v })}
-              placeholder="Leave blank for one-time"
+              placeholder="Leave blank if there's no fixed renewal period"
               type="number"
             />
             <Checkbox
