@@ -179,7 +179,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             (Guid.Parse("00000000-0000-0000-0000-000000000108"), "Infection Control", 12, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000109"), "Food Hygiene", 36, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000110"), "Right to Work", null, false),
-            (Guid.Parse("00000000-0000-0000-0000-000000000111"), "NMC Registration", 12, true)
+            (Guid.Parse("00000000-0000-0000-0000-000000000111"), "NMC Registration", 12, true),
+            (Guid.Parse("00000000-0000-0000-0000-000000000112"), "NVQ Level 2 in Health & Social Care", null, false),
+            (Guid.Parse("00000000-0000-0000-0000-000000000113"), "NVQ Level 3 in Health & Social Care", null, false),
+            (Guid.Parse("00000000-0000-0000-0000-000000000114"), "NVQ Level 4 in Health & Social Care", null, false)
         };
 
         modelBuilder.Entity<RequirementType>().HasData(seeds.Select(seed => new RequirementType
