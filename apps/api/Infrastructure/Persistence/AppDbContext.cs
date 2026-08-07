@@ -178,7 +178,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             (Guid.Parse("00000000-0000-0000-0000-000000000107"), "First Aid", 36, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000108"), "Infection Control", 12, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000109"), "Food Hygiene", 36, true),
-            (Guid.Parse("00000000-0000-0000-0000-000000000110"), "Right to Work", null, false),
+            // Not a fixed cadence like the others - a British/settled-status worker's right to
+            // work never expires, but a visa holder's does, on whatever date their own visa
+            // says. No universal DefaultValidityMonths applies; IsRenewable=true so the
+            // (future) compliance matrix checks each person's actual extracted expiry date
+            // instead of treating this as permanently satisfied once uploaded.
+            (Guid.Parse("00000000-0000-0000-0000-000000000110"), "Right to Work", null, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000111"), "NMC Registration", 12, true),
             (Guid.Parse("00000000-0000-0000-0000-000000000112"), "NVQ Level 2 in Health & Social Care", null, false),
             (Guid.Parse("00000000-0000-0000-0000-000000000113"), "NVQ Level 3 in Health & Social Care", null, false),
