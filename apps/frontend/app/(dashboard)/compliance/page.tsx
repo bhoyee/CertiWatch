@@ -60,6 +60,8 @@ export default function CompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [onlyGaps, setOnlyGaps] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -122,6 +124,13 @@ export default function CompliancePage() {
     });
   }, [rowsWithFlag, search, onlyGaps]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  // Desktop table and mobile cards share one page of rows so switching layouts (or resizing)
+  // never leaves the two views showing a different slice of staff.
+  const paged = filtered.slice(pageStart, pageStart + pageSize);
+
   if (error) return <ErrorCard message={error} />;
   if (!matrix) return <LoadingCard />;
 
@@ -149,7 +158,10 @@ export default function CompliancePage() {
               <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search staff, role..."
                 className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-56"
               />
@@ -158,11 +170,28 @@ export default function CompliancePage() {
               <input
                 type="checkbox"
                 checked={onlyGaps}
-                onChange={(e) => setOnlyGaps(e.target.checked)}
+                onChange={(e) => {
+                  setOnlyGaps(e.target.checked);
+                  setPage(1);
+                }}
                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
               Only show gaps
             </label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm transition focus:border-blue-500 focus:outline-none"
+            >
+              {[10, 25, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
           </div>
 
           <ColumnManager
@@ -183,12 +212,45 @@ export default function CompliancePage() {
 
         {matrix.rows.length > 0 && (
           <>
-            <ComplianceTable rows={filtered} requirements={visibleRequirements} />
+            <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+              <Legend status="compliant" label="Compliant" />
+              <Legend status="expiring" label="Expiring soon" />
+              <Legend status="expired" label="Expired" />
+              <Legend status="missing" label="Missing" />
+            </div>
+
+            <ComplianceTable rows={paged} requirements={visibleRequirements} />
             <div className="space-y-3 md:hidden">
-              {filtered.map(({ row, hasGap }, i) => (
+              {paged.map(({ row, hasGap }, i) => (
                 <ComplianceCard key={row.staffId} index={i} row={row} requirementTypes={matrix.requirementTypes} hasGap={hasGap} />
               ))}
-              {filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-500">No staff match your filters.</p>}
+              {paged.length === 0 && <p className="py-8 text-center text-sm text-slate-500">No staff match your filters.</p>}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+              <span>
+                Showing {filtered.length === 0 ? 0 : pageStart + 1}-{Math.min(filtered.length, pageStart + pageSize)} of{" "}
+                {filtered.length} staff
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <span className="text-slate-700">
+                  Page {currentPage} / {totalPages}
+                </span>
+                <button
+                  className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -260,12 +322,6 @@ function ComplianceTable({
           </table>
         </div>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-        <Legend status="compliant" label="Compliant" />
-        <Legend status="expiring" label="Expiring soon" />
-        <Legend status="expired" label="Expired" />
-        <Legend status="missing" label="Missing" />
-      </div>
     </div>
   );
 }
