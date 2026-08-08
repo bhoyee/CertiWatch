@@ -200,7 +200,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           {/* min-w-0 overrides the flex-item default of min-width:auto - without it, wide
               content (e.g. the Compliance table's many columns) forces this whole flex item
               to grow past the viewport instead of scrolling within its own container. */}
-          <main className="min-w-0 flex-1 px-4 py-6 md:px-10">
+          {/* flex flex-col here, plus mt-auto on Footer below, is the standard "sticky footer"
+              technique - pins the footer to the bottom of the viewport on short pages instead
+              of it floating right under whatever content happens to be there, while still
+              scrolling normally (not overlapping content) on tall pages. */}
+          <main className="flex min-w-0 flex-1 flex-col px-4 py-6 md:px-10">
             <div className="mb-4 flex items-center justify-between md:hidden">
               <Logo isSuper={isSuper} />
               <button
@@ -233,6 +237,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             >
               {isViewerRestricted || isManagerRestricted ? <AdminOnlyNotice /> : children}
             </div>
+            {/* Grows to fill any leftover space on short pages, pinning Footer to the bottom of
+                the viewport; collapses to 0 on tall pages, leaving Footer's own mt-6 as the gap. */}
+            <div className="flex-1" />
             <Footer />
           </main>
         </div>
