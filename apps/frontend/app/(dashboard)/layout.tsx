@@ -197,7 +197,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Logo isSuper={isSuper} />
             <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} isSuper={isSuper} userId={userId} />
           </aside>
-          <main className="flex-1 px-4 py-6 md:px-10">
+          {/* min-w-0 overrides the flex-item default of min-width:auto - without it, wide
+              content (e.g. the Compliance table's many columns) forces this whole flex item
+              to grow past the viewport instead of scrolling within its own container. */}
+          <main className="min-w-0 flex-1 px-4 py-6 md:px-10">
             <div className="mb-4 flex items-center justify-between md:hidden">
               <Logo isSuper={isSuper} />
               <button
