@@ -1,6 +1,7 @@
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Features.Admin;
 using CertiWatch.Api.Features.Auth;
+using CertiWatch.Api.Features.Compliance;
 using CertiWatch.Api.Features.Devices;
 using CertiWatch.Api.Features.Documents;
 using CertiWatch.Api.Features.Notifications;
@@ -163,6 +164,7 @@ app.MapSourceEndpoints();
 app.MapRecordEndpoints();
 app.MapCourseRuleEndpoints();
 app.MapRequirementTypeEndpoints();
+app.MapComplianceEndpoints();
 app.MapReportEndpoints();
 app.MapDocumentEndpoints();
 app.MapNotificationEndpoints();
