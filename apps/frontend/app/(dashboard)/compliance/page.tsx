@@ -61,7 +61,7 @@ export default function CompliancePage() {
   const [matrix, setMatrix] = useState<ComplianceMatrixDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [onlyGaps, setOnlyGaps] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -95,13 +95,25 @@ export default function CompliancePage() {
     saveColumnPrefs({ order, hidden: Array.from(hidden) });
   };
 
-  // Downloads the full (unfiltered) audit snapshot as a file - a fetch+blob dance rather than a
+  // Exports carry whatever status filter / search is currently active on screen - the point of
+  // clicking "Expired" then exporting is to walk away with a file of exactly that, not a filtered
+  // view that silently reverts to everything the moment you download it. No filter active still
+  // means the full snapshot, unchanged from before.
+  const exportParams = () => {
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status", statusFilter);
+    if (search.trim()) params.set("search", search.trim());
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  };
+
+  // Downloads the (possibly filtered) audit snapshot as a file - a fetch+blob dance rather than a
   // plain link href, because the browser needs the response bytes in hand before it can name
   // and save the file; a direct navigation would just show the CSV text in the tab.
   const exportCsv = async () => {
     setExportingCsv(true);
     try {
-      const res = await fetch(`${apiBase}/api/compliance-matrix/export.csv`, { credentials: "include" });
+      const res = await fetch(`${apiBase}/api/compliance-matrix/export.csv${exportParams()}`, { credentials: "include" });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -122,7 +134,7 @@ export default function CompliancePage() {
   // The printable report opens as a normal page navigation (not a fetch) so the browser's own
   // print / "Save as PDF" flow can act on it directly - no PDF library needed on either end.
   const openPrintReport = () => {
-    window.open(`${apiBase}/api/compliance-matrix/export.html`, "_blank");
+    window.open(`${apiBase}/api/compliance-matrix/export.html${exportParams()}`, "_blank");
   };
 
   const requirementById = useMemo(() => {
@@ -136,10 +148,10 @@ export default function CompliancePage() {
     [columnOrder, hiddenColumns, requirementById]
   );
 
-  // Row-level "has a gap" is derived once here rather than recomputed per render pass - both
-  // the summary counts and the "only show gaps" filter read off the same flag. Gaps are judged
-  // across ALL requirements, not just currently-visible columns, so hiding a column never makes
-  // a staff member look more compliant than they actually are.
+  // Row-level "has a gap" is derived once here rather than recomputed per render pass - the
+  // summary counts read off this flag. Gaps are judged across ALL requirements, not just
+  // currently-visible columns, so hiding a column never makes a staff member look more
+  // compliant than they actually are.
   const rowsWithFlag = useMemo(() => {
     if (!matrix) return [];
     return matrix.rows.map((row) => ({
@@ -148,14 +160,17 @@ export default function CompliancePage() {
     }));
   }, [matrix]);
 
+  // Clicking a legend item (Compliant/Expiring soon/Expired/Missing) filters to staff who have
+  // at least one cell in that exact status - their full row still shows, so the rest of their
+  // record stays visible for context, same as the old "only show gaps" toggle did more broadly.
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rowsWithFlag.filter(({ row, hasGap }) => {
-      if (onlyGaps && !hasGap) return false;
+    return rowsWithFlag.filter(({ row }) => {
+      if (statusFilter && !row.cells.some((c) => c.status === statusFilter)) return false;
       if (!term) return true;
       return row.staffName.toLowerCase().includes(term) || (row.jobTitle ?? "").toLowerCase().includes(term);
     });
-  }, [rowsWithFlag, search, onlyGaps]);
+  }, [rowsWithFlag, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -199,18 +214,18 @@ export default function CompliancePage() {
                 className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-56"
               />
             </div>
-            <label className="flex items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
-              <input
-                type="checkbox"
-                checked={onlyGaps}
-                onChange={(e) => {
-                  setOnlyGaps(e.target.checked);
+            {statusFilter && (
+              <button
+                onClick={() => {
+                  setStatusFilter(null);
                   setPage(1);
                 }}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              Only show gaps
-            </label>
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+              >
+                Filtered: {statusLabel(statusFilter)}
+                <span aria-hidden="true">&times;</span>
+              </button>
+            )}
             <select
               value={pageSize}
               onChange={(e) => {
@@ -263,11 +278,20 @@ export default function CompliancePage() {
 
         {matrix.rows.length > 0 && (
           <>
-            <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-              <Legend status="compliant" label="Compliant" />
-              <Legend status="expiring" label="Expiring soon" />
-              <Legend status="expired" label="Expired" />
-              <Legend status="missing" label="Missing" />
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="mr-1">Click a status to filter:</span>
+              {(["compliant", "expiring", "expired", "missing"] as Status[]).map((s) => (
+                <Legend
+                  key={s}
+                  status={s}
+                  label={statusLabel(s)}
+                  active={statusFilter === s}
+                  onClick={() => {
+                    setStatusFilter((prev) => (prev === s ? null : s));
+                    setPage(1);
+                  }}
+                />
+              ))}
             </div>
 
             <ComplianceTable rows={paged} requirements={visibleRequirements} />
@@ -559,12 +583,18 @@ function StatCard({ label, value, tone, icon, index }: { label: string; value: n
   );
 }
 
-function Legend({ status, label }: { status: Status; label: string }) {
+function Legend({ status, label, active, onClick }: { status: Status; label: string; active: boolean; onClick: () => void }) {
   return (
-    <span className="flex items-center gap-1.5">
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition ${
+        active ? "border-slate-300 bg-slate-100 font-semibold text-slate-900" : "border-transparent text-slate-500 hover:bg-slate-50"
+      }`}
+      title={`Show only staff with a ${label} requirement`}
+    >
       <StatusIcon status={status} />
       {label}
-    </span>
+    </button>
   );
 }
 

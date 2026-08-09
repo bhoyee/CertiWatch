@@ -4,6 +4,7 @@ using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Contracts.Dtos;
 using CertiWatch.Contracts.Enums;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace CertiWatch.Api.Features.Compliance;
@@ -36,9 +37,12 @@ public static class ComplianceEndpoints
         return Results.Ok(matrix);
     }
 
-    // The audit export is deliberately always the FULL matrix - unfiltered by whatever search
-    // text or "only show gaps" toggle happens to be active on screen. It's a dated snapshot for
-    // an inspector, not a view of whatever the admin was just looking at.
+    // Full snapshot by default - a dated audit document, not whatever happened to be on screen.
+    // But when the admin has explicitly clicked a status filter or typed a search on the
+    // Compliance page (e.g. "show me everyone Expired"), that same scope carries through to the
+    // export on request - the point is to let them go from "here's a problem" to "here's a file
+    // I can act on" in one step, not to silently ship a partial file. Either way the filter
+    // actually applied is written into the file itself so it's never ambiguous what's missing.
     //
     // Shape: one row per (staff, requirement) pair - a flat compliance register, not a wide
     // staff-by-requirement cross-tab. A cross-tab gains a column every time a requirement type
@@ -47,7 +51,12 @@ public static class ComplianceEndpoints
     // A flat list sorts/filters/pivots naturally in Excel and never gets wider - only longer,
     // which every spreadsheet tool handles fine. This is also the shape competitors' compliance
     // registers use, not a cross-tab.
-    private static async Task<IResult> ExportCsvAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    private static async Task<IResult> ExportCsvAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        CancellationToken token)
     {
         if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsManager(accessor))
         {
@@ -56,7 +65,8 @@ public static class ComplianceEndpoints
 
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var matrix = await BuildMatrixAsync(db, tenantId, token);
+        var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
+        var matrix = FilterMatrix(fullMatrix, status, search);
         var tenantName = tenant?.Name ?? "CertiWatch";
 
         var csv = new StringBuilder();
@@ -66,7 +76,8 @@ public static class ComplianceEndpoints
         csv.AppendLine("CertiWatch Compliance Export");
         csv.Append("Organisation,").AppendLine(Escape(tenantName));
         csv.Append("Generated,").AppendLine(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'"));
-        csv.Append("Active staff,").AppendLine(matrix.Rows.Count.ToString());
+        csv.Append("Filter,").AppendLine(Escape(DescribeFilter(status, search)));
+        csv.Append("Staff shown,").AppendLine(matrix.Rows.Count.ToString());
         csv.Append("Requirements tracked,").AppendLine(matrix.RequirementTypes.Count.ToString());
         csv.AppendLine();
         csv.AppendLine("Staff Name,Job Title,Requirement,Status,Expiry Date,Renewal Period");
@@ -88,11 +99,18 @@ public static class ComplianceEndpoints
         }
 
         var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-        var fileName = $"compliance-export-{DateTime.UtcNow:yyyy-MM-dd}.csv";
+        var filterSuffix = string.IsNullOrWhiteSpace(status) ? "" : $"-{status}";
+        var fileName = $"compliance-export{filterSuffix}-{DateTime.UtcNow:yyyy-MM-dd}.csv";
         return Results.File(bytes, "text/csv", fileName);
     }
 
-    private static async Task<IResult> ExportHtmlAsync(HttpContext context, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    private static async Task<IResult> ExportHtmlAsync(
+        HttpContext context,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        CancellationToken token)
     {
         if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsManager(accessor))
         {
@@ -101,7 +119,8 @@ public static class ComplianceEndpoints
 
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var matrix = await BuildMatrixAsync(db, tenantId, token);
+        var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
+        var matrix = FilterMatrix(fullMatrix, status, search);
 
         // The sitewide CSP (default-src 'self', set by SecurityHeaderExtensions in Program.cs)
         // has no style-src/script-src, so it silently blocks this report's inline <style> and
@@ -110,8 +129,49 @@ public static class ComplianceEndpoints
         // value HTML-encoded below) rather than loosening the global policy.
         context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'";
 
-        var html = BuildReportHtml(tenant?.Name ?? "CertiWatch", matrix);
+        var html = BuildReportHtml(tenant?.Name ?? "CertiWatch", matrix, DescribeFilter(status, search));
         return Results.Content(html, "text/html");
+    }
+
+    // Both export endpoints filter the SAME matrix that already powers the interactive page and
+    // the unfiltered export - one status computation, reused everywhere, never recomputed
+    // differently for "what you clicked" vs "what you downloaded".
+    private static ComplianceMatrixDto FilterMatrix(ComplianceMatrixDto matrix, string? status, string? search)
+    {
+        var normalizedStatus = status?.Trim().ToLowerInvariant();
+        var validStatus = normalizedStatus is "compliant" or "expiring" or "expired" or "missing" ? normalizedStatus : null;
+        var term = search?.Trim().ToLowerInvariant();
+
+        if (validStatus is null && string.IsNullOrEmpty(term))
+        {
+            return matrix;
+        }
+
+        var rows = matrix.Rows.Where(row =>
+        {
+            if (validStatus is not null && !row.Cells.Any(c => c.Status == validStatus)) return false;
+            if (!string.IsNullOrEmpty(term) &&
+                !row.StaffName.ToLowerInvariant().Contains(term) &&
+                !(row.JobTitle ?? "").ToLowerInvariant().Contains(term))
+            {
+                return false;
+            }
+            return true;
+        }).ToList();
+
+        return matrix with { Rows = rows };
+    }
+
+    private static string DescribeFilter(string? status, string? search)
+    {
+        var normalizedStatus = status?.Trim().ToLowerInvariant();
+        var validStatus = normalizedStatus is "compliant" or "expiring" or "expired" or "missing" ? normalizedStatus : null;
+        var term = search?.Trim();
+
+        var parts = new List<string>();
+        if (validStatus is not null) parts.Add($"Status = {StatusLabel(validStatus)}");
+        if (!string.IsNullOrEmpty(term)) parts.Add($"Search = \"{term}\"");
+        return parts.Count == 0 ? "None (full snapshot)" : string.Join("; ", parts);
     }
 
     private static async Task<ComplianceMatrixDto> BuildMatrixAsync(AppDbContext db, Guid tenantId, CancellationToken token)
@@ -218,7 +278,7 @@ public static class ComplianceEndpoints
     // executive SUMMARY instead: it stays roughly the same length whether a home has 20 staff
     // or 2,000, because its size is bounded by the requirement catalog (one bar per requirement
     // type) and a fixed top-N urgent list, never by headcount.
-    private static string BuildReportHtml(string tenantName, ComplianceMatrixDto matrix)
+    private static string BuildReportHtml(string tenantName, ComplianceMatrixDto matrix, string filterDescription)
     {
         var encodedTenant = System.Net.WebUtility.HtmlEncode(tenantName);
         var totalStaff = matrix.Rows.Count;
@@ -282,7 +342,8 @@ public static class ComplianceEndpoints
         sb.Append("<button class=\"print-btn no-print\" onclick=\"window.print()\">Print / Save as PDF</button>");
         sb.Append("<div class=\"brand\"><span class=\"mark\">CW</span><span class=\"name\">CertiWatch</span></div>");
         sb.Append("<h1>Compliance Summary - ").Append(encodedTenant).Append("</h1>");
-        sb.Append("<p class=\"meta\">Generated ").Append(DateTime.UtcNow.ToString("dd MMMM yyyy, HH:mm 'UTC'")).Append("</p>");
+        sb.Append("<p class=\"meta\">Generated ").Append(DateTime.UtcNow.ToString("dd MMMM yyyy, HH:mm 'UTC'"))
+          .Append(" &middot; Filter: ").Append(System.Net.WebUtility.HtmlEncode(filterDescription)).Append("</p>");
 
         sb.Append("<div class=\"summary\">");
         AppendStat(sb, "Active staff", totalStaff.ToString());
