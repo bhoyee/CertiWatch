@@ -254,6 +254,11 @@ public static class ComplianceEndpoints
               .legend span { margin-right: 16px; }
               .print-btn { margin-bottom: 16px; padding: 8px 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
               .empty { color: #64748b; font-size: 13px; }
+              .roster a { color: inherit; text-decoration: none; }
+              .roster a:hover { text-decoration: underline; }
+              .ok-badge { color: #047857; font-weight: 600; }
+              .gap-badge { color: #b91c1c; font-weight: 600; }
+              .note { color: #64748b; font-size: 12px; margin-top: 8px; }
               @media print { .no-print { display: none; } }
             </style>
             """);
@@ -301,25 +306,62 @@ public static class ComplianceEndpoints
             sb.Append("</tbody></table>");
         }
 
-        // Full per-person detail, one section per staff member so a printed page break never
-        // splits a person's record across two pages (page-break-inside: avoid on the section).
-        sb.Append("<h2>Full detail, by staff member</h2>");
-        var requirementLookup = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
+        // Roster: one line per active staff member, however many there are - this is what keeps
+        // the report honest at scale (everyone audited is visibly accounted for) without costing
+        // a full page each. Names with gaps link down to their detail section below.
+        sb.Append("<h2>Staff roster</h2>");
+        sb.Append("<table class=\"roster\"><thead><tr><th>Staff</th><th>Job title</th><th>Status</th></tr></thead><tbody>");
         foreach (var row in matrix.Rows)
         {
-            sb.Append("<div class=\"staff-section\">");
-            sb.Append("<p class=\"staff-name\">").Append(System.Net.WebUtility.HtmlEncode(row.StaffName)).Append("</p>");
-            sb.Append("<p class=\"staff-role\">").Append(System.Net.WebUtility.HtmlEncode(row.JobTitle ?? "-")).Append("</p>");
-            sb.Append("<table><thead><tr><th>Requirement</th><th>Status</th><th>Expiry</th><th>Renewal</th></tr></thead><tbody>");
-            foreach (var cell in row.Cells)
+            var gapCount = row.Cells.Count(c => c.Status != "compliant");
+            var name = System.Net.WebUtility.HtmlEncode(row.StaffName);
+            var nameCell = gapCount > 0 ? $"<a href=\"#staff-{row.StaffId}\">{name}</a>" : name;
+            var statusCell = gapCount > 0
+                ? $"<span class=\"gap-badge\">{gapCount} issue{(gapCount == 1 ? "" : "s")}</span>"
+                : "<span class=\"ok-badge\">Compliant</span>";
+            sb.Append("<tr><td>").Append(nameCell).Append("</td><td>")
+              .Append(System.Net.WebUtility.HtmlEncode(row.JobTitle ?? "-")).Append("</td><td>")
+              .Append(statusCell).Append("</td></tr>");
+        }
+        sb.Append("</tbody></table>");
+
+        // Full per-person detail is only rendered for staff with at least one gap - a fully
+        // compliant person already has nothing to show beyond their roster line above, and
+        // repeating a 14-row "everything's fine" table per person is what makes this kind of
+        // report unusable once a home has real headcount. Complete per-person records for
+        // everyone (including fully compliant staff) are always in the CSV export.
+        var staffWithGaps = matrix.Rows.Where(r => r.Cells.Any(c => c.Status != "compliant")).ToList();
+        sb.Append("<h2>Full detail - staff with gaps</h2>");
+        if (staffWithGaps.Count == 0)
+        {
+            sb.Append("<p class=\"empty\">No staff have any gaps - nothing further to detail.</p>");
+        }
+        else
+        {
+            var requirementLookup = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
+            foreach (var row in staffWithGaps)
             {
-                var req = requirementLookup[cell.RequirementTypeId];
-                sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(req.Name))
-                  .Append("</td><td class=\"").Append(cell.Status).Append("\">").Append(StatusLabel(cell.Status))
-                  .Append("</td><td>").Append(cell.ExpiryDate?.ToString("yyyy-MM-dd") ?? "-")
-                  .Append("</td><td>").Append(System.Net.WebUtility.HtmlEncode(RenewalPeriodText(req))).Append("</td></tr>");
+                sb.Append("<div class=\"staff-section\" id=\"staff-").Append(row.StaffId).Append("\">");
+                sb.Append("<p class=\"staff-name\">").Append(System.Net.WebUtility.HtmlEncode(row.StaffName)).Append("</p>");
+                sb.Append("<p class=\"staff-role\">").Append(System.Net.WebUtility.HtmlEncode(row.JobTitle ?? "-")).Append("</p>");
+                sb.Append("<table><thead><tr><th>Requirement</th><th>Status</th><th>Expiry</th><th>Renewal</th></tr></thead><tbody>");
+                foreach (var cell in row.Cells)
+                {
+                    var req = requirementLookup[cell.RequirementTypeId];
+                    sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(req.Name))
+                      .Append("</td><td class=\"").Append(cell.Status).Append("\">").Append(StatusLabel(cell.Status))
+                      .Append("</td><td>").Append(cell.ExpiryDate?.ToString("yyyy-MM-dd") ?? "-")
+                      .Append("</td><td>").Append(System.Net.WebUtility.HtmlEncode(RenewalPeriodText(req))).Append("</td></tr>");
+                }
+                sb.Append("</tbody></table></div>");
             }
-            sb.Append("</tbody></table></div>");
+            var compliantCount = matrix.Rows.Count - staffWithGaps.Count;
+            if (compliantCount > 0)
+            {
+                sb.Append("<p class=\"note\">").Append(compliantCount)
+                  .Append(compliantCount == 1 ? " other staff member is" : " other staff members are")
+                  .Append(" fully compliant and not repeated here individually - see the roster above, or the CSV export for a complete per-person record.</p>");
+            }
         }
 
         sb.Append("<p class=\"legend\">");
