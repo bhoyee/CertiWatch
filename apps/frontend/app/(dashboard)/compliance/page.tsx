@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "../../../lib/api";
 
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+
 type RequirementTypeDto = {
   id: string;
   tenantId: string | null;
@@ -65,6 +67,7 @@ export default function CompliancePage() {
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   useEffect(() => {
     fetchJson<ComplianceMatrixDto>("/api/compliance-matrix")
@@ -90,6 +93,36 @@ export default function CompliancePage() {
     setColumnOrder(order);
     setHiddenColumns(hidden);
     saveColumnPrefs({ order, hidden: Array.from(hidden) });
+  };
+
+  // Downloads the full (unfiltered) audit snapshot as a file - a fetch+blob dance rather than a
+  // plain link href, because the browser needs the response bytes in hand before it can name
+  // and save the file; a direct navigation would just show the CSV text in the tab.
+  const exportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const res = await fetch(`${apiBase}/api/compliance-matrix/export.csv`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `compliance-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message ?? "Export failed");
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  // The printable report opens as a normal page navigation (not a fetch) so the browser's own
+  // print / "Save as PDF" flow can act on it directly - no PDF library needed on either end.
+  const openPrintReport = () => {
+    window.open(`${apiBase}/api/compliance-matrix/export.html`, "_blank");
   };
 
   const requirementById = useMemo(() => {
@@ -194,14 +227,32 @@ export default function CompliancePage() {
             </select>
           </div>
 
-          <ColumnManager
-            requirementTypes={matrix.requirementTypes}
-            order={columnOrder}
-            hidden={hiddenColumns}
-            open={columnsOpen}
-            onOpenChange={setColumnsOpen}
-            onChange={persistColumns}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCsv}
+              disabled={exportingCsv}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              <Icon name="download" className="h-4 w-4" />
+              {exportingCsv ? "Exporting..." : "Export CSV"}
+            </button>
+            <button
+              onClick={openPrintReport}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              title="Opens a printable report in a new tab - use your browser's Print > Save as PDF"
+            >
+              <Icon name="printer" className="h-4 w-4" />
+              Print report
+            </button>
+            <ColumnManager
+              requirementTypes={matrix.requirementTypes}
+              order={columnOrder}
+              hidden={hiddenColumns}
+              open={columnsOpen}
+              onOpenChange={setColumnsOpen}
+              onChange={persistColumns}
+            />
+          </div>
         </div>
 
         {matrix.rows.length === 0 && (
@@ -579,7 +630,9 @@ type IconName =
   | "search"
   | "sliders"
   | "chevron-up"
-  | "chevron-down";
+  | "chevron-down"
+  | "download"
+  | "printer";
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
   const common = { className, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -652,6 +705,21 @@ function Icon({ name, className }: { name: IconName; className?: string }) {
       return (
         <svg {...common}>
           <path d="m6 9 6 6 6-6" />
+        </svg>
+      );
+    case "download":
+      return (
+        <svg {...common}>
+          <path d="M12 4v11m0 0 4-4m-4 4-4-4" />
+          <path d="M5 18h14" />
+        </svg>
+      );
+    case "printer":
+      return (
+        <svg {...common}>
+          <path d="M7 8V4h10v4" />
+          <rect x="5" y="8" width="14" height="8" rx="1.5" />
+          <path d="M7 16v4h10v-4" />
         </svg>
       );
   }
