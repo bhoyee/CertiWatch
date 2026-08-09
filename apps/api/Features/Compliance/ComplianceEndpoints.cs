@@ -212,11 +212,20 @@ public static class ComplianceEndpoints
         return cleaned.Contains(',') || cleaned.Contains('\n') ? $"\"{cleaned}\"" : cleaned;
     }
 
+    private const int TopUrgentLimit = 25;
+
+    // A printed/PDF document is the wrong medium for row-level staff data at any real scale -
+    // it belongs in something built for slicing large tables (the CSV export, or the on-screen
+    // Compliance page, both already unbounded and searchable). This report is deliberately an
+    // executive SUMMARY instead: it stays roughly the same length whether a home has 20 staff
+    // or 2,000, because its size is bounded by the requirement catalog (one bar per requirement
+    // type) and a fixed top-N urgent list, never by headcount.
     private static string BuildReportHtml(string tenantName, ComplianceMatrixDto matrix)
     {
         var encodedTenant = System.Net.WebUtility.HtmlEncode(tenantName);
+        var totalStaff = matrix.Rows.Count;
         var compliantStaff = matrix.Rows.Count(r => r.Cells.All(c => c.Status == "compliant"));
-        var gapStaff = matrix.Rows.Count - compliantStaff;
+        var gapStaff = totalStaff - compliantStaff;
         var totalGaps = matrix.Rows.Sum(r => r.Cells.Count(c => c.Status != "compliant"));
 
         var sb = new StringBuilder();
@@ -237,11 +246,9 @@ public static class ComplianceEndpoints
               .stat { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; }
               .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; }
               .stat .value { font-size: 22px; font-weight: 700; color: #0f172a; }
-              h2 { font-size: 15px; margin: 28px 0 10px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+              h2 { font-size: 15px; margin: 28px 0 4px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
               h2:first-of-type { border-top: none; padding-top: 0; }
-              .staff-section { page-break-inside: avoid; margin-bottom: 22px; }
-              .staff-name { font-size: 14px; font-weight: 700; }
-              .staff-role { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+              .sub { color: #64748b; font-size: 12px; margin: 0 0 12px; }
               table { border-collapse: collapse; width: 100%; font-size: 12px; }
               th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
               th { background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; color: #475569; }
@@ -254,47 +261,96 @@ public static class ComplianceEndpoints
               .legend span { margin-right: 16px; }
               .print-btn { margin-bottom: 16px; padding: 8px 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
               .empty { color: #64748b; font-size: 13px; }
-              .roster a { color: inherit; text-decoration: none; }
-              .roster a:hover { text-decoration: underline; }
-              .ok-badge { color: #047857; font-weight: 600; }
-              .gap-badge { color: #b91c1c; font-weight: 600; }
               .note { color: #64748b; font-size: 12px; margin-top: 8px; }
+              .req-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; page-break-inside: avoid; }
+              .req-name { width: 220px; flex-shrink: 0; font-size: 12px; }
+              .req-bar { flex: 1; height: 14px; border-radius: 4px; background: #f1f5f9; display: flex; overflow: hidden; }
+              .req-bar .seg.compliant-seg { background: #10b981; }
+              .req-bar .seg.expiring-seg { background: #f59e0b; }
+              .req-bar .seg.expired-seg { background: #ef4444; }
+              .req-pct { width: 110px; flex-shrink: 0; font-size: 11px; color: #64748b; text-align: right; }
               @media print { .no-print { display: none; } }
             </style>
             """);
         sb.Append("</head><body>");
         sb.Append("<button class=\"print-btn no-print\" onclick=\"window.print()\">Print / Save as PDF</button>");
         sb.Append("<div class=\"brand\"><span class=\"mark\">CW</span><span class=\"name\">CertiWatch</span></div>");
-        sb.Append("<h1>Compliance Audit Report - ").Append(encodedTenant).Append("</h1>");
+        sb.Append("<h1>Compliance Summary - ").Append(encodedTenant).Append("</h1>");
         sb.Append("<p class=\"meta\">Generated ").Append(DateTime.UtcNow.ToString("dd MMMM yyyy, HH:mm 'UTC'")).Append("</p>");
 
         sb.Append("<div class=\"summary\">");
-        AppendStat(sb, "Active staff", matrix.Rows.Count.ToString());
+        AppendStat(sb, "Active staff", totalStaff.ToString());
         AppendStat(sb, "Fully compliant", compliantStaff.ToString());
         AppendStat(sb, "Staff with gaps", gapStaff.ToString());
         AppendStat(sb, "Total gaps", totalGaps.ToString());
         sb.Append("</div>");
 
-        // Exceptions first - what an inspector (or the manager themselves) actually wants to
-        // see immediately, before the full per-person paper trail below.
-        sb.Append("<h2>Attention needed</h2>");
-        var exceptions = matrix.Rows
+        // One bar per requirement type - bounded by the size of the catalog, not by headcount.
+        // Sorted worst-first (lowest compliance rate on top) so the biggest organisation-wide
+        // problem is the first thing on the page, which is the actual point of a summary report.
+        sb.Append("<h2>Compliance by requirement</h2>");
+        sb.Append("<p class=\"sub\">Share of active staff compliant, expiring, or expired on each tracked requirement.</p>");
+        var byRequirement = matrix.RequirementTypes
+            .Select(req =>
+            {
+                var statuses = matrix.Rows.Select(row => row.Cells.First(c => c.RequirementTypeId == req.Id).Status).ToList();
+                var compliant = statuses.Count(s => s == "compliant");
+                var expiring = statuses.Count(s => s == "expiring");
+                var expired = statuses.Count(s => s == "expired");
+                return (Req: req, Compliant: compliant, Expiring: expiring, Expired: expired, Total: statuses.Count);
+            })
+            .OrderBy(x => x.Total == 0 ? 1.0 : (double)x.Compliant / x.Total)
+            .ToList();
+
+        if (totalStaff == 0)
+        {
+            sb.Append("<p class=\"empty\">No active staff yet.</p>");
+        }
+        else
+        {
+            foreach (var r in byRequirement)
+            {
+                var compliantPct = r.Total == 0 ? 0 : r.Compliant * 100.0 / r.Total;
+                var expiringPct = r.Total == 0 ? 0 : r.Expiring * 100.0 / r.Total;
+                var expiredPct = r.Total == 0 ? 0 : r.Expired * 100.0 / r.Total;
+                sb.Append("<div class=\"req-row\"><div class=\"req-name\">").Append(System.Net.WebUtility.HtmlEncode(r.Req.Name)).Append("</div>");
+                sb.Append("<div class=\"req-bar\">");
+                if (compliantPct > 0) sb.Append("<div class=\"seg compliant-seg\" style=\"width:").Append(compliantPct.ToString("0.##")).Append("%\"></div>");
+                if (expiringPct > 0) sb.Append("<div class=\"seg expiring-seg\" style=\"width:").Append(expiringPct.ToString("0.##")).Append("%\"></div>");
+                if (expiredPct > 0) sb.Append("<div class=\"seg expired-seg\" style=\"width:").Append(expiredPct.ToString("0.##")).Append("%\"></div>");
+                sb.Append("</div>");
+                sb.Append("<div class=\"req-pct\">").Append(Math.Round(compliantPct)).Append("% compliant</div>");
+                sb.Append("</div>");
+            }
+        }
+
+        // Bounded top-N, not an exhaustive list - actionable regardless of how many total gaps
+        // exist. Expired (already overdue, worst first) > missing (no evidence at all) > expiring
+        // (soonest first) - missing has no date to rank by but is not lower priority than expiring.
+        sb.Append("<h2>Most urgent</h2>");
+        var requirementById = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
+        var allGaps = matrix.Rows
             .SelectMany(row => row.Cells
                 .Where(c => c.Status != "compliant")
                 .Select(c => (row.StaffName, row.JobTitle, Cell: c)))
-            .OrderBy(x => x.Cell.Status == "expired" ? 0 : x.Cell.Status == "expiring" ? 1 : 2)
+            .ToList();
+        var ordered = allGaps
+            .OrderBy(x => x.Cell.Status switch { "expired" => 0, "missing" => 1, _ => 2 })
+            .ThenBy(x => x.Cell.Status == "expired" ? x.Cell.ExpiryDate : x.Cell.Status == "expiring" ? x.Cell.ExpiryDate : null)
             .ThenBy(x => x.StaffName)
             .ToList();
 
-        if (exceptions.Count == 0)
+        if (ordered.Count == 0)
         {
             sb.Append("<p class=\"empty\">No gaps - every active staff member is compliant on every tracked requirement.</p>");
         }
         else
         {
-            var requirementById = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
+            sb.Append("<p class=\"sub\">Showing the ").Append(Math.Min(TopUrgentLimit, ordered.Count)).Append(" most urgent of ")
+              .Append(ordered.Count).Append(" total gap").Append(ordered.Count == 1 ? "" : "s")
+              .Append(" - the complete list is in the CSV export or the on-screen Compliance page.</p>");
             sb.Append("<table><thead><tr><th>Staff</th><th>Requirement</th><th>Status</th><th>Expiry</th></tr></thead><tbody>");
-            foreach (var (staffName, jobTitle, cell) in exceptions)
+            foreach (var (staffName, jobTitle, cell) in ordered.Take(TopUrgentLimit))
             {
                 var req = requirementById[cell.RequirementTypeId];
                 sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(staffName))
@@ -304,64 +360,6 @@ public static class ComplianceEndpoints
                   .Append("</td><td>").Append(cell.ExpiryDate?.ToString("yyyy-MM-dd") ?? "-").Append("</td></tr>");
             }
             sb.Append("</tbody></table>");
-        }
-
-        // Roster: one line per active staff member, however many there are - this is what keeps
-        // the report honest at scale (everyone audited is visibly accounted for) without costing
-        // a full page each. Names with gaps link down to their detail section below.
-        sb.Append("<h2>Staff roster</h2>");
-        sb.Append("<table class=\"roster\"><thead><tr><th>Staff</th><th>Job title</th><th>Status</th></tr></thead><tbody>");
-        foreach (var row in matrix.Rows)
-        {
-            var gapCount = row.Cells.Count(c => c.Status != "compliant");
-            var name = System.Net.WebUtility.HtmlEncode(row.StaffName);
-            var nameCell = gapCount > 0 ? $"<a href=\"#staff-{row.StaffId}\">{name}</a>" : name;
-            var statusCell = gapCount > 0
-                ? $"<span class=\"gap-badge\">{gapCount} issue{(gapCount == 1 ? "" : "s")}</span>"
-                : "<span class=\"ok-badge\">Compliant</span>";
-            sb.Append("<tr><td>").Append(nameCell).Append("</td><td>")
-              .Append(System.Net.WebUtility.HtmlEncode(row.JobTitle ?? "-")).Append("</td><td>")
-              .Append(statusCell).Append("</td></tr>");
-        }
-        sb.Append("</tbody></table>");
-
-        // Full per-person detail is only rendered for staff with at least one gap - a fully
-        // compliant person already has nothing to show beyond their roster line above, and
-        // repeating a 14-row "everything's fine" table per person is what makes this kind of
-        // report unusable once a home has real headcount. Complete per-person records for
-        // everyone (including fully compliant staff) are always in the CSV export.
-        var staffWithGaps = matrix.Rows.Where(r => r.Cells.Any(c => c.Status != "compliant")).ToList();
-        sb.Append("<h2>Full detail - staff with gaps</h2>");
-        if (staffWithGaps.Count == 0)
-        {
-            sb.Append("<p class=\"empty\">No staff have any gaps - nothing further to detail.</p>");
-        }
-        else
-        {
-            var requirementLookup = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
-            foreach (var row in staffWithGaps)
-            {
-                sb.Append("<div class=\"staff-section\" id=\"staff-").Append(row.StaffId).Append("\">");
-                sb.Append("<p class=\"staff-name\">").Append(System.Net.WebUtility.HtmlEncode(row.StaffName)).Append("</p>");
-                sb.Append("<p class=\"staff-role\">").Append(System.Net.WebUtility.HtmlEncode(row.JobTitle ?? "-")).Append("</p>");
-                sb.Append("<table><thead><tr><th>Requirement</th><th>Status</th><th>Expiry</th><th>Renewal</th></tr></thead><tbody>");
-                foreach (var cell in row.Cells)
-                {
-                    var req = requirementLookup[cell.RequirementTypeId];
-                    sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(req.Name))
-                      .Append("</td><td class=\"").Append(cell.Status).Append("\">").Append(StatusLabel(cell.Status))
-                      .Append("</td><td>").Append(cell.ExpiryDate?.ToString("yyyy-MM-dd") ?? "-")
-                      .Append("</td><td>").Append(System.Net.WebUtility.HtmlEncode(RenewalPeriodText(req))).Append("</td></tr>");
-                }
-                sb.Append("</tbody></table></div>");
-            }
-            var compliantCount = matrix.Rows.Count - staffWithGaps.Count;
-            if (compliantCount > 0)
-            {
-                sb.Append("<p class=\"note\">").Append(compliantCount)
-                  .Append(compliantCount == 1 ? " other staff member is" : " other staff members are")
-                  .Append(" fully compliant and not repeated here individually - see the roster above, or the CSV export for a complete per-person record.</p>");
-            }
         }
 
         sb.Append("<p class=\"legend\">");
