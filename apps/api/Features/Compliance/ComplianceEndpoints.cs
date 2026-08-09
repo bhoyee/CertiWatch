@@ -291,9 +291,49 @@ public static class ComplianceEndpoints
         AppendStat(sb, "Total gaps", totalGaps.ToString());
         sb.Append("</div>");
 
+        // Org-wide totals across every tracked (staff, requirement) pair - pure counts, no
+        // names. This is deliberately the last piece of staff-level content this report ever
+        // had (an earlier version listed individual gaps here) - who specifically has what is
+        // the on-screen Compliance page's job, not a static document's. Leads the report ahead
+        // of the requirement breakdown - the single headline number before the detail.
+        sb.Append("<h2>Overall status</h2>");
+        sb.Append("<p class=\"sub\">Every active staff member against every requirement, combined.</p>");
+        var allCells = matrix.Rows.SelectMany(r => r.Cells).ToList();
+        var totalCells = allCells.Count;
+        var compliantCells = allCells.Count(c => c.Status == "compliant");
+        var expiringCells = allCells.Count(c => c.Status == "expiring");
+        var expiredCells = allCells.Count(c => c.Status == "expired");
+        var missingCells = allCells.Count(c => c.Status == "missing");
+
+        if (totalCells == 0)
+        {
+            sb.Append("<p class=\"empty\">Nothing tracked yet.</p>");
+        }
+        else
+        {
+            double Pct(int n) => n * 100.0 / totalCells;
+            sb.Append("<div class=\"overall-bar\">");
+            if (compliantCells > 0) sb.Append("<div class=\"seg compliant-seg\" style=\"width:").Append(Pct(compliantCells).ToString("0.##")).Append("%\"></div>");
+            if (expiringCells > 0) sb.Append("<div class=\"seg expiring-seg\" style=\"width:").Append(Pct(expiringCells).ToString("0.##")).Append("%\"></div>");
+            if (expiredCells > 0) sb.Append("<div class=\"seg expired-seg\" style=\"width:").Append(Pct(expiredCells).ToString("0.##")).Append("%\"></div>");
+            if (missingCells > 0) sb.Append("<div class=\"seg missing-seg\" style=\"width:").Append(Pct(missingCells).ToString("0.##")).Append("%\"></div>");
+            sb.Append("</div>");
+
+            sb.Append("<div class=\"breakdown\">");
+            AppendBreakdownItem(sb, "compliant", "Compliant", compliantCells, Pct(compliantCells));
+            AppendBreakdownItem(sb, "expiring", "Expiring soon", expiringCells, Pct(expiringCells));
+            AppendBreakdownItem(sb, "expired", "Expired", expiredCells, Pct(expiredCells));
+            AppendBreakdownItem(sb, "missing", "Missing", missingCells, Pct(missingCells));
+            sb.Append("</div>");
+
+            sb.Append("<p class=\"note\">").Append(totalCells).Append(" total checks across ").Append(totalStaff)
+              .Append(" staff and ").Append(matrix.RequirementTypes.Count)
+              .Append(" requirements. For which staff member has which gap, use the on-screen Compliance page (searchable and filterable) or the CSV export.</p>");
+        }
+
         // One bar per requirement type - bounded by the size of the catalog, not by headcount.
         // Sorted worst-first (lowest compliance rate on top) so the biggest organisation-wide
-        // problem is the first thing on the page, which is the actual point of a summary report.
+        // problem is the first thing in this section.
         sb.Append("<h2>Compliance by requirement</h2>");
         sb.Append("<p class=\"sub\">Share of active staff compliant, expiring, or expired on each tracked requirement.</p>");
         var byRequirement = matrix.RequirementTypes
@@ -328,45 +368,6 @@ public static class ComplianceEndpoints
                 sb.Append("<div class=\"req-pct\">").Append(Math.Round(compliantPct)).Append("% compliant</div>");
                 sb.Append("</div>");
             }
-        }
-
-        // Org-wide totals across every tracked (staff, requirement) pair - pure counts, no
-        // names. This is deliberately the last piece of staff-level content this report ever
-        // had (an earlier version listed individual gaps here) - who specifically has what is
-        // the on-screen Compliance page's job, not a static document's.
-        sb.Append("<h2>Overall status</h2>");
-        sb.Append("<p class=\"sub\">Every active staff member against every requirement, combined.</p>");
-        var allCells = matrix.Rows.SelectMany(r => r.Cells).ToList();
-        var totalCells = allCells.Count;
-        var compliantCells = allCells.Count(c => c.Status == "compliant");
-        var expiringCells = allCells.Count(c => c.Status == "expiring");
-        var expiredCells = allCells.Count(c => c.Status == "expired");
-        var missingCells = allCells.Count(c => c.Status == "missing");
-
-        if (totalCells == 0)
-        {
-            sb.Append("<p class=\"empty\">Nothing tracked yet.</p>");
-        }
-        else
-        {
-            double Pct(int n) => n * 100.0 / totalCells;
-            sb.Append("<div class=\"overall-bar\">");
-            if (compliantCells > 0) sb.Append("<div class=\"seg compliant-seg\" style=\"width:").Append(Pct(compliantCells).ToString("0.##")).Append("%\"></div>");
-            if (expiringCells > 0) sb.Append("<div class=\"seg expiring-seg\" style=\"width:").Append(Pct(expiringCells).ToString("0.##")).Append("%\"></div>");
-            if (expiredCells > 0) sb.Append("<div class=\"seg expired-seg\" style=\"width:").Append(Pct(expiredCells).ToString("0.##")).Append("%\"></div>");
-            if (missingCells > 0) sb.Append("<div class=\"seg missing-seg\" style=\"width:").Append(Pct(missingCells).ToString("0.##")).Append("%\"></div>");
-            sb.Append("</div>");
-
-            sb.Append("<div class=\"breakdown\">");
-            AppendBreakdownItem(sb, "compliant", "Compliant", compliantCells, Pct(compliantCells));
-            AppendBreakdownItem(sb, "expiring", "Expiring soon", expiringCells, Pct(expiringCells));
-            AppendBreakdownItem(sb, "expired", "Expired", expiredCells, Pct(expiredCells));
-            AppendBreakdownItem(sb, "missing", "Missing", missingCells, Pct(missingCells));
-            sb.Append("</div>");
-
-            sb.Append("<p class=\"note\">").Append(totalCells).Append(" total checks across ").Append(totalStaff)
-              .Append(" staff and ").Append(matrix.RequirementTypes.Count)
-              .Append(" requirements. For which staff member has which gap, use the on-screen Compliance page (searchable and filterable) or the CSV export.</p>");
         }
 
         sb.Append("<p class=\"legend\">");
