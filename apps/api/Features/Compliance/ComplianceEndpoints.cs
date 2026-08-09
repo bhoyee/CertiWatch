@@ -212,8 +212,6 @@ public static class ComplianceEndpoints
         return cleaned.Contains(',') || cleaned.Contains('\n') ? $"\"{cleaned}\"" : cleaned;
     }
 
-    private const int TopUrgentLimit = 25;
-
     // A printed/PDF document is the wrong medium for row-level staff data at any real scale -
     // it belongs in something built for slicing large tables (the CSV export, or the on-screen
     // Compliance page, both already unbounded and searchable). This report is deliberately an
@@ -265,10 +263,18 @@ public static class ComplianceEndpoints
               .req-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; page-break-inside: avoid; }
               .req-name { width: 220px; flex-shrink: 0; font-size: 12px; }
               .req-bar { flex: 1; height: 14px; border-radius: 4px; background: #f1f5f9; display: flex; overflow: hidden; }
-              .req-bar .seg.compliant-seg { background: #10b981; }
-              .req-bar .seg.expiring-seg { background: #f59e0b; }
-              .req-bar .seg.expired-seg { background: #ef4444; }
               .req-pct { width: 110px; flex-shrink: 0; font-size: 11px; color: #64748b; text-align: right; }
+              .overall-bar { height: 22px; border-radius: 6px; background: #f1f5f9; display: flex; overflow: hidden; margin-bottom: 14px; }
+              /* Shared by both the per-requirement bars and the overall bar, not scoped to
+                 either - a segment's color shouldn't depend on which bar it happens to be in. */
+              .seg.compliant-seg { background: #10b981; }
+              .seg.expiring-seg { background: #f59e0b; }
+              .seg.expired-seg { background: #ef4444; }
+              .seg.missing-seg { background: #cbd5e1; }
+              .breakdown { display: flex; gap: 12px; }
+              .breakdown .item { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; }
+              .breakdown .item .count { font-size: 20px; font-weight: 700; }
+              .breakdown .item .pct { font-size: 12px; color: #64748b; }
               @media print { .no-print { display: none; } }
             </style>
             """);
@@ -324,42 +330,43 @@ public static class ComplianceEndpoints
             }
         }
 
-        // Bounded top-N, not an exhaustive list - actionable regardless of how many total gaps
-        // exist. Expired (already overdue, worst first) > missing (no evidence at all) > expiring
-        // (soonest first) - missing has no date to rank by but is not lower priority than expiring.
-        sb.Append("<h2>Most urgent</h2>");
-        var requirementById = matrix.RequirementTypes.ToDictionary(r => r.Id, r => r);
-        var allGaps = matrix.Rows
-            .SelectMany(row => row.Cells
-                .Where(c => c.Status != "compliant")
-                .Select(c => (row.StaffName, row.JobTitle, Cell: c)))
-            .ToList();
-        var ordered = allGaps
-            .OrderBy(x => x.Cell.Status switch { "expired" => 0, "missing" => 1, _ => 2 })
-            .ThenBy(x => x.Cell.Status == "expired" ? x.Cell.ExpiryDate : x.Cell.Status == "expiring" ? x.Cell.ExpiryDate : null)
-            .ThenBy(x => x.StaffName)
-            .ToList();
+        // Org-wide totals across every tracked (staff, requirement) pair - pure counts, no
+        // names. This is deliberately the last piece of staff-level content this report ever
+        // had (an earlier version listed individual gaps here) - who specifically has what is
+        // the on-screen Compliance page's job, not a static document's.
+        sb.Append("<h2>Overall status</h2>");
+        sb.Append("<p class=\"sub\">Every active staff member against every requirement, combined.</p>");
+        var allCells = matrix.Rows.SelectMany(r => r.Cells).ToList();
+        var totalCells = allCells.Count;
+        var compliantCells = allCells.Count(c => c.Status == "compliant");
+        var expiringCells = allCells.Count(c => c.Status == "expiring");
+        var expiredCells = allCells.Count(c => c.Status == "expired");
+        var missingCells = allCells.Count(c => c.Status == "missing");
 
-        if (ordered.Count == 0)
+        if (totalCells == 0)
         {
-            sb.Append("<p class=\"empty\">No gaps - every active staff member is compliant on every tracked requirement.</p>");
+            sb.Append("<p class=\"empty\">Nothing tracked yet.</p>");
         }
         else
         {
-            sb.Append("<p class=\"sub\">Showing the ").Append(Math.Min(TopUrgentLimit, ordered.Count)).Append(" most urgent of ")
-              .Append(ordered.Count).Append(" total gap").Append(ordered.Count == 1 ? "" : "s")
-              .Append(" - the complete list is in the CSV export or the on-screen Compliance page.</p>");
-            sb.Append("<table><thead><tr><th>Staff</th><th>Requirement</th><th>Status</th><th>Expiry</th></tr></thead><tbody>");
-            foreach (var (staffName, jobTitle, cell) in ordered.Take(TopUrgentLimit))
-            {
-                var req = requirementById[cell.RequirementTypeId];
-                sb.Append("<tr><td>").Append(System.Net.WebUtility.HtmlEncode(staffName))
-                  .Append(jobTitle is null ? "" : $" <span style=\"color:#94a3b8\">({System.Net.WebUtility.HtmlEncode(jobTitle)})</span>")
-                  .Append("</td><td>").Append(System.Net.WebUtility.HtmlEncode(req.Name))
-                  .Append("</td><td class=\"").Append(cell.Status).Append("\">").Append(StatusLabel(cell.Status))
-                  .Append("</td><td>").Append(cell.ExpiryDate?.ToString("yyyy-MM-dd") ?? "-").Append("</td></tr>");
-            }
-            sb.Append("</tbody></table>");
+            double Pct(int n) => n * 100.0 / totalCells;
+            sb.Append("<div class=\"overall-bar\">");
+            if (compliantCells > 0) sb.Append("<div class=\"seg compliant-seg\" style=\"width:").Append(Pct(compliantCells).ToString("0.##")).Append("%\"></div>");
+            if (expiringCells > 0) sb.Append("<div class=\"seg expiring-seg\" style=\"width:").Append(Pct(expiringCells).ToString("0.##")).Append("%\"></div>");
+            if (expiredCells > 0) sb.Append("<div class=\"seg expired-seg\" style=\"width:").Append(Pct(expiredCells).ToString("0.##")).Append("%\"></div>");
+            if (missingCells > 0) sb.Append("<div class=\"seg missing-seg\" style=\"width:").Append(Pct(missingCells).ToString("0.##")).Append("%\"></div>");
+            sb.Append("</div>");
+
+            sb.Append("<div class=\"breakdown\">");
+            AppendBreakdownItem(sb, "compliant", "Compliant", compliantCells, Pct(compliantCells));
+            AppendBreakdownItem(sb, "expiring", "Expiring soon", expiringCells, Pct(expiringCells));
+            AppendBreakdownItem(sb, "expired", "Expired", expiredCells, Pct(expiredCells));
+            AppendBreakdownItem(sb, "missing", "Missing", missingCells, Pct(missingCells));
+            sb.Append("</div>");
+
+            sb.Append("<p class=\"note\">").Append(totalCells).Append(" total checks across ").Append(totalStaff)
+              .Append(" staff and ").Append(matrix.RequirementTypes.Count)
+              .Append(" requirements. For which staff member has which gap, use the on-screen Compliance page (searchable and filterable) or the CSV export.</p>");
         }
 
         sb.Append("<p class=\"legend\">");
@@ -376,5 +383,11 @@ public static class ComplianceEndpoints
     {
         sb.Append("<div class=\"stat\"><div class=\"label\">").Append(label)
           .Append("</div><div class=\"value\">").Append(value).Append("</div></div>");
+    }
+
+    private static void AppendBreakdownItem(StringBuilder sb, string statusClass, string label, int count, double pct)
+    {
+        sb.Append("<div class=\"item\"><div class=\"").Append(statusClass).Append(" count\">").Append(count)
+          .Append("</div><div class=\"pct\">").Append(label).Append(" - ").Append(Math.Round(pct)).Append("%</div></div>");
     }
 }
