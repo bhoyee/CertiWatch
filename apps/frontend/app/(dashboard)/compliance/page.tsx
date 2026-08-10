@@ -145,29 +145,34 @@ export default function CompliancePage() {
     return map;
   }, [matrix]);
 
-  const visibleRequirements = useMemo(
+  // Picking a Requirement narrows the visible column(s) to just that one - Column Manager's
+  // saved order/hidden set is left completely untouched underneath, so clearing the requirement
+  // filter brings back exactly the layout the admin had before, not a reset one.
+  const columnManagerRequirements = useMemo(
     () => columnOrder.map((id) => requirementById.get(id)).filter((r): r is RequirementTypeDto => !!r && !hiddenColumns.has(r.id)),
     [columnOrder, hiddenColumns, requirementById]
   );
+  const visibleRequirements = useMemo(() => {
+    if (!requirementFilter) return columnManagerRequirements;
+    const req = requirementById.get(requirementFilter);
+    return req ? [req] : columnManagerRequirements;
+  }, [requirementFilter, requirementById, columnManagerRequirements]);
 
   // Row-level "has a gap" is derived once here rather than recomputed per render pass - the
-  // summary counts read off this flag. Gaps are judged across ALL requirements, not just
-  // currently-visible columns, so hiding a column never makes a staff member look more
-  // compliant than they actually are.
+  // summary counts and mobile cards read off this flag. Scoped to just the selected requirement
+  // when one is active ("compliant" then means compliant on THAT requirement, matching what the
+  // narrowed column/card actually shows), otherwise across all of a person's requirements.
   const rowsWithFlag = useMemo(() => {
     if (!matrix) return [];
-    return matrix.rows.map((row) => ({
-      row,
-      hasGap: row.cells.some((c) => c.status !== "compliant")
-    }));
-  }, [matrix]);
+    return matrix.rows.map((row) => {
+      const cells = requirementFilter ? row.cells.filter((c) => c.requirementTypeId === requirementFilter) : row.cells;
+      return { row, hasGap: cells.some((c) => c.status !== "compliant") };
+    });
+  }, [matrix, requirementFilter]);
 
   // Clicking a legend item filters to staff who have that exact status - scoped to one specific
   // requirement's cell when a Requirement is also picked ("who's Compliant on First Aid"),
-  // otherwise to any of their cells ("who's Compliant on anything"). Either way the row's full
-  // set of columns still renders on screen - narrowing to just the picked requirement is an
-  // export-only behavior (see exportParams/backend FilterMatrix), since the on-screen table
-  // already lets you narrow visible columns yourself via Columns.
+  // otherwise to any of their cells ("who's Compliant on anything").
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rowsWithFlag.filter(({ row }) => {
@@ -196,7 +201,10 @@ export default function CompliancePage() {
 
   const compliantStaffCount = rowsWithFlag.filter((r) => !r.hasGap).length;
   const gapStaffCount = rowsWithFlag.length - compliantStaffCount;
-  const totalGaps = rowsWithFlag.reduce((acc, r) => acc + r.row.cells.filter((c) => c.status !== "compliant").length, 0);
+  const totalGaps = rowsWithFlag.reduce((acc, r) => {
+    const cells = requirementFilter ? r.row.cells.filter((c) => c.requirementTypeId === requirementFilter) : r.row.cells;
+    return acc + cells.filter((c) => c.status !== "compliant").length;
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -223,7 +231,7 @@ export default function CompliancePage() {
                   setPage(1);
                 }}
                 placeholder="Search staff, role..."
-                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-56"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-80"
               />
             </div>
             <select
@@ -294,6 +302,7 @@ export default function CompliancePage() {
               requirementTypes={matrix.requirementTypes}
               order={columnOrder}
               hidden={hiddenColumns}
+              disabled={!!requirementFilter}
               open={columnsOpen}
               onOpenChange={setColumnsOpen}
               onChange={persistColumns}
@@ -330,9 +339,12 @@ export default function CompliancePage() {
 
             <ComplianceTable rows={paged} requirements={visibleRequirements} />
             <div className="space-y-3 md:hidden">
-              {paged.map(({ row, hasGap }, i) => (
-                <ComplianceCard key={row.staffId} index={i} row={row} requirementTypes={matrix.requirementTypes} hasGap={hasGap} />
-              ))}
+              {paged.map(({ row, hasGap }, i) => {
+                // Same narrowing as the desktop table's columns - the expanded card lists
+                // exactly what's visible, not all 14 requirements when only one is in view.
+                const cardRow = requirementFilter ? { ...row, cells: row.cells.filter((c) => c.requirementTypeId === requirementFilter) } : row;
+                return <ComplianceCard key={row.staffId} index={i} row={cardRow} requirementTypes={visibleRequirements} hasGap={hasGap} />;
+              })}
               {paged.length === 0 && <p className="py-8 text-center text-sm text-slate-500">No staff match your filters.</p>}
             </div>
 
@@ -441,7 +453,8 @@ function ColumnManager({
   hidden,
   open,
   onOpenChange,
-  onChange
+  onChange,
+  disabled
 }: {
   requirementTypes: RequirementTypeDto[];
   order: string[];
@@ -449,6 +462,7 @@ function ColumnManager({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onChange: (order: string[], hidden: Set<string>) => void;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const byId = useMemo(() => new Map(requirementTypes.map((r) => [r.id, r])), [requirementTypes]);
@@ -484,8 +498,10 @@ function ColumnManager({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => onOpenChange(!open)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+        onClick={() => !disabled && onOpenChange(!open)}
+        disabled={disabled}
+        title={disabled ? "Clear the Requirement filter to choose columns manually" : undefined}
+        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
       >
         <Icon name="sliders" className="h-4 w-4" />
         Columns
