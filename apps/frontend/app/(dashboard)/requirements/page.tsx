@@ -97,7 +97,7 @@ export default function RequirementsPage() {
               The credentials every staff member is checked against — pre-seeded for care providers, plus anything you add yourself.
             </p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
             <input
               value={search}
               onChange={(e) => {
