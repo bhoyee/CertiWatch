@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
             <p className="text-sm text-slate-600">Expiring soon (next 30 days)</p>
             <p className="text-lg font-semibold text-slate-900">{data.expiringSoon} records</p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-end">
             {reminderError && <p className="text-xs text-rose-600">Reminder preview unavailable</p>}
             {reminders && (
               <div className="flex flex-wrap gap-2 text-xs">

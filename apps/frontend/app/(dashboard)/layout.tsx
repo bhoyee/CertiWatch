@@ -288,7 +288,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
         <div className="h-5 w-px bg-slate-200 md:block" />
         <div className="text-sm text-slate-600">Stay on top of certificates and review queue</div>
       </div>
-      <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:justify-end">
+      <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 md:justify-end">
         <div className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-inner md:w-80">
           <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="11" cy="11" r="7" />

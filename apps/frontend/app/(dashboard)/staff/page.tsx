@@ -341,7 +341,7 @@ export default function StaffPage() {
               Everyone you're tracking compliance for — including anyone who hasn't had a certificate uploaded yet.
             </p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
             <input
               value={search}
               onChange={(e) => {

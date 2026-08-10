@@ -428,7 +428,7 @@ export default function UploadsPage() {
               <h2 className="text-lg font-semibold text-slate-900">Recent uploads</h2>
               <p className="text-sm text-slate-600">Search, sort, and paginate recent upload links.</p>
             </div>
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
               <input
                 value={historySearch}
                 onChange={(e) => {
