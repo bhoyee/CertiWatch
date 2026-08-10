@@ -56,6 +56,7 @@ public static class ComplianceEndpoints
         ITenantContextAccessor accessor,
         [FromQuery] string? status,
         [FromQuery] string? search,
+        [FromQuery] string? requirement,
         CancellationToken token)
     {
         if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsManager(accessor))
@@ -66,7 +67,8 @@ public static class ComplianceEndpoints
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
         var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
-        var matrix = FilterMatrix(fullMatrix, status, search);
+        var requirementName = ResolveRequirementName(fullMatrix, requirement);
+        var matrix = FilterMatrix(fullMatrix, status, search, requirement);
         var tenantName = tenant?.Name ?? "CertiWatch";
 
         var csv = new StringBuilder();
@@ -76,7 +78,7 @@ public static class ComplianceEndpoints
         csv.AppendLine("CertiWatch Compliance Export");
         csv.Append("Organisation,").AppendLine(Escape(tenantName));
         csv.Append("Generated,").AppendLine(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'"));
-        csv.Append("Filter,").AppendLine(Escape(DescribeFilter(status, search)));
+        csv.Append("Filter,").AppendLine(Escape(DescribeFilter(status, search, requirementName)));
         csv.Append("Staff shown,").AppendLine(matrix.Rows.Count.ToString());
         csv.Append("Requirements tracked,").AppendLine(matrix.RequirementTypes.Count.ToString());
         csv.AppendLine();
@@ -110,6 +112,7 @@ public static class ComplianceEndpoints
         ITenantContextAccessor accessor,
         [FromQuery] string? status,
         [FromQuery] string? search,
+        [FromQuery] string? requirement,
         CancellationToken token)
     {
         if (!RecordVisibility.IsAdmin(accessor) && !RecordVisibility.IsManager(accessor))
@@ -120,7 +123,8 @@ public static class ComplianceEndpoints
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
         var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
-        var matrix = FilterMatrix(fullMatrix, status, search);
+        var requirementName = ResolveRequirementName(fullMatrix, requirement);
+        var matrix = FilterMatrix(fullMatrix, status, search, requirement);
 
         // The sitewide CSP (default-src 'self', set by SecurityHeaderExtensions in Program.cs)
         // has no style-src/script-src, so it silently blocks this report's inline <style> and
@@ -129,27 +133,48 @@ public static class ComplianceEndpoints
         // value HTML-encoded below) rather than loosening the global policy.
         context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'";
 
-        var html = BuildReportHtml(tenant?.Name ?? "CertiWatch", matrix, DescribeFilter(status, search));
+        var html = BuildReportHtml(tenant?.Name ?? "CertiWatch", matrix, DescribeFilter(status, search, requirementName));
         return Results.Content(html, "text/html");
     }
+
+    private static string? ResolveRequirementName(ComplianceMatrixDto matrix, string? requirement)
+        => Guid.TryParse(requirement, out var id) ? matrix.RequirementTypes.FirstOrDefault(r => r.Id == id)?.Name : null;
 
     // Both export endpoints filter the SAME matrix that already powers the interactive page and
     // the unfiltered export - one status computation, reused everywhere, never recomputed
     // differently for "what you clicked" vs "what you downloaded".
-    private static ComplianceMatrixDto FilterMatrix(ComplianceMatrixDto matrix, string? status, string? search)
+    //
+    // A selected requirement does two different jobs at once: (1) it narrows which staff rows
+    // are included the same way status/search do, and (2) - unlike status/search - it also
+    // narrows each remaining row's Cells down to just that one requirement. That second part
+    // matters because status/search answer "who has a problem" (where seeing a person's whole
+    // record is the point), while picking a requirement answers "who's done X specifically" -
+    // a roster, where the other 13 unrelated requirements are just noise.
+    private static ComplianceMatrixDto FilterMatrix(ComplianceMatrixDto matrix, string? status, string? search, string? requirement)
     {
         var normalizedStatus = status?.Trim().ToLowerInvariant();
         var validStatus = normalizedStatus is "compliant" or "expiring" or "expired" or "missing" ? normalizedStatus : null;
         var term = search?.Trim().ToLowerInvariant();
+        var requirementId = Guid.TryParse(requirement, out var reqGuid) ? reqGuid : (Guid?)null;
 
-        if (validStatus is null && string.IsNullOrEmpty(term))
+        if (validStatus is null && string.IsNullOrEmpty(term) && requirementId is null)
         {
             return matrix;
         }
 
         var rows = matrix.Rows.Where(row =>
         {
-            if (validStatus is not null && !row.Cells.Any(c => c.Status == validStatus)) return false;
+            if (requirementId is not null)
+            {
+                var cell = row.Cells.FirstOrDefault(c => c.RequirementTypeId == requirementId);
+                if (cell is null) return false;
+                if (validStatus is not null && cell.Status != validStatus) return false;
+            }
+            else if (validStatus is not null && !row.Cells.Any(c => c.Status == validStatus))
+            {
+                return false;
+            }
+
             if (!string.IsNullOrEmpty(term) &&
                 !row.StaffName.ToLowerInvariant().Contains(term) &&
                 !(row.JobTitle ?? "").ToLowerInvariant().Contains(term))
@@ -159,16 +184,24 @@ public static class ComplianceEndpoints
             return true;
         }).ToList();
 
+        if (requirementId is not null)
+        {
+            rows = rows.Select(row => row with { Cells = row.Cells.Where(c => c.RequirementTypeId == requirementId).ToList() }).ToList();
+            var requirementTypes = matrix.RequirementTypes.Where(r => r.Id == requirementId).ToList();
+            return new ComplianceMatrixDto(requirementTypes, rows);
+        }
+
         return matrix with { Rows = rows };
     }
 
-    private static string DescribeFilter(string? status, string? search)
+    private static string DescribeFilter(string? status, string? search, string? requirementName)
     {
         var normalizedStatus = status?.Trim().ToLowerInvariant();
         var validStatus = normalizedStatus is "compliant" or "expiring" or "expired" or "missing" ? normalizedStatus : null;
         var term = search?.Trim();
 
         var parts = new List<string>();
+        if (!string.IsNullOrEmpty(requirementName)) parts.Add($"Requirement = {requirementName}");
         if (validStatus is not null) parts.Add($"Status = {StatusLabel(validStatus)}");
         if (!string.IsNullOrEmpty(term)) parts.Add($"Search = \"{term}\"");
         return parts.Count == 0 ? "None (full snapshot)" : string.Join("; ", parts);

@@ -62,6 +62,7 @@ export default function CompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
+  const [requirementFilter, setRequirementFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -103,6 +104,7 @@ export default function CompliancePage() {
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
     if (search.trim()) params.set("search", search.trim());
+    if (requirementFilter) params.set("requirement", requirementFilter);
     const qs = params.toString();
     return qs ? `?${qs}` : "";
   };
@@ -160,17 +162,27 @@ export default function CompliancePage() {
     }));
   }, [matrix]);
 
-  // Clicking a legend item (Compliant/Expiring soon/Expired/Missing) filters to staff who have
-  // at least one cell in that exact status - their full row still shows, so the rest of their
-  // record stays visible for context, same as the old "only show gaps" toggle did more broadly.
+  // Clicking a legend item filters to staff who have that exact status - scoped to one specific
+  // requirement's cell when a Requirement is also picked ("who's Compliant on First Aid"),
+  // otherwise to any of their cells ("who's Compliant on anything"). Either way the row's full
+  // set of columns still renders on screen - narrowing to just the picked requirement is an
+  // export-only behavior (see exportParams/backend FilterMatrix), since the on-screen table
+  // already lets you narrow visible columns yourself via Columns.
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rowsWithFlag.filter(({ row }) => {
-      if (statusFilter && !row.cells.some((c) => c.status === statusFilter)) return false;
+      if (statusFilter) {
+        if (requirementFilter) {
+          const cell = row.cells.find((c) => c.requirementTypeId === requirementFilter);
+          if (!cell || cell.status !== statusFilter) return false;
+        } else if (!row.cells.some((c) => c.status === statusFilter)) {
+          return false;
+        }
+      }
       if (!term) return true;
       return row.staffName.toLowerCase().includes(term) || (row.jobTitle ?? "").toLowerCase().includes(term);
     });
-  }, [rowsWithFlag, search, statusFilter]);
+  }, [rowsWithFlag, search, statusFilter, requirementFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -200,8 +212,8 @@ export default function CompliancePage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -214,15 +226,34 @@ export default function CompliancePage() {
                 className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-56"
               />
             </div>
-            {statusFilter && (
+            <select
+              value={requirementFilter ?? ""}
+              onChange={(e) => {
+                setRequirementFilter(e.target.value || null);
+                setPage(1);
+              }}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm transition focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">All requirements</option>
+              {matrix.requirementTypes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            {(statusFilter || requirementFilter) && (
               <button
                 onClick={() => {
                   setStatusFilter(null);
+                  setRequirementFilter(null);
                   setPage(1);
                 }}
                 className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
               >
-                Filtered: {statusLabel(statusFilter)}
+                Filtered:{" "}
+                {[requirementFilter ? requirementById.get(requirementFilter)?.name : null, statusFilter ? statusLabel(statusFilter) : null]
+                  .filter(Boolean)
+                  .join(" + ")}
                 <span aria-hidden="true">&times;</span>
               </button>
             )}
@@ -242,7 +273,7 @@ export default function CompliancePage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={exportCsv}
               disabled={exportingCsv}
@@ -279,13 +310,16 @@ export default function CompliancePage() {
         {matrix.rows.length > 0 && (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="mr-1">Click a status to filter:</span>
+              <span className="mr-1">
+                Click a status to filter{requirementFilter ? ` ${requirementById.get(requirementFilter)?.name ?? ""}` : ""}:
+              </span>
               {(["compliant", "expiring", "expired", "missing"] as Status[]).map((s) => (
                 <Legend
                   key={s}
                   status={s}
                   label={statusLabel(s)}
                   active={statusFilter === s}
+                  scopeLabel={requirementFilter ? requirementById.get(requirementFilter)?.name : undefined}
                   onClick={() => {
                     setStatusFilter((prev) => (prev === s ? null : s));
                     setPage(1);
@@ -583,14 +617,26 @@ function StatCard({ label, value, tone, icon, index }: { label: string; value: n
   );
 }
 
-function Legend({ status, label, active, onClick }: { status: Status; label: string; active: boolean; onClick: () => void }) {
+function Legend({
+  status,
+  label,
+  active,
+  scopeLabel,
+  onClick
+}: {
+  status: Status;
+  label: string;
+  active: boolean;
+  scopeLabel?: string;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition ${
         active ? "border-slate-300 bg-slate-100 font-semibold text-slate-900" : "border-transparent text-slate-500 hover:bg-slate-50"
       }`}
-      title={`Show only staff with a ${label} requirement`}
+      title={scopeLabel ? `Show only staff who are ${label} on ${scopeLabel}` : `Show only staff with a ${label} requirement`}
     >
       <StatusIcon status={status} />
       {label}
