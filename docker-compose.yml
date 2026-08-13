@@ -51,7 +51,7 @@ services:
       Stripe__Plans__2__DisplayName: Pro
       Stripe__Plans__2__RecordLimit: 0
       Email__FromAddress: ${Email__FromAddress:-hello@salisu.dev}
-      Email__FromName: ${Email__FromName:-IncidentPulse}
+      Email__FromName: ${Email__FromName:-CertiWatch}
       # No SmtpHost default: EmailService treats an empty host as "log the email instead of
       # sending it" (see apps/api/Infrastructure/Services/EmailService.cs). Defaulting this to
       # smtp.resend.com with a placeholder re_XXXX password meant every send silently failed
