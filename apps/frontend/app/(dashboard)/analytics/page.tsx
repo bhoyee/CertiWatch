@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
         <LiveIndicator lastUpdated={lastUpdated} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         {cards.map((card) => (
           <StatCard key={card.label} {...card} />
         ))}
@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search staff, course, issuer..."
+              placeholder="Search staff, requirement, issuer..."
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
             />
             <select
@@ -263,7 +263,7 @@ export default function AnalyticsPage() {
                   Staff
                 </Header>
                 <Header onClick={() => toggleSort("course")} sorted={sortKey === "course"} dir={sortDir}>
-                  Course
+                  Requirement
                 </Header>
                 <Header onClick={() => toggleSort("expiry")} sorted={sortKey === "expiry"} dir={sortDir}>
                   Expiry
@@ -353,26 +353,26 @@ const ACCENT_TINTS: Record<string, string> = {
 function StatCard({ label, value, icon, accent, delta, sparkline }: StatCardProps) {
   const tint = ACCENT_TINTS[accent] ?? "border-slate-200 bg-white";
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tint}`}>
+    <div className={`rounded-xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tint}`}>
       <div className="flex items-start justify-between">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm ${accent}`}>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-sm ${accent}`}>
           <StatIcon name={icon} />
         </div>
         {typeof delta === "number" && (
           <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
               delta > 0 ? "bg-emerald-50 text-emerald-700" : delta < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"
             }`}
           >
             {delta > 0 ? "+" : ""}
-            {delta} this week
+            {delta} this wk
           </span>
         )}
       </div>
-      <p className="mt-4 text-3xl font-bold text-slate-900">{value}</p>
-      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-xl font-bold text-slate-900">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
       {sparkline && sparkline.length > 1 && (
-        <div className="mt-3 h-8">
+        <div className="mt-2 h-5">
           <Sparkline data={sparkline} />
         </div>
       )}
@@ -395,7 +395,7 @@ function Sparkline({ data }: { data: DayCount[] }) {
 }
 
 function StatIcon({ name }: { name: StatCardProps["icon"] }) {
-  const cls = "h-5 w-5";
+  const cls = "h-4 w-4";
   switch (name) {
     case "records":
       return (
