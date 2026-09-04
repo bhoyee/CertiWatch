@@ -884,11 +884,17 @@ public static class PlatformEndpoints
         if (tenantId.HasValue) query = query.Where(a => a.TenantId == tenantId.Value);
 
         var logs = await query.OrderByDescending(a => a.CreatedAt).Take(limit).ToListAsync(token);
+        // logs is already a plain in-memory List here, but embedding a LINQ-to-Objects
+        // .Where/.Select chain directly inside an EF queryable's predicate still makes the
+        // translator choke trying to turn the whole lambda into SQL - precomputing the id list
+        // first keeps the actual EF query down to a plain, well-supported "IN" translation.
+        var tenantIds = logs.Select(l => l.TenantId).Distinct().ToList();
+        var actorIds = logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Distinct().ToList();
         var tenantNames = await db.Tenants.AsNoTracking()
-            .Where(t => logs.Select(l => l.TenantId).Contains(t.Id))
+            .Where(t => tenantIds.Contains(t.Id))
             .ToDictionaryAsync(t => t.Id, t => t.Name, token);
         var userEmails = await db.Users.AsNoTracking()
-            .Where(u => logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Contains(u.Id))
+            .Where(u => actorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.Email, token);
 
         var dto = logs.Select(l => new AuditLogDto(
@@ -917,11 +923,13 @@ public static class PlatformEndpoints
         if (tenantId.HasValue) query = query.Where(a => a.TenantId == tenantId.Value);
 
         var logs = await query.OrderByDescending(a => a.CreatedAt).Take(limit).ToListAsync(token);
+        var tenantIds = logs.Select(l => l.TenantId).Distinct().ToList();
+        var actorIds = logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Distinct().ToList();
         var tenantNames = await db.Tenants.AsNoTracking()
-            .Where(t => logs.Select(l => l.TenantId).Contains(t.Id))
+            .Where(t => tenantIds.Contains(t.Id))
             .ToDictionaryAsync(t => t.Id, t => t.Name, token);
         var userEmails = await db.Users.AsNoTracking()
-            .Where(u => logs.Where(l => l.ActorId.HasValue).Select(l => l.ActorId!.Value).Contains(u.Id))
+            .Where(u => actorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.Email, token);
 
         var dto = logs.Select(l => new AuditLogDto(
