@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
         <LiveIndicator lastUpdated={lastUpdated} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
           <StatCard key={card.label} {...card} />
         ))}
@@ -341,11 +341,21 @@ type StatCardProps = {
   sparkline?: DayCount[];
 };
 
+const ACCENT_TINTS: Record<string, string> = {
+  "bg-indigo-600": "border-indigo-100 bg-indigo-50/70",
+  "bg-amber-500": "border-amber-100 bg-amber-50/70",
+  "bg-rose-600": "border-rose-100 bg-rose-50/70",
+  "bg-slate-500": "border-slate-200 bg-slate-100/70",
+  "bg-emerald-600": "border-emerald-100 bg-emerald-50/70",
+  "bg-cyan-600": "border-cyan-100 bg-cyan-50/70"
+};
+
 function StatCard({ label, value, icon, accent, delta, sparkline }: StatCardProps) {
+  const tint = ACCENT_TINTS[accent] ?? "border-slate-200 bg-white";
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <div className={`rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tint}`}>
       <div className="flex items-start justify-between">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl text-white ${accent}`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm ${accent}`}>
           <StatIcon name={icon} />
         </div>
         {typeof delta === "number" && (
