@@ -287,7 +287,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
       <div className="flex items-center gap-2">
         <div className="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 md:block">Dashboard</div>
         <div className="h-5 w-px bg-slate-200 md:block" />
-        <div className="text-sm text-slate-600">Stay on top of certificates and review queue</div>
+        <div className="text-sm text-slate-600">Stay on top of your compliance records and review queue</div>
       </div>
       <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 md:justify-end">
         <div className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-inner md:w-80">
