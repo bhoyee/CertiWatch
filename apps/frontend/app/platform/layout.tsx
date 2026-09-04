@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
+import { LogoMark } from "../../components/LogoMark";
 
 type NavItem = {
   href: string;
@@ -32,9 +33,12 @@ export default function PlatformLayout({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex">
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-slate-200">
-          <div className="text-xl font-bold text-slate-900">CertiWatch</div>
-          <p className="text-xs text-slate-500 mt-1">Platform Console</p>
+        <div className="flex items-center gap-2.5 px-4 py-5 border-b border-slate-200">
+          <LogoMark className="h-8 w-8 shrink-0" />
+          <div>
+            <div className="text-xl font-bold text-slate-900">CertiWatch</div>
+            <p className="text-xs text-slate-500">Platform Console</p>
+          </div>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-1">
           {navItems.map((item) => {

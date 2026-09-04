@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
@@ -30,7 +31,16 @@ type PagedResult<T> = {
 };
 
 export default function RecordsPage() {
+  return (
+    <Suspense fallback={<LoadingCard />}>
+      <RecordsPageInner />
+    </Suspense>
+  );
+}
+
+function RecordsPageInner() {
   const { role } = useRole();
+  const searchParams = useSearchParams();
   const isViewer = role?.toLowerCase() === "viewer";
   const roleReady = role !== null;
   const canManage = roleReady && !isViewer;
@@ -40,7 +50,18 @@ export default function RecordsPage() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams?.get("q") ?? "");
+
+  // useState's initializer only runs on first mount, but a global-search result clicked while
+  // already on this page navigates via a query-string-only change (no remount) - so re-sync
+  // whenever the "q" param itself changes.
+  useEffect(() => {
+    const q = searchParams?.get("q");
+    if (q) {
+      setSearch(q);
+      setPage(1);
+    }
+  }, [searchParams]);
   const [status, setStatus] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");

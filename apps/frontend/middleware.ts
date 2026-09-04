@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PLATFORM_PUBLIC = ["/platform/login", "/platform/magic"];
-const PUBLIC_PATHS = ["/", "/signup", "/signup/success", "/login", "/magic", "/logout", "/upload", "/favicon.ico", "/_next", ...PLATFORM_PUBLIC];
+const PUBLIC_PATHS = ["/", "/signup", "/signup/success", "/login", "/magic", "/logout", "/upload", "/favicon.ico", "/icon.svg", "/_next", ...PLATFORM_PUBLIC];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -38,5 +38,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"]
 };

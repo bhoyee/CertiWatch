@@ -7,6 +7,9 @@ import { fetchJson, postJson } from "../../lib/api";
 import { NotificationBell } from "./NotificationBell";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
+import { LogoMark } from "../../components/LogoMark";
+import { navItems } from "./navItems";
+import { GlobalSearch } from "./GlobalSearch";
 
 type TenantPlanDto = {
   tenantName: string;
@@ -28,28 +31,6 @@ type ProfileDto = {
   tenantName: string;
 };
 
-const navItems = [
-  { href: "/platform/tenants", label: "Platform", icon: "shield", superOnly: true },
-  { href: "/platform/billing", label: "Platform Billing", icon: "credit", superOnly: true },
-  { href: "/platform/usage", label: "Platform Usage", icon: "chart", superOnly: true },
-   { href: "/platform/security", label: "Platform Security", icon: "shield-check", superOnly: true },
-  { href: "/platform/support", label: "Platform Support", icon: "life-buoy", superOnly: true },
-  { href: "/analytics", label: "Analytics", icon: "chart" },
-  { href: "/records", label: "Records", icon: "table" },
-  { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
-  { href: "/team", label: "Team", icon: "users", viewerHidden: true, managerHidden: true },
-  { href: "/staff", label: "Staff", icon: "users", viewerHidden: true },
-  { href: "/compliance", label: "Compliance", icon: "table", viewerHidden: true },
-  { href: "/support", label: "Support", icon: "life-buoy" },
-  { href: "/requirements", label: "Requirements", icon: "shield", viewerHidden: true, managerHidden: true },
-  { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true, managerHidden: true },
-  { href: "/uploads", label: "Uploads", icon: "cloud" },
-  { href: "/sources", label: "Sources", icon: "plug", viewerHidden: true, managerHidden: true },
-  { href: "/plan", label: "Manage plan", icon: "credit", viewerHidden: true, managerHidden: true },
-  { href: "/profile", label: "Profile", icon: "user" },
-  { href: "/invite", label: "Invite", icon: "users", viewerHidden: true },
-  { href: "/logout", label: "Logout", icon: "exit" }
-];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -227,7 +208,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 />
               </div>
             )}
-            <TopBar isBlocked={isBlocked} role={role} onShowTour={() => setShowTour(true)} />
+            <TopBar isBlocked={isBlocked} role={role} isSuper={isSuper} onShowTour={() => setShowTour(true)} />
             {(!isSuper && (isBlocked || (!isViewer && !isManager))) && (
               <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
             )}
@@ -266,9 +247,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 function Logo({ isSuper }: { isSuper?: boolean }) {
   return (
     <div className="flex items-center gap-3 px-1">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white font-semibold shadow-sm">
-        CW
-      </div>
+      <LogoMark className="h-10 w-10 shrink-0 drop-shadow-sm" />
       <div>
         <Link href={isSuper ? "/platform/tenants" : "/analytics"} className="text-lg font-semibold text-slate-900">
           CertiWatch
@@ -279,29 +258,30 @@ function Logo({ isSuper }: { isSuper?: boolean }) {
   );
 }
 
-function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: string | null; onShowTour: () => void }) {
+function TopBar({
+  isBlocked,
+  role,
+  isSuper,
+  onShowTour
+}: {
+  isBlocked: boolean;
+  role: string | null;
+  isSuper?: boolean;
+  onShowTour: () => void;
+}) {
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
   return (
     <div className="relative z-40 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
-        <div className="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 md:block">Dashboard</div>
+        <div className="hidden bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-sm font-extrabold uppercase tracking-wider text-transparent md:block">
+          Dashboard
+        </div>
         <div className="h-5 w-px bg-slate-200 md:block" />
         <div className="text-sm text-slate-600">Stay on top of your compliance records and review queue</div>
       </div>
       <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 md:justify-end">
-        <div className="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-inner md:w-80">
-          <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-          </svg>
-          <input
-            className="w-full border-0 bg-transparent text-sm focus:outline-none"
-            placeholder="Search staff, requirement, issuer..."
-            aria-label="Search"
-            disabled={isBlocked}
-          />
-        </div>
+        <GlobalSearch isBlocked={isBlocked} role={role} isSuper={isSuper} />
         <Link
           href="/uploads"
           className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm ${
@@ -321,7 +301,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
             className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm ${
               isBlocked
                 ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                : "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
             }`}
             aria-disabled={isBlocked}
             tabIndex={isBlocked ? -1 : 0}
@@ -334,7 +314,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
         )}
         <button
           onClick={onShowTour}
-          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
         >
           Show tour
         </button>
