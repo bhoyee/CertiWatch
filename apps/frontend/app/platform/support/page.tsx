@@ -238,8 +238,14 @@ function StatusBadge({ value }: { value: string }) {
       : v === "closed"
       ? "bg-emerald-100 text-emerald-800"
       : "bg-slate-100 text-slate-700";
+  // self-start matters here: this span is a direct child of the row's grid container, and
+  // CSS Grid's default align-items: stretch was forcing it to fill the full row height - with
+  // rounded-full, that turned a tight text pill into an oversized oval with the label floating
+  // above it instead of sitting inside it.
   return (
-    <span className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{value ?? "unknown"}</span>
+    <span className={`w-fit self-start rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>
+      {value ?? "unknown"}
+    </span>
   );
 }
 
