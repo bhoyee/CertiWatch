@@ -125,6 +125,25 @@ public static class PlatformEndpoints
             .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.IsDisabled, u.CreatedAt })
             .ToListAsync(token);
 
+        // Precomputed to a plain List<Guid> so the GroupBy below is a well-supported EF "IN" translation.
+        var userIds = users.Select(u => u.Id).ToList();
+        var lastLogins = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.Action == "auth_login" && a.ActorId.HasValue && userIds.Contains(a.ActorId.Value))
+            .GroupBy(a => a.ActorId!.Value)
+            .Select(g => new { UserId = g.Key, LastLoginAt = g.Max(a => a.CreatedAt) })
+            .ToDictionaryAsync(x => x.UserId, x => x.LastLoginAt, token);
+
+        var usersWithLastLogin = users.Select(u => new
+        {
+            u.Id,
+            u.Email,
+            u.Name,
+            u.Role,
+            u.IsDisabled,
+            u.CreatedAt,
+            LastLoginAt = lastLogins.TryGetValue(u.Id, out var lastLogin) ? lastLogin : (DateTime?)null
+        }).ToList();
+
         var devices = await db.Devices.AsNoTracking()
             .Where(d => d.TenantId == id)
             .OrderByDescending(d => d.CreatedAt)
@@ -168,7 +187,7 @@ public static class PlatformEndpoints
             UserCount = userCount,
             DeviceCount = deviceCount,
             SourceCount = sourceCount,
-            Users = users,
+            Users = usersWithLastLogin,
             Devices = devices,
             Sources = sources,
             ApiKeys = apiKeys,

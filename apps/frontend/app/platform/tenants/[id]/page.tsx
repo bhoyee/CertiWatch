@@ -12,6 +12,7 @@ type TenantUser = {
   role: string;
   isDisabled: boolean;
   createdAt: string;
+  lastLoginAt?: string | null;
 };
 
 type TenantDetail = {
@@ -190,6 +191,7 @@ export default function TenantDetailPage() {
                     <th className="px-4 py-2 text-left font-semibold text-slate-600">Role</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-600">Status</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-600">Joined</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Last login</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -209,6 +211,9 @@ export default function TenantDetailPage() {
                       </td>
                       <td className="px-4 py-2 text-slate-500">
                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-slate-500">
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
                       </td>
                     </tr>
                   ))}
