@@ -297,7 +297,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
           </svg>
           <input
             className="w-full border-0 bg-transparent text-sm focus:outline-none"
-            placeholder="Search staff, course, issuer..."
+            placeholder="Search staff, requirement, issuer..."
             aria-label="Search"
             disabled={isBlocked}
           />

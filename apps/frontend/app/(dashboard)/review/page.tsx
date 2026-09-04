@@ -213,7 +213,7 @@ export default function ReviewQueuePage() {
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-3 py-2 text-left">Staff / Course</th>
+                    <th className="px-3 py-2 text-left">Staff / Requirement</th>
                     <th className="px-3 py-2 text-left">Issue</th>
                     <th className="px-3 py-2 text-left">Expiry</th>
                     <th className="px-3 py-2">Confidence</th>
@@ -390,7 +390,7 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
 
       <div className="space-y-2">
         <Field label="Staff name" value={staffName} onChange={setStaffName} />
-        <Field label="Course" value={courseName} onChange={setCourseName} />
+        <Field label="Requirement" value={courseName} onChange={setCourseName} />
         <Field label="Issuer" value={issuer} onChange={setIssuer} />
         <Field label="Issue date" value={issueDate} onChange={setIssueDate} placeholder="YYYY-MM-DD" />
         <Field label="Expiry date" value={expiryDate} onChange={setExpiryDate} placeholder="YYYY-MM-DD" />

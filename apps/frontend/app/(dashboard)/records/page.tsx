@@ -157,7 +157,7 @@ export default function RecordsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="search"
-            placeholder="Search staff, course, issuer"
+            placeholder="Search staff, requirement, issuer"
             value={search}
             onChange={(e) => {
               setPage(1);
@@ -229,7 +229,7 @@ export default function RecordsPage() {
                 Staff
               </Header>
               <Header onClick={() => toggleSort("courseName")} sortField={sortField} sortDir={sortDir} field="courseName">
-                Course
+                Requirement
               </Header>
               <Header onClick={() => toggleSort("issuer")} sortField={sortField} sortDir={sortDir} field="issuer">
                 Issuer
