@@ -324,6 +324,13 @@ public static class RecordsEndpoints
     {
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
         var cleaned = value.Replace("\"", "\"\"");
+        // A field starting with =, +, -, or @ executes as a formula when the export is opened
+        // in Excel/Sheets - a leading apostrophe is the standard mitigation (forces text, and
+        // spreadsheet apps hide it on display).
+        if ("=+-@".IndexOf(cleaned[0]) >= 0)
+        {
+            cleaned = "'" + cleaned;
+        }
         return cleaned.Contains(',') ? $"\"{cleaned}\"" : cleaned;
     }
 

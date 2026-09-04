@@ -11,6 +11,17 @@ namespace CertiWatch.Api.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // This AddColumn was missing from the originally-committed version of this migration -
+            // the column existed on the real dev database (added by hand at some point) but a
+            // fresh database run through every migration from scratch never actually got it,
+            // silently drifting from what AppDbContextModelSnapshot/the User entity both expect.
+            migrationBuilder.AddColumn<bool>(
+                name: "IsDisabled",
+                table: "Users",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.UpdateData(
                 table: "CourseRules",
                 keyColumn: "Id",
@@ -85,6 +96,10 @@ namespace CertiWatch.Api.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropColumn(
+                name: "IsDisabled",
+                table: "Users");
+
             migrationBuilder.UpdateData(
                 table: "CourseRules",
                 keyColumn: "Id",

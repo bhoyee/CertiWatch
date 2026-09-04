@@ -14,7 +14,6 @@ public static class ReportsEndpoints
     {
         var group = routes.MapGroup("/api/reports").RequireAuthorization();
         group.MapGet("/digest-preview", DigestPreviewAsync);
-        group.MapPost("/export-pdf", ExportPdfAsync);
         group.MapGet("/analytics", AnalyticsAsync);
         return group;
     }
@@ -60,12 +59,6 @@ public static class ReportsEndpoints
 
         var html = renderer.RenderDigest(digest);
         return Results.Ok(new DigestPreviewResponse(digest, html));
-    }
-
-    private static IResult ExportPdfAsync()
-    {
-        var fake = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("CertiWatch Report"));
-        return Results.Ok(new { fileName = $"certiwatch-report-{DateTime.UtcNow:yyyyMMdd}.pdf", content = fake });
     }
 
     private static async Task<IResult> AnalyticsAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
