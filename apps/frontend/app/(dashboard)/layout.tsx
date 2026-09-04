@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchJson, postJson } from "../../lib/api";
+import { NotificationBell } from "./NotificationBell";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
 
@@ -282,7 +283,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="relative z-40 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
         <div className="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 md:block">Dashboard</div>
         <div className="h-5 w-px bg-slate-200 md:block" />
@@ -337,6 +338,7 @@ function TopBar({ isBlocked, role, onShowTour }: { isBlocked: boolean; role: str
         >
           Show tour
         </button>
+        {!isViewer && <NotificationBell />}
       </div>
     </div>
   );

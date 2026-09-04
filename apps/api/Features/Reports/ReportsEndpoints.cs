@@ -103,6 +103,26 @@ public static class ReportsEndpoints
             .GroupBy(r => r.ProcessingStatus.ToString())
             .ToDictionary(g => g.Key, g => g.Count());
 
+        // okRecordCreatedDates drives both the trend line and the week-over-week delta, so the
+        // sparkline under "Total records" and the number beside it always tell the same story.
+        var okRecordSet = records.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
+        var trendStart = today.AddDays(-29);
+        var recordsTrend = Enumerable.Range(0, 30)
+            .Select(i => trendStart.AddDays(i))
+            .Select(d => new DayCountDto(d, okRecordSet.Count(r => DateOnly.FromDateTime(r.CreatedAt) == d)))
+            .ToList();
+
+        var nowUtc = DateTime.UtcNow;
+        var newThisWeek = okRecordSet.Count(r => r.CreatedAt >= nowUtc.AddDays(-7));
+        var newLastWeek = okRecordSet.Count(r => r.CreatedAt >= nowUtc.AddDays(-14) && r.CreatedAt < nowUtc.AddDays(-7));
+
+        var forwardLooking = recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today).ToList();
+        var expiryBuckets = new ExpiryBucketsDto(
+            Next7: forwardLooking.Count(r => r.ExpiryDate <= today.AddDays(7)),
+            Next30: forwardLooking.Count(r => r.ExpiryDate > today.AddDays(7) && r.ExpiryDate <= today.AddDays(30)),
+            Next60: forwardLooking.Count(r => r.ExpiryDate > today.AddDays(30) && r.ExpiryDate <= today.AddDays(60)),
+            Next90Plus: forwardLooking.Count(r => r.ExpiryDate > today.AddDays(60)));
+
         var isViewer = RecordVisibility.IsViewer(accessor);
         var dto = new AnalyticsOverviewDto(
             TotalRecords: okRecords.Count,
@@ -112,7 +132,11 @@ public static class ReportsEndpoints
             Devices: isViewer ? 0 : await db.Devices.CountAsync(d => d.TenantId == tenantId, token),
             Sources: isViewer ? 0 : await db.Sources.CountAsync(s => s.TenantId == tenantId, token),
             StatusCounts: statusCounts,
-            ExpiringSoonList: expiringSoon.OrderBy(r => r.ExpiryDate).Take(10).ToList());
+            ExpiringSoonList: expiringSoon.OrderBy(r => r.ExpiryDate).Take(10).ToList(),
+            RecordsTrend: recordsTrend,
+            ExpiryBuckets: expiryBuckets,
+            NewThisWeek: newThisWeek,
+            NewLastWeek: newLastWeek);
 
         return Results.Ok(dto);
     }

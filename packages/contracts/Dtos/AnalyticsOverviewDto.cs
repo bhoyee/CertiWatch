@@ -8,4 +8,8 @@ public sealed record AnalyticsOverviewDto(
     int Devices,
     int Sources,
     IReadOnlyDictionary<string, int> StatusCounts,
-    IReadOnlyList<RecordDto> ExpiringSoonList);
+    IReadOnlyList<RecordDto> ExpiringSoonList,
+    IReadOnlyList<DayCountDto> RecordsTrend,
+    ExpiryBucketsDto ExpiryBuckets,
+    int NewThisWeek,
+    int NewLastWeek);

@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<DeviceEnrollmentCode> DeviceEnrollmentCodes => Set<DeviceEnrollmentCode>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<RequirementType> RequirementTypes => Set<RequirementType>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(v => v.HintsJson).HasColumnType("jsonb");
             entity.Property(v => v.PatternsJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasIndex(n => new { n.TenantId, n.IsRead, n.CreatedAt });
+            entity.HasIndex(n => new { n.RecordId, n.Type }).HasDatabaseName("idx_notifications_record_type");
         });
 
         modelBuilder.Entity<Reminder>(entity =>
