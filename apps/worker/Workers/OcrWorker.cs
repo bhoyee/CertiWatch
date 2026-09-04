@@ -18,7 +18,7 @@ namespace CertiWatch.Worker.Workers;
 public sealed class OcrWorker : BackgroundService
 {
   private readonly WorkerOptions _options;
-  private readonly IAzureVisionClient _vision;
+  private readonly IOcrSpaceClient _ocrSpace;
   private readonly ITesseractClient _tesseract;
   private readonly IDoctrClient _doctr;
   private readonly IDeepSeekClient _deepSeek;
@@ -29,7 +29,7 @@ public sealed class OcrWorker : BackgroundService
 
   public OcrWorker(
     IOptions<WorkerOptions> options,
-    IAzureVisionClient vision,
+    IOcrSpaceClient ocrSpace,
     ITesseractClient tesseract,
     IDoctrClient doctr,
     IDeepSeekClient deepSeek,
@@ -38,7 +38,7 @@ public sealed class OcrWorker : BackgroundService
     ILogger<OcrWorker> logger)
   {
     _options = options.Value;
-    _vision = vision;
+    _ocrSpace = ocrSpace;
     _tesseract = tesseract;
     _doctr = doctr;
     _deepSeek = deepSeek;
@@ -234,9 +234,8 @@ public sealed class OcrWorker : BackgroundService
 
   private async Task<string> ExtractTextAsync(string file, CancellationToken token)
   {
-    // Step 1: OCR (PaddleOCR > Azure Vision > Tesseract)
-    var useAzure = !string.IsNullOrWhiteSpace(_options.AzureVisionEndpoint) &&
-           !string.IsNullOrWhiteSpace(_options.AzureVisionKey);
+    // Step 1: OCR (PaddleOCR/Doctr > OCR.space > Tesseract)
+    var useOcrSpace = !string.IsNullOrWhiteSpace(_options.OcrSpaceApiKey);
     var useDoctr = !string.IsNullOrWhiteSpace(_options.DoctrBaseUrl);
     var useDeepSeek = !string.IsNullOrWhiteSpace(_options.DeepSeekApiKey);
 
@@ -257,10 +256,10 @@ public sealed class OcrWorker : BackgroundService
           rawText = string.Empty;
         }
       }
-      else if (useAzure)
+      else if (useOcrSpace)
       {
-        rawText = await _vision.ExtractTextAsync(file, token);
-        _logger.LogInformation("OCR (Azure Vision) raw preview: {Preview}", Truncate(rawText, 500));
+        rawText = await _ocrSpace.ExtractTextAsync(file, token);
+        _logger.LogInformation("OCR (OCR.space) raw preview: {Preview}", Truncate(rawText, 500));
       }
       else
       {

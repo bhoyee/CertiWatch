@@ -16,7 +16,7 @@ builder.Services.AddHttpClient<IApiClient, ApiClient>()
     });
 builder.Services.AddSingleton(new KeywordMatcher(KeywordMaps.Default));
 builder.Services.AddSingleton<ParsingPipeline>();
-builder.Services.AddSingleton<IAzureVisionClient, AzureVisionClient>();
+builder.Services.AddHttpClient<IOcrSpaceClient, OcrSpaceClient>();
 builder.Services.AddSingleton<ITesseractClient, TesseractClient>();
 builder.Services.AddHttpClient<IDoctrClient, DoctrClient>();
 builder.Services.AddHttpClient<IDeepSeekClient, DeepSeekClient>();

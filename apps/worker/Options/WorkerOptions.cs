@@ -9,8 +9,7 @@ public sealed class WorkerOptions
     public Guid SourceId { get; set; } = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     public Guid DeviceId { get; set; } = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     public string DeviceToken { get; set; } = "dev-token";
-    public string AzureVisionEndpoint { get; set; } = string.Empty;
-    public string AzureVisionKey { get; set; } = string.Empty;
+    public string OcrSpaceApiKey { get; set; } = string.Empty;
     public string DoctrBaseUrl { get; set; } = string.Empty;
     public string DeepSeekApiKey { get; set; } = string.Empty;
     public string DeepSeekBaseUrl { get; set; } = "https://api.deepseek.com";
