@@ -30,6 +30,8 @@ public static class PlatformEndpoints
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/enable", EnableUserAsync);
         group.MapPost("/tenants/{tenantId:guid}/users/{userId:guid}/force-reset", ForceResetAsync);
         group.MapGet("/support/tickets", ListSupportTicketsAsync);
+        group.MapGet("/support/tickets/{id:guid}", GetSupportTicketAsync);
+        group.MapPost("/support/tickets/{id:guid}/messages", ReplySupportTicketAsync);
         group.MapPost("/support/tickets/{id:guid}/status", UpdateSupportTicketAsync);
         group.MapGet("/billing/overview", BillingOverviewAsync);
         group.MapPost("/billing/invoices/{invoiceId}/resend", ResendInvoiceAsync);
@@ -998,6 +1000,115 @@ public static class PlatformEndpoints
                 var html =
                     $"<p>Hello,</p><p>A support ticket was assigned to you.</p><p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(ticket.Subject)}</p><p>Status: {ticket.Status}</p><p>Tenant: {ticket.TenantId}</p>";
                 await emailService.SendAsync(user.Email, "Support ticket assigned to you", html, token);
+            }
+        }
+
+        return Results.NoContent();
+    }
+
+    private sealed record PlatformMessageDto(Guid Id, Guid? AuthorUserId, string? AuthorName, bool AuthorIsPlatform, string Body, DateTime CreatedAt);
+
+    private sealed record PlatformTicketDetailDto(
+        Guid Id,
+        Guid TenantId,
+        string TenantName,
+        string Subject,
+        string Body,
+        string Status,
+        string AssignedRole,
+        Guid? AssignedToUserId,
+        string? AssignedToName,
+        string? CreatedByName,
+        DateTime CreatedAt,
+        DateTime UpdatedAt,
+        IEnumerable<PlatformMessageDto> Messages);
+
+    // Unlike the tenant-side GetAsync in SupportEndpoints (scoped to the caller's own tenant),
+    // this deliberately looks up by ticket id alone - a platform superadmin's TenantId claim is
+    // the empty guid (see CwSessionAuthenticationHandler), never any real tenant's, so it needs
+    // its own lookup rather than reusing that tenant-scoped query.
+    private static async Task<IResult> GetSupportTicketAsync(Guid id, AppDbContext db, CancellationToken token)
+    {
+        var ticket = await db.SupportTickets
+            .AsNoTracking()
+            .Include(t => t.Messages.OrderBy(m => m.CreatedAt))
+            .FirstOrDefaultAsync(t => t.Id == id, token);
+        if (ticket is null) return Results.NotFound();
+
+        var tenantName = await db.Tenants.AsNoTracking()
+            .Where(t => t.Id == ticket.TenantId)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync(token) ?? "Unknown";
+
+        var userIds = ticket.Messages.Select(m => m.AuthorUserId).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        if (ticket.CreatedByUserId.HasValue) userIds.Add(ticket.CreatedByUserId.Value);
+        if (ticket.AssignedToUserId.HasValue) userIds.Add(ticket.AssignedToUserId.Value);
+        var userLookup = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => new { Name = u.Name ?? u.Email, u.Role }, token);
+
+        var dto = new PlatformTicketDetailDto(
+            ticket.Id,
+            ticket.TenantId,
+            tenantName,
+            ticket.Subject,
+            ticket.Body,
+            ticket.Status,
+            ticket.AssignedRole,
+            ticket.AssignedToUserId,
+            ticket.AssignedToUserId.HasValue && userLookup.TryGetValue(ticket.AssignedToUserId.Value, out var an) ? an.Name : null,
+            ticket.CreatedByUserId.HasValue && userLookup.TryGetValue(ticket.CreatedByUserId.Value, out var cn) ? cn.Name : null,
+            ticket.CreatedAt,
+            ticket.UpdatedAt,
+            ticket.Messages.Select(m => new PlatformMessageDto(
+                m.Id,
+                m.AuthorUserId,
+                m.AuthorUserId.HasValue && userLookup.TryGetValue(m.AuthorUserId.Value, out var mn) ? mn.Name : null,
+                m.AuthorUserId.HasValue && userLookup.TryGetValue(m.AuthorUserId.Value, out var mr) && mr.Role.Equals("superadmin", StringComparison.OrdinalIgnoreCase),
+                m.Body,
+                m.CreatedAt)));
+
+        return Results.Ok(dto);
+    }
+
+    private sealed record PlatformReplyRequest(string Body);
+
+    private static async Task<IResult> ReplySupportTicketAsync(
+        Guid id,
+        PlatformReplyRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IEmailService emailService,
+        CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(request.Body)) return Results.BadRequest(new { error = "body_required" });
+
+        var ticket = await db.SupportTickets.FirstOrDefaultAsync(t => t.Id == id, token);
+        if (ticket is null) return Results.NotFound();
+
+        ticket.UpdatedAt = DateTime.UtcNow;
+        db.SupportMessages.Add(new Domain.Entities.SupportMessage
+        {
+            TicketId = ticket.Id,
+            AuthorUserId = accessor.Current.UserId,
+            Body = request.Body.Trim()
+        });
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, ticket.TenantId, accessor, "platform_support_reply", new { ticketId = id }, token);
+
+        if (ticket.CreatedByUserId.HasValue)
+        {
+            var creatorEmail = await db.Users.AsNoTracking()
+                .Where(u => u.Id == ticket.CreatedByUserId.Value)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync(token);
+            if (!string.IsNullOrWhiteSpace(creatorEmail))
+            {
+                var html =
+                    $"<p>Hello,</p><p>CertiWatch support replied to your ticket.</p>" +
+                    $"<p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(ticket.Subject)}</p>" +
+                    $"<p>{System.Net.WebUtility.HtmlEncode(request.Body)}</p>";
+                await emailService.SendAsync(creatorEmail, $"Re: {ticket.Subject}", html, token);
             }
         }
 

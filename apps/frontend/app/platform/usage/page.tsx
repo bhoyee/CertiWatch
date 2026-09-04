@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/api";
 
 type DayStat = { date: string; count: number };
@@ -14,10 +17,6 @@ type UsageOverview = {
   health: Health;
 };
 
-async function getUsage(): Promise<UsageOverview> {
-  return await fetchJson<UsageOverview>("/api/platform/usage/overview");
-}
-
 function StatusBadge({ label, tone }: { label: string; tone?: "green" | "amber" | "red" | "slate" }) {
   const colors: Record<string, string> = {
     green: "bg-emerald-50 text-emerald-700",
@@ -28,8 +27,40 @@ function StatusBadge({ label, tone }: { label: string; tone?: "green" | "amber" 
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${colors[tone ?? "slate"]}`}>{label}</span>;
 }
 
-export default async function PlatformUsagePage() {
-  const data = await getUsage();
+export default function PlatformUsagePage() {
+  const [data, setData] = useState<UsageOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchJson<UsageOverview>("/api/platform/usage/overview")
+      .then((res) => {
+        if (active) setData(res);
+      })
+      .catch((err: any) => {
+        if (active) setError(err?.message ?? "Failed to load usage data");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-slate-600">Loading usage data…</div>;
+  }
+
+  if (error || !data) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {error ?? "Failed to load usage data"}
+      </div>
+    );
+  }
+
   const maxCount = data.last7Days.length ? Math.max(...data.last7Days.map((d) => d.count)) : 1;
 
   const cards = [

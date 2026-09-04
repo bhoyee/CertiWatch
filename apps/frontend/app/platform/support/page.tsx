@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { fetchJson, postVoid } from "@/lib/api";
@@ -195,32 +196,19 @@ function PlatformSupportPageContent() {
               <span>{t.createdByName ?? "Unknown"}</span>
               <span>{new Date(t.createdAt).toLocaleString()}</span>
               <span>{new Date(t.updatedAt).toLocaleString()}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <ActionButton
-                  label="Open"
-                  onClick={() => updateTicket(t.id, { status: "open" })}
-                  disabled={busyId === t.id}
-                />
-                <ActionButton
-                  label="Pending"
-                  onClick={() => updateTicket(t.id, { status: "pending" })}
-                  disabled={busyId === t.id}
-                />
-                <ActionButton
-                  label="Close"
-                  onClick={() => updateTicket(t.id, { status: "closed" })}
-                  disabled={busyId === t.id}
-                />
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/platform/support/${t.id}`}
+                  className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  View & reply
+                </Link>
                 <ActionButton
                   label="Escalate"
+                  color="purple"
                   onClick={() =>
                     updateTicket(t.id, { assignedRole: "superadmin", assignedToUserId: null, unassign: true })
                   }
-                  disabled={busyId === t.id}
-                />
-                <ActionButton
-                  label="Unassign"
-                  onClick={() => updateTicket(t.id, { unassign: true })}
                   disabled={busyId === t.id}
                 />
                 {savingStatus && busyId === t.id && <span className="text-xs text-slate-500">Saving.</span>}
@@ -255,12 +243,30 @@ function StatusBadge({ value }: { value: string }) {
   );
 }
 
-function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+const actionColors: Record<string, string> = {
+  amber: "bg-amber-100 text-amber-800 hover:bg-amber-200",
+  blue: "bg-blue-100 text-blue-800 hover:bg-blue-200",
+  emerald: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
+  purple: "bg-purple-100 text-purple-800 hover:bg-purple-200",
+  slate: "bg-slate-100 text-slate-700 hover:bg-slate-200"
+};
+
+function ActionButton({
+  label,
+  color,
+  onClick,
+  disabled
+}: {
+  label: string;
+  color: keyof typeof actionColors;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+      className={`rounded-full px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${actionColors[color]}`}
     >
       {label}
     </button>

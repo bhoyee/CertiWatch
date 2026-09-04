@@ -52,8 +52,20 @@ type InvoiceRow = {
   hostedInvoiceUrl?: string | null;
 };
 
-function formatCurrency(value: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+function formatCurrency(value?: number | null, currency?: string | null) {
+  const amount = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  // Stripe currency codes are 3 letters; anything else (missing, empty, malformed) would make
+  // Intl.NumberFormat throw a RangeError and take the whole page down with it - fall back to a
+  // plain-number render instead of trusting the value is always well-formed.
+  const code = (currency ?? "USD").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) {
+    return `${amount.toFixed(2)} ${code || "?"}`.trim();
+  }
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${code}`;
+  }
 }
 
 function formatDate(value?: string | null) {
@@ -75,12 +87,12 @@ export default function PlatformBillingPage() {
       setError(null);
       const [ov, subs, inv] = await Promise.all([
         fetchJson<BillingOverview>("/api/platform/billing/overview"),
-        fetchJson<SubscriptionRow[]>("/api/platform/billing/subscriptions"),
-        fetchJson<InvoiceRow[]>("/api/platform/billing/invoices")
+        fetchJson<{ total: number; items: SubscriptionRow[] }>("/api/platform/billing/subscriptions"),
+        fetchJson<{ total: number; items: InvoiceRow[] }>("/api/platform/billing/invoices")
       ]);
       setOverview(ov);
-      setSubscriptions(subs);
-      setInvoices(inv);
+      setSubscriptions(subs.items ?? []);
+      setInvoices(inv.items ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load billing data");
     } finally {
