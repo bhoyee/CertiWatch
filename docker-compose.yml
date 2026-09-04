@@ -28,10 +28,18 @@ services:
       - postgres
       - redis
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # Defaults to Development so local Docker keeps working exactly as before with no .env
+      # changes. When this stack is actually deployed somewhere, set ASPNETCORE_ENVIRONMENT=
+      # Production in .env - that also disables the dev-only auto-admin-login bypass and Swagger
+      # UI in Program.cs, and switches on the MagicLinks__Secret startup check below.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__postgres: Host=postgres;Username=postgres;Password=postgres;Database=certiwatch
       MagicLinks__BaseUrl: http://localhost:3300
+      # "dev-secret" is a known placeholder the API refuses to start with outside Development
+      # (see Program.cs) - set a real random value in .env as MagicLinks__Secret before ever
+      # setting ASPNETCORE_ENVIRONMENT=Production.
+      MagicLinks__Secret: ${MagicLinks__Secret:-dev-secret}
       Stripe__SecretKey: ${Stripe__SecretKey:-sk_test_xxx}
       Stripe__WebhookSecret: ${Stripe__WebhookSecret:-whsec_xxx}
       Stripe__MagicLinks__BaseUrl: ${Stripe__MagicLinks__BaseUrl:-http://localhost:3300}
@@ -82,6 +90,9 @@ services:
       WORKER__DeepSeekApiKey: ${DEEPSEEK_API_KEY:-}
       WORKER__DeepSeekBaseUrl: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       WORKER__ApiBaseUrl: http://api:8080
+      # Only used if DoctrBaseUrl (below) is ever unset - Doctr is the real, always-on OCR engine
+      # here. Free key from https://ocr.space/ocrapi, set in .env as WORKER__OcrSpaceApiKey.
+      WORKER__OcrSpaceApiKey: ${WORKER__OcrSpaceApiKey:-}
       # Enroll a device (see README "Docker quickstart") to get a real id/token pair, then set
       # them in .env as WORKER__DeviceId / WORKER__DeviceToken - do not hardcode real values here.
       WORKER__DeviceId: ${WORKER__DeviceId:-}

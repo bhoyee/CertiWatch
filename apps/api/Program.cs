@@ -32,6 +32,7 @@ using Serilog;
 using CertiWatch.Contracts.Requests;
 using Stripe;
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,7 +49,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddAppDbContext(builder.Configuration);
 
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
-builder.Services.AddSingleton<IIngestionQueue, InMemoryIngestionQueue>();
+builder.Services.AddSingleton<IIngestionQueue, RedisIngestionQueue>();
 builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(_ =>
 {
     var connectionString = builder.Configuration["Redis:ConnectionString"] ?? "redis:6379";
@@ -127,6 +128,22 @@ builder.Services.Configure<JsonOptions>(o =>
 
 var app = builder.Build();
 
+// Magic-link tokens are signed with this secret - if it's ever missing or left as a known
+// placeholder outside Development, every login token becomes forgeable with a value that's
+// sitting in the git history. Fail fast at startup instead of silently accepting it.
+if (!app.Environment.IsDevelopment())
+{
+    var magicLinkSecret = app.Services.GetRequiredService<IOptions<MagicLinkOptions>>().Value.Secret;
+    var knownPlaceholders = new[] { "dev-secret", "local-secret" };
+    if (string.IsNullOrWhiteSpace(magicLinkSecret) || knownPlaceholders.Contains(magicLinkSecret))
+    {
+        throw new InvalidOperationException(
+            "MagicLinks:Secret is missing or set to a known placeholder value. Set a real secret " +
+            "via configuration (e.g. the MagicLinks__Secret environment variable) before starting " +
+            "outside Development.");
+    }
+}
+
 app.UseSerilogRequestLogging();
 // Leave HTTPS redirection off for local/docker to avoid mixed-content/fetch failures.
 app.UseSecurityHeaders();
@@ -183,6 +200,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+// Top-level statements generate an internal Program class by default - WebApplicationFactory<T>
+// (used by the integration tests in tests/ApiTests) needs a public type to reference.
+public partial class Program;
 
 public static class SecurityHeaderExtensions
 {
