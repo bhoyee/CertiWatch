@@ -9,17 +9,21 @@ const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
 const COLUMN_KEYS = ["staffName", "courseName", "issuer", "issueDate", "expiryDate", "confidence", "status", "actions"] as const;
 type ColumnKey = (typeof COLUMN_KEYS)[number];
+// Widths are percentages of the table (not px) that always sum to 100 - resizing a column
+// borrows/gives space to its neighbor rather than growing the table itself, so the table never
+// exceeds its container and never needs a horizontal scrollbar just from resizing.
 const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
-  staffName: 160,
-  courseName: 170,
-  issuer: 170,
-  issueDate: 110,
-  expiryDate: 140,
-  confidence: 110,
-  status: 120,
-  actions: 150
+  staffName: 15,
+  courseName: 15,
+  issuer: 15,
+  issueDate: 10,
+  expiryDate: 13,
+  confidence: 10,
+  status: 11,
+  actions: 11
 };
-const COL_WIDTHS_STORAGE_KEY = "cw_records_col_widths_v1";
+const MIN_COL_PCT = 6;
+const COL_WIDTHS_STORAGE_KEY = "cw_records_col_widths_v2";
 
 type RecordDto = {
   id: string;
@@ -88,24 +92,44 @@ function RecordsPageInner() {
       return DEFAULT_COL_WIDTHS;
     }
   });
-  const resizingRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Column resizing: track the dragged column in a ref (not state - we don't want a re-render
-  // per pixel) and only commit widths to state, then localStorage, on pointerup.
+  // Column resizing redistributes width between the dragged column and its neighbor (dragging
+  // the last column's handle borrows from the one before it instead, since it has no "next"),
+  // so the pair's combined width - and therefore the table's total width - never changes. That's
+  // what keeps the table exactly at the container's width with no horizontal scrollbar, instead
+  // of the table itself growing/shrinking as columns are resized.
   const startResize = (key: ColumnKey) => (e: React.PointerEvent) => {
     e.preventDefault();
-    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] };
+    const keys: ColumnKey[] = canManage ? [...COLUMN_KEYS] : COLUMN_KEYS.filter((k) => k !== "actions");
+    const idx = keys.indexOf(key);
+    const isLast = idx === keys.length - 1;
+    const neighborKey = isLast ? keys[idx - 1] : keys[idx + 1];
+    if (!neighborKey) return;
+
+    const containerWidth = tableWrapperRef.current?.clientWidth || 1000;
+    const startX = e.clientX;
+    const startOwn = colWidths[key];
+    const startNeighbor = colWidths[neighborKey];
+    const pairTotal = startOwn + startNeighbor;
 
     const onMove = (moveEvent: PointerEvent) => {
-      const active = resizingRef.current;
-      if (!active) return;
-      const next = Math.max(70, active.startWidth + (moveEvent.clientX - active.startX));
-      setColWidths((prev) => ({ ...prev, [active.key]: next }));
+      const deltaPct = ((moveEvent.clientX - startX) / containerWidth) * 100;
+      const signedDelta = isLast ? -deltaPct : deltaPct;
+      let nextOwn = startOwn + signedDelta;
+      let nextNeighbor = pairTotal - nextOwn;
+      if (nextOwn < MIN_COL_PCT) {
+        nextOwn = MIN_COL_PCT;
+        nextNeighbor = pairTotal - nextOwn;
+      } else if (nextNeighbor < MIN_COL_PCT) {
+        nextNeighbor = MIN_COL_PCT;
+        nextOwn = pairTotal - nextNeighbor;
+      }
+      setColWidths((prev) => ({ ...prev, [key]: nextOwn, [neighborKey]: nextNeighbor }));
     };
     const onUp = () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
-      resizingRef.current = null;
       setColWidths((prev) => {
         try {
           window.localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(prev));
@@ -220,10 +244,6 @@ function RecordsPageInner() {
   }
 
   const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
-  const visibleColumnKeys: ColumnKey[] = canManage
-    ? [...COLUMN_KEYS]
-    : COLUMN_KEYS.filter((key) => key !== "actions");
-  const totalTableWidth = visibleColumnKeys.reduce((sum, key) => sum + colWidths[key], 0);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-4">
@@ -299,25 +319,20 @@ function RecordsPageInner() {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        {/* An explicit pixel width, not just table-layout:fixed + <col>, keeps the table's
-            rendered width exactly equal to the sum of the column widths - without it, browsers
-            can stretch the last column (Actions) to soak up any leftover space between that sum
-            and whatever width the table would otherwise be given, so a drag on one column could
-            appear to silently resize a different one. */}
-        <table
-          className="divide-y divide-slate-200 text-sm"
-          style={{ tableLayout: "fixed", width: totalTableWidth }}
-        >
+      <div ref={tableWrapperRef}>
+        {/* Column widths are percentages that always sum to 100 (see startResize) and the table
+            is w-full, so it always exactly fills this wrapper - no horizontal scrolling, just
+            like before resizing was added. */}
+        <table className="w-full divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
           <colgroup>
-            <col style={{ width: colWidths.staffName }} />
-            <col style={{ width: colWidths.courseName }} />
-            <col style={{ width: colWidths.issuer }} />
-            <col style={{ width: colWidths.issueDate }} />
-            <col style={{ width: colWidths.expiryDate }} />
-            <col style={{ width: colWidths.confidence }} />
-            <col style={{ width: colWidths.status }} />
-            {canManage && <col style={{ width: colWidths.actions }} />}
+            <col style={{ width: `${colWidths.staffName}%` }} />
+            <col style={{ width: `${colWidths.courseName}%` }} />
+            <col style={{ width: `${colWidths.issuer}%` }} />
+            <col style={{ width: `${colWidths.issueDate}%` }} />
+            <col style={{ width: `${colWidths.expiryDate}%` }} />
+            <col style={{ width: `${colWidths.confidence}%` }} />
+            <col style={{ width: `${colWidths.status}%` }} />
+            {canManage && <col style={{ width: `${colWidths.actions}%` }} />}
           </colgroup>
           <thead className="bg-slate-50">
             <tr>
@@ -499,7 +514,7 @@ function Header({
 }) {
   const isActive = field && sortField?.toLowerCase() === field.toLowerCase();
   return (
-    <th className="relative border-r border-slate-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
+    <th className="relative border-r-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
       <span
         onClick={onClick}
         className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
@@ -522,7 +537,7 @@ function Header({
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <td className={`break-words border-r border-slate-100 px-3 py-2 text-slate-800 last:border-r-0 ${className}`}>
+    <td className={`break-words border-r-2 border-slate-200 px-3 py-2 text-slate-800 last:border-r-0 ${className}`}>
       {children}
     </td>
   );
