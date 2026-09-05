@@ -467,10 +467,12 @@ function ChartCard({
     <div className={`flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
       <p className="text-sm font-semibold text-slate-900">{title}</p>
       {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
-      {/* flex-1 justify-end: when this card sits next to a taller sibling in the same grid row
-          (grid stretches both to equal height), pin the chart to the bottom instead of leaving
-          the extra stretched space below it - keeps both charts' baseline labels level. */}
-      <div className="mt-4 flex flex-1 flex-col justify-end">{children}</div>
+      {/* flex-1 (no justify-end): when this card sits next to a taller sibling in the same grid
+          row (grid stretches both to equal height), this hands the chart the full stretched
+          height instead of leaving it below a compact block - each chart fills it how it needs
+          to (ExpiryBarChart keeps values pinned top and labels pinned bottom via its own
+          internal flex layout, rather than the whole block just sliding down as one unit). */}
+      <div className="mt-4 flex-1">{children}</div>
     </div>
   );
 }
@@ -593,17 +595,23 @@ function ExpiryBarChart({ buckets }: { buckets: ExpiryBuckets }) {
     { label: "60+ days", value: buckets.next90Plus, color: "bg-emerald-500" }
   ];
   const max = Math.max(1, ...items.map((i) => i.value));
-  const barTrackHeight = 90;
 
   return (
-    <div className="flex items-end justify-between gap-2">
+    <div className="flex h-full min-h-[140px] items-stretch justify-between gap-2">
       {items.map((item) => (
         <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
           <span className="text-sm font-semibold text-slate-900">{item.value}</span>
-          <div className="flex w-full items-end justify-center" style={{ height: barTrackHeight }}>
+          {/* A flex-grow "bar chart without measuring" trick: the spacer above and the bar below
+              share the track's height in proportion to (max - value) : value, so the bar's
+              rendered height always reflects its share of the tallest bucket, and it naturally
+              sits at the bottom of the track (last child in a column flex) - values stay pinned
+              to the top of the card and labels to the bottom regardless of the track's actual
+              pixel height, which changes whenever this card is stretched to match a taller sibling. */}
+          <div className="flex w-full flex-1 flex-col items-center">
+            <div style={{ flex: `${Math.max(0, max - item.value)} 1 0%` }} />
             <div
               className={`w-7 rounded-t-md transition-all duration-500 sm:w-9 ${item.color}`}
-              style={{ height: `${item.value === 0 ? 3 : Math.max(6, (item.value / max) * barTrackHeight)}px` }}
+              style={{ flex: `${item.value === 0 ? 0 : item.value} 1 0%`, minHeight: item.value === 0 ? 4 : 6 }}
             />
           </div>
           <span className="text-center text-[11px] leading-tight text-slate-500">{item.label}</span>
