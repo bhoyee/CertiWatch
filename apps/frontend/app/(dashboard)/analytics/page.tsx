@@ -237,7 +237,7 @@ export default function AnalyticsPage() {
                 setPage(1);
               }}
               placeholder="Search staff, requirement, issuer..."
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
+              className="w-full rounded-md border-2 border-slate-300 px-3 py-2 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100 md:w-64"
             />
             <select
               value={pageSize}
@@ -260,10 +260,10 @@ export default function AnalyticsPage() {
             <thead className="bg-slate-50">
               <tr>
                 <Header onClick={() => toggleSort("staff")} sorted={sortKey === "staff"} dir={sortDir}>
-                  Staff
+                  Staff name
                 </Header>
                 <Header onClick={() => toggleSort("course")} sorted={sortKey === "course"} dir={sortDir}>
-                  Requirement
+                  Requirement type
                 </Header>
                 <Header onClick={() => toggleSort("expiry")} sorted={sortKey === "expiry"} dir={sortDir}>
                   Expiry
@@ -464,10 +464,13 @@ function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+    <div className={`flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
       <p className="text-sm font-semibold text-slate-900">{title}</p>
       {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
-      <div className="mt-4">{children}</div>
+      {/* flex-1 justify-end: when this card sits next to a taller sibling in the same grid row
+          (grid stretches both to equal height), pin the chart to the bottom instead of leaving
+          the extra stretched space below it - keeps both charts' baseline labels level. */}
+      <div className="mt-4 flex flex-1 flex-col justify-end">{children}</div>
     </div>
   );
 }
