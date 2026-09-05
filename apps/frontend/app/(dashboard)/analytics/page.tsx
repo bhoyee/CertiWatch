@@ -350,8 +350,18 @@ const ACCENT_TINTS: Record<string, string> = {
   "bg-cyan-600": "border-cyan-100 bg-cyan-50/70"
 };
 
+const ACCENT_LINES: Record<string, string> = {
+  "bg-indigo-600": "bg-indigo-400",
+  "bg-amber-500": "bg-amber-400",
+  "bg-rose-600": "bg-rose-400",
+  "bg-slate-500": "bg-slate-400",
+  "bg-emerald-600": "bg-emerald-400",
+  "bg-cyan-600": "bg-cyan-400"
+};
+
 function StatCard({ label, value, icon, accent, delta, sparkline }: StatCardProps) {
   const tint = ACCENT_TINTS[accent] ?? "border-slate-200 bg-white";
+  const hasSparkline = sparkline && sparkline.length > 1;
   return (
     <div className={`rounded-xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tint}`}>
       <div className="flex items-start justify-between">
@@ -369,13 +379,15 @@ function StatCard({ label, value, icon, accent, delta, sparkline }: StatCardProp
           </span>
         )}
       </div>
-      <p className="mt-2 text-xl font-bold text-slate-900">{value}</p>
+      <p className="mt-2 text-2xl font-extrabold text-slate-900">{value}</p>
       <p className="text-xs text-slate-500">{label}</p>
-      {sparkline && sparkline.length > 1 && (
-        <div className="mt-2 h-5">
-          <Sparkline data={sparkline} />
-        </div>
-      )}
+      <div className="mt-2 flex h-5 items-center">
+        {hasSparkline ? (
+          <Sparkline data={sparkline!} />
+        ) : (
+          <div className={`h-0.5 w-full rounded-full ${ACCENT_LINES[accent] ?? "bg-slate-300"}`} />
+        )}
+      </div>
     </div>
   );
 }
