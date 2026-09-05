@@ -7,7 +7,7 @@ import { fetchJson, postVoid } from "../../lib/api";
 type NotificationDto = {
   id: string;
   recordId?: string | null;
-  type: "expiring" | "expired" | string;
+  type: "expiring" | "expired" | "needs_review" | string;
   title: string;
   body: string;
   isRead: boolean;
@@ -129,7 +129,13 @@ export function NotificationBell() {
               items.map((n) => (
                 <Link
                   key={n.id}
-                  href={n.recordId ? "/records" : "/analytics"}
+                  href={
+                    n.type === "needs_review" && n.recordId
+                      ? `/review?recordId=${n.recordId}`
+                      : n.recordId
+                        ? "/records"
+                        : "/analytics"
+                  }
                   onClick={() => {
                     if (!n.isRead) void markRead(n.id);
                     setOpen(false);

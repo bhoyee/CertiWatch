@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Services;
@@ -6,6 +7,7 @@ using CertiWatch.Parsing;
 using CertiWatch.Parsing.Rules;
 using CertiWatch.Contracts.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 
 namespace CertiWatch.Api.Infrastructure.Jobs;
@@ -176,6 +178,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     .OrderByDescending(r => r.CreatedAt)
                     .FirstOrDefaultAsync(stoppingToken);
 
+                Guid? newlyNeedsReviewRecordId = null;
+
                 if (existingRecord is null)
                 {
                     var document = new Document
@@ -221,6 +225,12 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     };
 
                     db.Records.Add(record);
+
+                    if (processingStatus == ProcessingStatus.NeedsReview)
+                    {
+                        AddNeedsReviewNotification(db, docEvent.TenantId, record.Id, staff, course, docEvent.DetectedAt);
+                        newlyNeedsReviewRecordId = record.Id;
+                    }
                 }
                 else
                 {
@@ -256,6 +266,11 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     existingRecord.ExtractionConfidence = extractionConfidence ?? existingRecord.ExtractionConfidence;
                     existingRecord.Confidence = Math.Max(existingRecord.Confidence, recordConfidence);
 
+                    // Captured before ProcessingStatus is overwritten below, so we can tell a fresh
+                    // needs-review flag (worth a notification) apart from one that was already sitting
+                    // in the queue (re-ingesting the same hash shouldn't re-notify every time).
+                    var wasNeedsReview = existingRecord.ProcessingStatus == ProcessingStatus.NeedsReview;
+
                     // Auto-clear NeedsReview if a subsequent high-confidence pass succeeds without review hints.
                     var shouldAutoClear = existingRecord.ProcessingStatus == ProcessingStatus.NeedsReview
                                              && processingStatus != ProcessingStatus.NeedsReview
@@ -286,9 +301,20 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     existingRecord.FieldsJson = JsonSerializer.Serialize(sanitizedFields);
                     existingRecord.UpdatedAt = docEvent.DetectedAt;
                     _logger.LogInformation("Updated record {RecordId} for hash {FileHash} with staff={Staff} course={Course}, New Status: {Status}", existingRecord.Id, docEvent.FileHash, existingRecord.StaffName, existingRecord.CourseName, processingStatus);
+
+                    if (processingStatus == ProcessingStatus.NeedsReview && !wasNeedsReview)
+                    {
+                        AddNeedsReviewNotification(db, docEvent.TenantId, existingRecord.Id, existingRecord.StaffName, existingRecord.CourseName, docEvent.DetectedAt);
+                        newlyNeedsReviewRecordId = existingRecord.Id;
+                    }
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
+
+                if (newlyNeedsReviewRecordId.HasValue)
+                {
+                    await EmailAdminsNeedsReviewAsync(scope, docEvent.TenantId, newlyNeedsReviewRecordId.Value, staff!, course!, stoppingToken);
+                }
 
                 // Notify manager if a managed upload was ingested.
                 try
@@ -385,6 +411,54 @@ public sealed class DocumentIngestionWorker : BackgroundService
         }
 
         return cleaned;
+    }
+
+    private static void AddNeedsReviewNotification(AppDbContext db, Guid tenantId, Guid recordId, string staffName, string courseName, DateTime createdAt)
+    {
+        db.Notifications.Add(new Notification
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            RecordId = recordId,
+            Type = "needs_review",
+            Title = $"{courseName} needs review",
+            Body = $"{staffName}'s {courseName} document needs review before it can be approved.",
+            CreatedAt = createdAt
+        });
+    }
+
+    // Best-effort - a failed email here shouldn't fail the whole ingestion, the in-app
+    // notification (already saved) is the source of truth either way.
+    private async Task EmailAdminsNeedsReviewAsync(IServiceScope scope, Guid tenantId, Guid recordId, string staffName, string courseName, CancellationToken token)
+    {
+        try
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            var baseUrl = scope.ServiceProvider.GetRequiredService<IOptions<MagicLinkOptions>>().Value.BaseUrl;
+
+            var recipients = await db.Users.AsNoTracking()
+                .Where(u => u.TenantId == tenantId && !u.IsDisabled &&
+                    (u.Role.ToLower() == "admin" || u.Role.ToLower() == "manager"))
+                .Select(u => new { u.Name, u.Email })
+                .ToListAsync(token);
+
+            var link = $"{baseUrl.TrimEnd('/')}/review?recordId={recordId}";
+            foreach (var recipient in recipients)
+            {
+                if (string.IsNullOrWhiteSpace(recipient.Email)) continue;
+                var html = $"""
+                    <p>Hello {recipient.Name ?? "there"},</p>
+                    <p><strong>{courseName}</strong> for <strong>{staffName}</strong> needs review before it can be approved.</p>
+                    <p><a href="{link}">Review it now</a></p>
+                    """;
+                await emailService.SendAsync(recipient.Email, $"{courseName} needs review", html, token);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send needs-review email for record {RecordId}", recordId);
+        }
     }
 
     private static string? NormalizeText(string? value, params string[] unknownTokens)

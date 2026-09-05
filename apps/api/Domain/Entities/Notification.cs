@@ -7,7 +7,7 @@ public sealed class Notification : BaseEntity
 {
     public Guid TenantId { get; set; }
     public Guid? RecordId { get; set; }
-    public string Type { get; set; } = "expiring"; // "expiring" | "expired"
+    public string Type { get; set; } = "expiring"; // "expiring" | "expired" | "needs_review"
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
     public bool IsRead { get; set; }

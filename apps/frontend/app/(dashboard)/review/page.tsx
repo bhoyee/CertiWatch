@@ -571,6 +571,31 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
   const previewUrl = `${API_BASE}/api/documents/${document.id}/file`;
   const iframeTitle = `${document.fileName} preview`;
   const [enlarged, setEnlarged] = useState(false);
+  const rotationKey = `cw_doc_rotation_${document.id}`;
+  // Keyed by document id in localStorage so a rotation choice is remembered next time this exact
+  // document is opened (per-browser, not shared between reviewers - matches how the resizable
+  // Records columns persist too).
+  const [rotation, setRotation] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    try {
+      const saved = Number(window.localStorage.getItem(rotationKey));
+      return [0, 90, 180, 270].includes(saved) ? saved : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const rotate = (delta: number) => {
+    setRotation((prev) => {
+      const next = ((prev + delta) % 360 + 360) % 360;
+      try {
+        window.localStorage.setItem(rotationKey, String(next));
+      } catch {
+        // Best-effort - rotation still works this session even if it can't persist.
+      }
+      return next;
+    });
+  };
+  const isSideways = rotation === 90 || rotation === 270;
 
   return (
     <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
@@ -617,21 +642,67 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <p className="truncate text-sm font-semibold text-slate-900">{document.fileName}</p>
-              <button
-                onClick={() => setEnlarged(false)}
-                aria-label="Close preview"
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                  <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => rotate(-90)}
+                  aria-label="Rotate left"
+                  title="Rotate left"
+                  className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <RotateIcon />
+                </button>
+                <button
+                  onClick={() => rotate(90)}
+                  aria-label="Rotate right"
+                  title="Rotate right"
+                  className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <RotateIcon mirrored />
+                </button>
+                <button
+                  onClick={() => setEnlarged(false)}
+                  aria-label="Close preview"
+                  className="ml-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                    <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <iframe src={previewUrl} title={iframeTitle} className="flex-1 bg-white" />
+            <div className="flex flex-1 items-center justify-center overflow-auto bg-slate-100 p-4">
+              <div
+                className="bg-white shadow transition-transform duration-200"
+                style={{
+                  width: isSideways ? "70vh" : "70vw",
+                  height: isSideways ? "70vw" : "70vh",
+                  transform: `rotate(${rotation}deg)`
+                }}
+              >
+                <iframe src={previewUrl} title={iframeTitle} className="h-full w-full border-0 bg-white" />
+              </div>
+            </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+// A rotate-right icon is this same rotate-left arrow mirrored horizontally (mirrored prop) -
+// avoids drawing two near-identical curved-arrow paths by hand.
+function RotateIcon({ mirrored }: { mirrored?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className={`h-4 w-4 ${mirrored ? "-scale-x-100" : ""}`}
+    >
+      <path d="M4 9a8 8 0 1 1 1.5 8.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 4v5h5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
