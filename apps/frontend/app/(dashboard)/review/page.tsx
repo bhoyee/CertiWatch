@@ -73,6 +73,19 @@ function ReviewQueuePageInner() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const lastDetailHash = useRef<string | null>(null);
+  const detailSectionRef = useRef<HTMLElement>(null);
+  const [requirementTypeNames, setRequirementTypeNames] = useState<string[]>([]);
+
+  // Best-effort: powers a suggestion list on the Requirement type field so a reviewer can match
+  // a document's own wording (e.g. a council's certificate titled differently) to the tenant's
+  // actual catalog entry instead of having to know/retype it exactly. 403s for managers (this
+  // endpoint is admin-only) are fine to swallow - the field just falls back to plain free text.
+  useEffect(() => {
+    if (isViewer) return;
+    fetchJson<Array<{ name: string }>>("/api/requirement-types")
+      .then((types) => setRequirementTypeNames(types.map((t) => t.name).filter(Boolean)))
+      .catch(() => setRequirementTypeNames([]));
+  }, [isViewer]);
   // Clicking "View" on a record in the Records table links here with ?recordId=... - honor that
   // exact record on the first load even if it isn't in the needs-review queue (e.g. it's since
   // been approved elsewhere), rather than the queue's own load() immediately overwriting it with
@@ -261,7 +274,15 @@ function ReviewQueuePageInner() {
                         </td>
                         <td className="px-3 py-2 align-top text-center">
                           <button
-                            onClick={() => setSelectedId(record.id)}
+                            onClick={() => {
+                              setSelectedId(record.id);
+                              // Selecting a row only updates the detail panel on the right - on
+                              // narrow screens that panel sits below the fold, so without this a
+                              // click can look like it did nothing. Also re-scroll even when the
+                              // row was already selected (querySelector's own scrollIntoView is a
+                              // no-op if already in view, so this is a safe, cheap nudge either way).
+                              detailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }}
                             className="rounded-md bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
                           >
                             View review
@@ -276,7 +297,7 @@ function ReviewQueuePageInner() {
           )}
         </section>
 
-        <section className="min-h-[320px] rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section ref={detailSectionRef} className="min-h-[320px] scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-amber-600">Needs review</p>
@@ -304,7 +325,13 @@ function ReviewQueuePageInner() {
 
           {!detailLoading && detail && (
             <div className="mt-4">
-              <ReviewCard key={detail.record.id} record={detail.record} onUpdated={refreshDetail} onDeleted={handleDeleted} />
+              <ReviewCard
+                key={detail.record.id}
+                record={detail.record}
+                requirementTypeNames={requirementTypeNames}
+                onUpdated={refreshDetail}
+                onDeleted={handleDeleted}
+              />
             </div>
           )}
 
@@ -325,7 +352,17 @@ function ReviewQueuePageInner() {
   );
 }
 
-function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpdated: () => void; onDeleted: () => void }) {
+function ReviewCard({
+  record,
+  requirementTypeNames,
+  onUpdated,
+  onDeleted
+}: {
+  record: RecordDto;
+  requirementTypeNames: string[];
+  onUpdated: () => void;
+  onDeleted: () => void;
+}) {
   const [staffName, setStaffName] = useState(record.staffName ?? "");
   const [courseName, setCourseName] = useState(record.courseName ?? "");
   const [issuer, setIssuer] = useState(record.issuer ?? "");
@@ -345,11 +382,20 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
     setReviewNotes(record.reviewNotes ?? "");
   }, [record]);
 
+  const confidenceValue = record.extractionConfidence ?? record.confidence ?? null;
   const confidenceText = useMemo(() => {
     if (record.extractionConfidence != null) return `${(record.extractionConfidence * 100).toFixed(0)}% AI`;
     if (record.confidence != null) return `${(record.confidence * 100).toFixed(0)}%`;
     return "n/a";
   }, [record.confidence, record.extractionConfidence]);
+  const confidenceColorClass =
+    confidenceValue == null
+      ? "text-slate-500"
+      : confidenceValue >= 0.8
+        ? "text-emerald-600"
+        : confidenceValue >= 0.5
+          ? "text-amber-600"
+          : "text-rose-600";
 
   const patch = async (processingStatus?: number) => {
     setSaving(true);
@@ -402,15 +448,25 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
           <p className="text-xs uppercase text-amber-600">Needs Review</p>
           <h2 className="text-base font-semibold text-slate-900">{courseName || record.courseName}</h2>
           <p className="text-sm text-slate-700">{staffName || record.staffName}</p>
-          <p className="text-xs text-slate-500 mt-1">AI confidence: {confidenceText}</p>
-          {record.reviewReason && <p className="text-xs text-slate-500">Reason: {formatReviewReason(record.reviewReason)}</p>}
+          <p className="mt-1 text-xs text-slate-500">
+            AI confidence: <span className={`font-bold ${confidenceColorClass}`}>{confidenceText}</span>
+          </p>
+          {record.reviewReason && (
+            <p className="font-medium text-xs text-rose-600">Reason: {formatReviewReason(record.reviewReason)}</p>
+          )}
         </div>
         <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">Review</span>
       </div>
 
       <div className="space-y-2">
         <Field label="Staff name" value={staffName} onChange={setStaffName} />
-        <Field label="Requirement type" value={courseName} onChange={setCourseName} />
+        <Field
+          label="Requirement type"
+          value={courseName}
+          onChange={setCourseName}
+          suggestions={requirementTypeNames}
+          listId="requirement-type-suggestions"
+        />
         <Field label="Issuer" value={issuer} onChange={setIssuer} />
         <Field label="Issue date" value={issueDate} onChange={setIssueDate} placeholder="YYYY-MM-DD" />
         <Field label="Expiry date" value={expiryDate} onChange={setExpiryDate} placeholder="YYYY-MM-DD" />
@@ -452,7 +508,7 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
         <button
           onClick={() => patch(NEEDS_REVIEW)}
           disabled={saving}
-          className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
         >
           Save & keep in queue
         </button>
@@ -514,6 +570,7 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
 
   const previewUrl = `${API_BASE}/api/documents/${document.id}/file`;
   const iframeTitle = `${document.fileName} preview`;
+  const [enlarged, setEnlarged] = useState(false);
 
   return (
     <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
@@ -522,14 +579,24 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
         <p className="text-xs text-slate-500">MIME: {document.mimeType}</p>
         <p className="text-xs text-slate-500">Extraction confidence: {formatConfidence(document.extractionConfidence)}</p>
       </div>
-      <div className="mt-3 h-56 overflow-hidden rounded-md border border-slate-200">
+      <button
+        type="button"
+        onClick={() => setEnlarged(true)}
+        className="group relative mt-3 block h-56 w-full overflow-hidden rounded-md border border-slate-200 text-left"
+        title="Click to enlarge"
+      >
         <iframe
           src={previewUrl}
           title={iframeTitle}
           className="h-full w-full bg-white"
           loading="lazy"
         />
-      </div>
+        {/* Overlay to intercept the click - a plain click on the iframe itself would go to the
+            embedded PDF/image viewer instead of bubbling up to this button. */}
+        <span className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition group-hover:bg-slate-900/30 group-hover:opacity-100">
+          <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow">Click to enlarge</span>
+        </span>
+      </button>
       <a
         href={previewUrl}
         target="_blank"
@@ -538,6 +605,32 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
       >
         Open original document in new tab
       </a>
+
+      {enlarged && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6"
+          onClick={() => setEnlarged(false)}
+        >
+          <div
+            className="flex h-full w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <p className="truncate text-sm font-semibold text-slate-900">{document.fileName}</p>
+              <button
+                onClick={() => setEnlarged(false)}
+                aria-label="Close preview"
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                  <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <iframe src={previewUrl} title={iframeTitle} className="flex-1 bg-white" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -546,12 +639,20 @@ function Field({
   label,
   value,
   onChange,
-  placeholder
+  placeholder,
+  suggestions,
+  listId
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  // A datalist keeps this a free-text field (so it still works for anything not in the catalog)
+  // while surfacing the tenant's actual Requirement Type names as suggestions - lets a reviewer
+  // match a document's own wording (e.g. a council titling its certificate differently) to the
+  // canonical name instead of having to know/retype it exactly.
+  suggestions?: string[];
+  listId?: string;
 }) {
   return (
     <div>
@@ -561,7 +662,15 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        list={suggestions && suggestions.length > 0 ? listId : undefined}
       />
+      {suggestions && suggestions.length > 0 && listId && (
+        <datalist id={listId}>
+          {suggestions.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      )}
     </div>
   );
 }
