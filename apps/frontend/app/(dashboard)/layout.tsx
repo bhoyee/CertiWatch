@@ -314,9 +314,15 @@ function TopBar({
         )}
         <button
           onClick={onShowTour}
-          className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+          aria-label="Show tour"
+          title="Show tour"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition hover:bg-amber-100"
         >
-          Show tour
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9.5a2.5 2.5 0 0 1 4.6-1.4c.6.9.3 1.7-.5 2.4-.7.6-1.1 1-1.1 2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 17h.01" strokeLinecap="round" />
+          </svg>
         </button>
         {!isViewer && <NotificationBell />}
       </div>
@@ -521,57 +527,61 @@ function OnboardingTour({
   const current = steps[step];
   if (!open || steps.length === 0) return null;
   const isLast = step === steps.length - 1;
+  const progress = ((step + 1) / steps.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Getting started</p>
-            <h3 className="text-lg font-semibold text-slate-900">{current.title}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
+                <path d="M9 18h6M10 21h4M8.5 14a4.5 4.5 0 1 1 7 0c-.7.8-1.2 1.4-1.4 2.2-.1.4-.4.8-1.1.8h-2c-.7 0-1-.4-1.1-.8-.2-.8-.7-1.4-1.4-2.2Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              Getting started · Step {step + 1} of {steps.length}
+            </p>
           </div>
           <button
             onClick={() => onClose(true)}
-            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            aria-label="Close tour"
+            className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
-            Skip
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
-        <p className="text-sm text-slate-700">{current.body}</p>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex gap-1">
-            {steps.map((_, idx) => (
-              <span
-                key={idx}
-                className={`h-2 w-8 rounded-full ${idx === step ? "bg-indigo-500" : "bg-slate-200"}`}
-              />
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onPrev}
-              disabled={step === 0}
-              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => {
-                if (isLast) onClose(true);
-                else onNext();
-              }}
-              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              {isLast ? "Done" : "Next"}
-            </button>
-          </div>
+
+        <h3 className="mt-4 text-xl font-bold text-slate-900">{current.title}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">{current.body}</p>
+
+        <div className="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all"
+            style={{ width: `${progress}%` }}
+          />
         </div>
-        <button
-          onClick={() => onClose(true)}
-          className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          Don’t show again
-        </button>
+
+        <div className="mt-5 flex items-center justify-between">
+          <button
+            onClick={onPrev}
+            disabled={step === 0}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+          >
+            Back
+          </button>
+          <button
+            onClick={() => {
+              if (isLast) onClose(true);
+              else onNext();
+            }}
+            className="rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+          >
+            {isLast ? "Done" : "Next"}
+          </button>
+        </div>
       </div>
     </div>
   );
