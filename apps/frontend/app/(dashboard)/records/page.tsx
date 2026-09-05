@@ -1,11 +1,25 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+
+const COLUMN_KEYS = ["staffName", "courseName", "issuer", "issueDate", "expiryDate", "confidence", "status", "actions"] as const;
+type ColumnKey = (typeof COLUMN_KEYS)[number];
+const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
+  staffName: 160,
+  courseName: 170,
+  issuer: 170,
+  issueDate: 110,
+  expiryDate: 140,
+  confidence: 110,
+  status: 120,
+  actions: 150
+};
+const COL_WIDTHS_STORAGE_KEY = "cw_records_col_widths_v1";
 
 type RecordDto = {
   id: string;
@@ -65,6 +79,45 @@ function RecordsPageInner() {
   const [status, setStatus] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
+    if (typeof window === "undefined") return DEFAULT_COL_WIDTHS;
+    try {
+      const saved = window.localStorage.getItem(COL_WIDTHS_STORAGE_KEY);
+      return saved ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(saved) } : DEFAULT_COL_WIDTHS;
+    } catch {
+      return DEFAULT_COL_WIDTHS;
+    }
+  });
+  const resizingRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null);
+
+  // Column resizing: track the dragged column in a ref (not state - we don't want a re-render
+  // per pixel) and only commit widths to state, then localStorage, on pointerup.
+  const startResize = (key: ColumnKey) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] };
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const active = resizingRef.current;
+      if (!active) return;
+      const next = Math.max(70, active.startWidth + (moveEvent.clientX - active.startX));
+      setColWidths((prev) => ({ ...prev, [active.key]: next }));
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      resizingRef.current = null;
+      setColWidths((prev) => {
+        try {
+          window.localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(prev));
+        } catch {
+          // Best-effort - resizing still works for the rest of the session either way.
+        }
+        return prev;
+      });
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -184,7 +237,7 @@ function RecordsPageInner() {
               setPage(1);
               setSearch(e.target.value);
             }}
-            className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            className="w-56 rounded-md border-2 border-slate-300 px-3 py-2 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100"
           />
           <select
             value={status}
@@ -217,14 +270,14 @@ function RecordsPageInner() {
           <button
             onClick={load}
             disabled={loading}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
           <button
             onClick={() => exportFile("csv")}
             disabled={exporting !== null}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
           >
             {exporting === "csv" ? "Exporting..." : "Export CSV"}
           </button>
@@ -243,31 +296,83 @@ function RecordsPageInner() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: colWidths.staffName }} />
+            <col style={{ width: colWidths.courseName }} />
+            <col style={{ width: colWidths.issuer }} />
+            <col style={{ width: colWidths.issueDate }} />
+            <col style={{ width: colWidths.expiryDate }} />
+            <col style={{ width: colWidths.confidence }} />
+            <col style={{ width: colWidths.status }} />
+            {canManage && <col style={{ width: colWidths.actions }} />}
+          </colgroup>
           <thead className="bg-slate-50">
             <tr>
-              <Header onClick={() => toggleSort("staffName")} sortField={sortField} sortDir={sortDir} field="staffName">
+              <Header
+                onClick={() => toggleSort("staffName")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="staffName"
+                onResizeStart={startResize("staffName")}
+              >
                 Staff name
               </Header>
-              <Header onClick={() => toggleSort("courseName")} sortField={sortField} sortDir={sortDir} field="courseName">
+              <Header
+                onClick={() => toggleSort("courseName")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="courseName"
+                onResizeStart={startResize("courseName")}
+              >
                 Requirement type
               </Header>
-              <Header onClick={() => toggleSort("issuer")} sortField={sortField} sortDir={sortDir} field="issuer">
+              <Header
+                onClick={() => toggleSort("issuer")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="issuer"
+                onResizeStart={startResize("issuer")}
+              >
                 Issuer
               </Header>
-              <Header onClick={() => toggleSort("issueDate")} sortField={sortField} sortDir={sortDir} field="issueDate">
+              <Header
+                onClick={() => toggleSort("issueDate")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="issueDate"
+                onResizeStart={startResize("issueDate")}
+              >
                 Issue
               </Header>
-              <Header onClick={() => toggleSort("expiryDate")} sortField={sortField} sortDir={sortDir} field="expiryDate">
+              <Header
+                onClick={() => toggleSort("expiryDate")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="expiryDate"
+                onResizeStart={startResize("expiryDate")}
+              >
                 Expiry
               </Header>
-              <Header onClick={() => toggleSort("extractionConfidence")} sortField={sortField} sortDir={sortDir} field="extractionConfidence">
+              <Header
+                onClick={() => toggleSort("extractionConfidence")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="extractionConfidence"
+                onResizeStart={startResize("confidence")}
+              >
                 Confidence
               </Header>
-              <Header onClick={() => toggleSort("processingStatus")} sortField={sortField} sortDir={sortDir} field="processingStatus">
+              <Header
+                onClick={() => toggleSort("processingStatus")}
+                sortField={sortField}
+                sortDir={sortDir}
+                field="processingStatus"
+                onResizeStart={startResize("status")}
+              >
                 Status
               </Header>
-              {canManage && <Header>Actions</Header>}
+              {canManage && <Header onResizeStart={startResize("actions")}>Actions</Header>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -370,32 +475,39 @@ function Header({
   onClick,
   sortField,
   sortDir,
-  field
+  field,
+  onResizeStart
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   sortField?: string;
   sortDir?: "asc" | "desc";
   field?: string;
+  onResizeStart?: (e: React.PointerEvent) => void;
 }) {
   const isActive = field && sortField?.toLowerCase() === field.toLowerCase();
   return (
-    <th
-      onClick={onClick}
-      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
-        onClick ? "cursor-pointer select-none hover:text-slate-900" : ""
-      }`}
-    >
-      <span className="inline-flex items-center gap-1">
+    <th className="relative px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+      <span
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
+      >
         {children}
         {isActive && <span className="text-[10px] text-slate-500">{sortDir === "asc" ? "^" : "v"}</span>}
       </span>
+      {onResizeStart && (
+        <div
+          onPointerDown={onResizeStart}
+          aria-hidden="true"
+          className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-indigo-300/60 active:bg-indigo-400/70"
+        />
+      )}
     </th>
   );
 }
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
+  return <td className={`break-words px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
 }
 
 function LoadingCard() {
