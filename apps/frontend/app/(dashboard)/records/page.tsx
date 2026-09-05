@@ -220,6 +220,10 @@ function RecordsPageInner() {
   }
 
   const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
+  const visibleColumnKeys: ColumnKey[] = canManage
+    ? [...COLUMN_KEYS]
+    : COLUMN_KEYS.filter((key) => key !== "actions");
+  const totalTableWidth = visibleColumnKeys.reduce((sum, key) => sum + colWidths[key], 0);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-4">
@@ -296,7 +300,15 @@ function RecordsPageInner() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
+        {/* An explicit pixel width, not just table-layout:fixed + <col>, keeps the table's
+            rendered width exactly equal to the sum of the column widths - without it, browsers
+            can stretch the last column (Actions) to soak up any leftover space between that sum
+            and whatever width the table would otherwise be given, so a drag on one column could
+            appear to silently resize a different one. */}
+        <table
+          className="divide-y divide-slate-200 text-sm"
+          style={{ tableLayout: "fixed", width: totalTableWidth }}
+        >
           <colgroup>
             <col style={{ width: colWidths.staffName }} />
             <col style={{ width: colWidths.courseName }} />
@@ -487,7 +499,7 @@ function Header({
 }) {
   const isActive = field && sortField?.toLowerCase() === field.toLowerCase();
   return (
-    <th className="relative px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+    <th className="relative border-r border-slate-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
       <span
         onClick={onClick}
         className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
@@ -496,6 +508,8 @@ function Header({
         {isActive && <span className="text-[10px] text-slate-500">{sortDir === "asc" ? "^" : "v"}</span>}
       </span>
       {onResizeStart && (
+        // The border-r above marks where columns divide; this handle just widens the grabbable
+        // area around that same line and highlights it on hover/drag so it reads as draggable.
         <div
           onPointerDown={onResizeStart}
           aria-hidden="true"
@@ -507,7 +521,11 @@ function Header({
 }
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`break-words px-3 py-2 text-slate-800 ${className}`}>{children}</td>;
+  return (
+    <td className={`break-words border-r border-slate-100 px-3 py-2 text-slate-800 last:border-r-0 ${className}`}>
+      {children}
+    </td>
+  );
 }
 
 function LoadingCard() {
