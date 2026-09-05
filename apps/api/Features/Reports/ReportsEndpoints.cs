@@ -184,7 +184,7 @@ public static class ReportsEndpoints
             r.TenantId,
             r.DocumentId,
             Normalize(r.StaffName) ?? "Unknown",
-            Normalize(r.CourseName) ?? "Unknown Course",
+            Normalize(r.CourseName) ?? "Unknown Requirement",
             Normalize(r.Issuer),
             r.IssueDate,
             r.ExpiryDate,
