@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
@@ -53,16 +54,31 @@ const NEEDS_REVIEW = 2; // ProcessingStatus.NeedsReview
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
 export default function ReviewQueuePage() {
+  return (
+    <Suspense fallback={<div className="cw-card p-6 text-sm text-slate-600">Loading review queue...</div>}>
+      <ReviewQueuePageInner />
+    </Suspense>
+  );
+}
+
+function ReviewQueuePageInner() {
   const { role } = useRole();
+  const searchParams = useSearchParams();
   const isViewer = role?.toLowerCase() === "viewer";
   const [records, setRecords] = useState<RecordDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams?.get("recordId") ?? null);
   const [detail, setDetail] = useState<RecordDetailDto | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const lastDetailHash = useRef<string | null>(null);
+  // Clicking "View" on a record in the Records table links here with ?recordId=... - honor that
+  // exact record on the first load even if it isn't in the needs-review queue (e.g. it's since
+  // been approved elsewhere), rather than the queue's own load() immediately overwriting it with
+  // whatever happens to be first in the list. Only applies once; later refreshes fall back to the
+  // normal "stay selected if still in the queue, else pick the first item" behavior.
+  const deepLinkPendingRef = useRef<boolean>(!!searchParams?.get("recordId"));
 
   const load = useCallback(() => {
     if (isViewer) {
@@ -79,6 +95,10 @@ export default function ReviewQueuePage() {
         });
         setRecords(needsReview);
         setSelectedId((prev) => {
+          if (deepLinkPendingRef.current && prev) {
+            deepLinkPendingRef.current = false;
+            return prev;
+          }
           if (needsReview.length === 0) {
             return null;
           }
@@ -383,7 +403,7 @@ function ReviewCard({ record, onUpdated, onDeleted }: { record: RecordDto; onUpd
           <h2 className="text-base font-semibold text-slate-900">{courseName || record.courseName}</h2>
           <p className="text-sm text-slate-700">{staffName || record.staffName}</p>
           <p className="text-xs text-slate-500 mt-1">AI confidence: {confidenceText}</p>
-          {record.reviewReason && <p className="text-xs text-slate-500">Reason: {record.reviewReason}</p>}
+          {record.reviewReason && <p className="text-xs text-slate-500">Reason: {formatReviewReason(record.reviewReason)}</p>}
         </div>
         <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">Review</span>
       </div>
@@ -562,6 +582,22 @@ function formatDate(value?: string | null): string {
 function formatConfidence(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
   return `${Math.round(value * 100)}%`;
+}
+
+const REVIEW_REASON_LABELS: Record<string, string> = {
+  "needs_review:unknown_requirement": "Requirement type could not be determined",
+  "needs_review:duplicate_record": "Possible duplicate of an existing record"
+};
+
+// reviewReason can carry multiple ";"-joined internal hint codes (e.g. "needs_review:unknown_requirement");
+// translate the ones we know into plain language rather than showing raw codes to the reviewer.
+function formatReviewReason(reason: string): string {
+  return reason
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => REVIEW_REASON_LABELS[part] ?? part.replace(/^needs_review:/, "").replace(/_/g, " "))
+    .join(", ");
 }
 
 function statusLabel(status: number | string | undefined): string {

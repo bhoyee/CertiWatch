@@ -29,7 +29,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
         _pipeline = pipeline;
     }
 
-    private static readonly string[] DefaultUnknownTokens = { "Unknown", "Unknown Course", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
+    private static readonly string[] DefaultUnknownTokens = { "Unknown", "Unknown Course", "Unknown Requirement", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -91,8 +91,8 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                 ?? NormalizeText(parsed.Result.StaffName, "Unknown")
                                 ?? "Unknown";
                 var course = sanitizedFields.GetValueOrDefault("course_name")
-                                 ?? NormalizeText(parsed.Result.CourseName, "Unknown Course")
-                                 ?? "Unknown Course";
+                                 ?? NormalizeText(parsed.Result.CourseName, "Unknown Requirement")
+                                 ?? "Unknown Requirement";
                 var issuer = sanitizedFields.GetValueOrDefault("issuer")
                                  ?? NormalizeText(parsed.Result.Issuer);
                 var issueDate = TryParse(sanitizedFields.GetValueOrDefault("issue_date"))
@@ -129,7 +129,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 // Safeguard: If the course is truly unknown (null/empty/token) OR not explicitly allowed by a rule, force review.
                 if (isUnknownCourseName || !courseAllowed)
                 {
-                    var ruleHint = "needs_review:unknown_course";
+                    var ruleHint = "needs_review:unknown_requirement";
                     if (!reviewHints.Contains(ruleHint))
                     {
                         reviewHints.Add(ruleHint);
@@ -239,7 +239,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
 
                     existingRecord.StaffName = staff ?? NormalizeText(existingRecord.StaffName, "Unknown") ?? "Unknown";
-                    existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Course") ?? "Unknown Course";
+                    existingRecord.CourseName = course ?? NormalizeText(existingRecord.CourseName, "Unknown Requirement") ?? "Unknown Requirement";
                     existingRecord.Issuer = issuer ?? NormalizeText(existingRecord.Issuer) ?? existingRecord.Issuer;
                     existingRecord.IssueDate = issueDate ?? existingRecord.IssueDate;
                     if (createdBy.HasValue)

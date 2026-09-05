@@ -494,7 +494,7 @@ public sealed record DeviceEnrollmentCodeResponse(string Code, DateTime ExpiresA
 
 internal static class HashCheckExtensions
 {
-    private static readonly string[] UnknownTokens = { "Unknown", "Unknown Course", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
+    private static readonly string[] UnknownTokens = { "Unknown", "Unknown Course", "Unknown Requirement", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
 
     public static bool IsIncomplete(Record record)
     {

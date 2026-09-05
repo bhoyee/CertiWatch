@@ -240,7 +240,7 @@ public static class RecordsEndpoints
             .ToList();
 
         var csv = new StringBuilder();
-        csv.AppendLine("Staff,Course,Issuer,Issue,Expiry,Status,Confidence");
+        csv.AppendLine("Staff,Requirement,Issuer,Issue,Expiry,Status,Confidence");
         foreach (var row in rows)
         {
             var staff = Escape(row.StaffName);
@@ -379,7 +379,7 @@ public static class RecordsEndpoints
     {
         var fields = DeserializeFields(record.FieldsJson);
         var staff = NormalizeText(record.StaffName) ?? "Unknown";
-        var course = NormalizeText(record.CourseName) ?? "Unknown Course";
+        var course = NormalizeText(record.CourseName) ?? "Unknown Requirement";
         var issuer = NormalizeText(record.Issuer);
         return new RecordDto(
             record.Id,
