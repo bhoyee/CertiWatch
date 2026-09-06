@@ -551,7 +551,60 @@ function ReviewCard({
   );
 }
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.25;
+
 function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | null; loading: boolean }) {
+  // All hooks live above any early return (loading/no-document below) - React requires hooks to
+  // run in the same order on every render. They used to sit after those early returns, which
+  // meant that on whichever render happened to hit "loading" or "no document" - e.g. a background
+  // detail refresh - React lost track of this component's hook slots entirely and silently reset
+  // them, including "enlarged", which is exactly what made an already-open preview popup vanish
+  // on its own with no user action.
+  const [enlarged, setEnlarged] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  // Snapshot of the document the popup was opened for. Rendering the modal from this instead of
+  // the live `document` prop means it keeps showing what the user opened even if the underlying
+  // record changes or drops out from under them in the background (e.g. someone else actions the
+  // same queue item) while they're still looking at it - it only closes when they close it.
+  const [modalDoc, setModalDoc] = useState<DocumentDto | null>(null);
+
+  // Reload the persisted rotation whenever the document actually changes (not just on first
+  // mount - a useState initializer only runs once, so it can't react to a later document swap).
+  useEffect(() => {
+    if (!document) return;
+    try {
+      const saved = Number(window.localStorage.getItem(`cw_doc_rotation_${document.id}`));
+      setRotation([0, 90, 180, 270].includes(saved) ? saved : 0);
+    } catch {
+      setRotation(0);
+    }
+  }, [document?.id]);
+
+  const rotate = (delta: number) => {
+    if (!modalDoc) return;
+    setRotation((prev) => {
+      const next = ((prev + delta) % 360 + 360) % 360;
+      try {
+        window.localStorage.setItem(`cw_doc_rotation_${modalDoc.id}`, String(next));
+      } catch {
+        // Best-effort - rotation still works this session even if it can't persist.
+      }
+      return next;
+    });
+  };
+  const zoomBy = (delta: number) => {
+    setZoom((prev) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((prev + delta) * 100) / 100)));
+  };
+  const openEnlarged = () => {
+    if (!document) return;
+    setModalDoc(document);
+    setZoom(1);
+    setEnlarged(true);
+  };
+
   if (loading) {
     return (
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
@@ -570,31 +623,7 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
 
   const previewUrl = `${API_BASE}/api/documents/${document.id}/file`;
   const iframeTitle = `${document.fileName} preview`;
-  const [enlarged, setEnlarged] = useState(false);
-  const rotationKey = `cw_doc_rotation_${document.id}`;
-  // Keyed by document id in localStorage so a rotation choice is remembered next time this exact
-  // document is opened (per-browser, not shared between reviewers - matches how the resizable
-  // Records columns persist too).
-  const [rotation, setRotation] = useState(() => {
-    if (typeof window === "undefined") return 0;
-    try {
-      const saved = Number(window.localStorage.getItem(rotationKey));
-      return [0, 90, 180, 270].includes(saved) ? saved : 0;
-    } catch {
-      return 0;
-    }
-  });
-  const rotate = (delta: number) => {
-    setRotation((prev) => {
-      const next = ((prev + delta) % 360 + 360) % 360;
-      try {
-        window.localStorage.setItem(rotationKey, String(next));
-      } catch {
-        // Best-effort - rotation still works this session even if it can't persist.
-      }
-      return next;
-    });
-  };
+  const modalPreviewUrl = modalDoc ? `${API_BASE}/api/documents/${modalDoc.id}/file` : "";
   const isSideways = rotation === 90 || rotation === 270;
 
   return (
@@ -606,7 +635,7 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
       </div>
       <button
         type="button"
-        onClick={() => setEnlarged(true)}
+        onClick={openEnlarged}
         className="group relative mt-3 block h-56 w-full overflow-hidden rounded-md border border-slate-200 text-left"
         title="Click to enlarge"
       >
@@ -631,7 +660,7 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
         Open original document in new tab
       </a>
 
-      {enlarged && (
+      {enlarged && modalDoc && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6"
           onClick={() => setEnlarged(false)}
@@ -641,8 +670,28 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <p className="truncate text-sm font-semibold text-slate-900">{document.fileName}</p>
+              <p className="truncate text-sm font-semibold text-slate-900">{modalDoc.fileName}</p>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => zoomBy(-ZOOM_STEP)}
+                  disabled={zoom <= ZOOM_MIN}
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                  className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                >
+                  <ZoomIcon out />
+                </button>
+                <span className="w-10 text-center text-xs font-medium text-slate-500">{Math.round(zoom * 100)}%</span>
+                <button
+                  onClick={() => zoomBy(ZOOM_STEP)}
+                  disabled={zoom >= ZOOM_MAX}
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                  className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                >
+                  <ZoomIcon />
+                </button>
+                <span className="mx-1 h-5 w-px bg-slate-200" />
                 <button
                   onClick={() => rotate(-90)}
                   aria-label="Rotate left"
@@ -672,14 +721,14 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
             </div>
             <div className="flex flex-1 items-center justify-center overflow-auto bg-slate-100 p-4">
               <div
-                className="bg-white shadow transition-transform duration-200"
+                className="shrink-0 bg-white shadow transition-transform duration-200"
                 style={{
                   width: isSideways ? "70vh" : "70vw",
                   height: isSideways ? "70vw" : "70vh",
-                  transform: `rotate(${rotation}deg)`
+                  transform: `rotate(${rotation}deg) scale(${zoom})`
                 }}
               >
-                <iframe src={previewUrl} title={iframeTitle} className="h-full w-full border-0 bg-white" />
+                <iframe src={modalPreviewUrl} title={`${modalDoc.fileName} preview`} className="h-full w-full border-0 bg-white" />
               </div>
             </div>
           </div>
@@ -702,6 +751,16 @@ function RotateIcon({ mirrored }: { mirrored?: boolean }) {
     >
       <path d="M4 9a8 8 0 1 1 1.5 8.5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M4 4v5h5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ZoomIcon({ out }: { out?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m20 20-4.35-4.35" strokeLinecap="round" />
+      {out ? <path d="M7.5 10.5h6" strokeLinecap="round" /> : <path d="M10.5 7.5v6M7.5 10.5h6" strokeLinecap="round" />}
     </svg>
   );
 }
