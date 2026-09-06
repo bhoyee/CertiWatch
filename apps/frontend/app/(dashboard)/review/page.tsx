@@ -605,61 +605,64 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
     setEnlarged(true);
   };
 
+  // Built from `loading`/`document` only - never touches `enlarged`/`modalDoc`, so nothing about
+  // the popup below is affected by whichever of these three states the panel is in right now.
+  let panel: React.ReactNode;
   if (loading) {
-    return (
+    panel = (
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
         Loading record preview...
       </div>
     );
-  }
-
-  if (!document) {
-    return (
+  } else if (!document) {
+    panel = (
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
         Select a record to view the submitted document.
       </div>
     );
+  } else {
+    const previewUrl = `${API_BASE}/api/documents/${document.id}/file`;
+    panel = (
+      <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold text-slate-900">{document.fileName}</p>
+          <p className="text-xs text-slate-500">MIME: {document.mimeType}</p>
+          <p className="text-xs text-slate-500">Extraction confidence: {formatConfidence(document.extractionConfidence)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={openEnlarged}
+          className="group relative mt-3 block h-56 w-full overflow-hidden rounded-md border border-slate-200 text-left"
+          title="Click to enlarge"
+        >
+          <iframe src={previewUrl} title={`${document.fileName} preview`} className="h-full w-full bg-white" loading="lazy" />
+          {/* Overlay to intercept the click - a plain click on the iframe itself would go to the
+              embedded PDF/image viewer instead of bubbling up to this button. */}
+          <span className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition group-hover:bg-slate-900/30 group-hover:opacity-100">
+            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow">Click to enlarge</span>
+          </span>
+        </button>
+        <a href={previewUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-slate-700">
+          Open original document in new tab
+        </a>
+      </div>
+    );
   }
 
-  const previewUrl = `${API_BASE}/api/documents/${document.id}/file`;
-  const iframeTitle = `${document.fileName} preview`;
-  const modalPreviewUrl = modalDoc ? `${API_BASE}/api/documents/${modalDoc.id}/file` : "";
   const isSideways = rotation === 90 || rotation === 270;
+  const isImage = modalDoc?.mimeType?.startsWith("image/") ?? false;
+  const modalPreviewUrl = modalDoc ? `${API_BASE}/api/documents/${modalDoc.id}/file` : "";
+  const contentStyle: React.CSSProperties = {
+    transform: `rotate(${rotation}deg) scale(${zoom})`,
+    transformOrigin: "center center"
+  };
 
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
-      <div className="flex flex-col gap-1">
-        <p className="font-semibold text-slate-900">{document.fileName}</p>
-        <p className="text-xs text-slate-500">MIME: {document.mimeType}</p>
-        <p className="text-xs text-slate-500">Extraction confidence: {formatConfidence(document.extractionConfidence)}</p>
-      </div>
-      <button
-        type="button"
-        onClick={openEnlarged}
-        className="group relative mt-3 block h-56 w-full overflow-hidden rounded-md border border-slate-200 text-left"
-        title="Click to enlarge"
-      >
-        <iframe
-          src={previewUrl}
-          title={iframeTitle}
-          className="h-full w-full bg-white"
-          loading="lazy"
-        />
-        {/* Overlay to intercept the click - a plain click on the iframe itself would go to the
-            embedded PDF/image viewer instead of bubbling up to this button. */}
-        <span className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition group-hover:bg-slate-900/30 group-hover:opacity-100">
-          <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow">Click to enlarge</span>
-        </span>
-      </button>
-      <a
-        href={previewUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-2 inline-flex text-xs font-semibold text-slate-700"
-      >
-        Open original document in new tab
-      </a>
+    <>
+      {panel}
 
+      {/* Deliberately not gated on `document`/`loading` at all (see `panel` above) - once open,
+          this only closes when the user closes it, regardless of what the panel state does. */}
       {enlarged && modalDoc && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6"
@@ -720,21 +723,36 @@ function DocumentPreviewPanel({ document, loading }: { document?: DocumentDto | 
               </div>
             </div>
             <div className="flex flex-1 items-center justify-center overflow-auto bg-slate-100 p-4">
-              <div
-                className="shrink-0 bg-white shadow transition-transform duration-200"
-                style={{
-                  width: isSideways ? "70vh" : "70vw",
-                  height: isSideways ? "70vw" : "70vh",
-                  transform: `rotate(${rotation}deg) scale(${zoom})`
-                }}
-              >
-                <iframe src={modalPreviewUrl} title={`${modalDoc.fileName} preview`} className="h-full w-full border-0 bg-white" />
-              </div>
+              {isImage ? (
+                // A real <img> so rotate/zoom transform the actual image pixels directly - for
+                // PDFs (the common case) there's no equivalent: the iframe hands rendering off to
+                // the browser's own PDF viewer, so the best we can do is transform the iframe
+                // element itself (below) rather than an extra wrapping div around it, which keeps
+                // the transform as close to "the content" as this approach allows.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={modalPreviewUrl}
+                  alt={modalDoc.fileName}
+                  className="max-h-full max-w-full object-contain transition-transform duration-200"
+                  style={contentStyle}
+                />
+              ) : (
+                <iframe
+                  src={modalPreviewUrl}
+                  title={`${modalDoc.fileName} preview`}
+                  className="shrink-0 border-0 bg-white shadow transition-transform duration-200"
+                  style={{
+                    ...contentStyle,
+                    width: isSideways ? "70vh" : "70vw",
+                    height: isSideways ? "70vw" : "70vh"
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
