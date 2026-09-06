@@ -234,21 +234,14 @@ export default function CompliancePage() {
                 className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:w-80"
               />
             </div>
-            <select
-              value={requirementFilter ?? ""}
-              onChange={(e) => {
-                setRequirementFilter(e.target.value || null);
+            <RequirementFilterDropdown
+              requirementTypes={matrix.requirementTypes}
+              value={requirementFilter}
+              onChange={(id) => {
+                setRequirementFilter(id);
                 setPage(1);
               }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm transition focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">All requirements</option>
-              {matrix.requirementTypes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
+            />
             {(statusFilter || requirementFilter) && (
               <button
                 onClick={() => {
@@ -285,14 +278,14 @@ export default function CompliancePage() {
             <button
               onClick={exportCsv}
               disabled={exportingCsv}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
             >
               <Icon name="download" className="h-4 w-4" />
               {exportingCsv ? "Exporting..." : "Export CSV"}
             </button>
             <button
               onClick={openPrintReport}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
               title="Opens a printable report in a new tab - use your browser's Print > Save as PDF"
             >
               <Icon name="printer" className="h-4 w-4" />
@@ -447,6 +440,96 @@ function ComplianceTable({
   );
 }
 
+function RequirementFilterDropdown({
+  requirementTypes,
+  value,
+  onChange
+}: {
+  requirementTypes: RequirementTypeDto[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
+
+  const selected = requirementTypes.find((r) => r.id === value);
+  const term = query.trim().toLowerCase();
+  const filtered = term ? requirementTypes.filter((r) => r.name.toLowerCase().includes(term)) : requirementTypes;
+
+  const select = (id: string | null) => {
+    onChange(id);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full min-w-[11rem] items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition focus:border-blue-500 focus:outline-none sm:w-auto"
+      >
+        <span className="truncate">{selected ? selected.name : "All requirements"}</span>
+        <Icon name="chevron-down" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-40 mt-2 w-72 origin-top-left animate-scale-in rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+          <div className="relative mb-1">
+            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search requirements..."
+              className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="max-h-64 space-y-0.5 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => select(null)}
+              className={`block w-full rounded-lg px-2.5 py-1.5 text-left text-sm transition ${
+                !value ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              All requirements
+            </button>
+            {filtered.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => select(r.id)}
+                title={r.name}
+                className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition ${
+                  value === r.id ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {r.name}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="px-2.5 py-2 text-sm text-slate-400">No matching requirements.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ColumnManager({
   requirementTypes,
   order,
@@ -501,12 +584,12 @@ function ColumnManager({
         onClick={() => !disabled && onOpenChange(!open)}
         disabled={disabled}
         title={disabled ? "Clear the Requirement filter to choose columns manually" : undefined}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-50"
       >
         <Icon name="sliders" className="h-4 w-4" />
         Columns
         {hiddenCount > 0 && (
-          <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">{hiddenCount} hidden</span>
+          <span className="rounded-full bg-violet-700 px-1.5 py-0.5 text-[10px] font-semibold text-white">{hiddenCount} hidden</span>
         )}
       </button>
       {open && (
@@ -615,9 +698,19 @@ function StatCard({ label, value, tone, icon, index }: { label: string; value: n
     amber: "bg-amber-100 text-amber-600",
     rose: "bg-rose-100 text-rose-600"
   };
+  const cardTints: Record<string, string> = {
+    emerald: "border-emerald-100 bg-emerald-50/70",
+    amber: "border-amber-100 bg-amber-50/70",
+    rose: "border-rose-100 bg-rose-50/70"
+  };
+  const accentLines: Record<string, string> = {
+    emerald: "bg-emerald-400",
+    amber: "bg-amber-400",
+    rose: "bg-rose-400"
+  };
   return (
     <div
-      className="animate-fade-in-up rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+      className={`animate-fade-in-up rounded-2xl border p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${cardTints[tone]}`}
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="flex items-center gap-3">
@@ -629,6 +722,7 @@ function StatCard({ label, value, tone, icon, index }: { label: string; value: n
           <p className="mt-0.5 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
         </div>
       </div>
+      <div className={`mt-3 h-0.5 w-full rounded-full ${accentLines[tone]}`} />
     </div>
   );
 }
