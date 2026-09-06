@@ -132,8 +132,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
   const roleRestrictedRoutes = useMemo(
     () => ({
-      viewer: ["/review", "/requirements", "/devices", "/sources", "/plan", "/invite", "/team", "/staff", "/compliance"],
-      manager: ["/requirements", "/devices", "/sources", "/plan", "/team"]
+      viewer: ["/review", "/requirements", "/devices", "/sources", "/plan", "/invite", "/staff", "/compliance"],
+      manager: ["/requirements", "/devices", "/sources", "/plan"]
     }),
     []
   );
