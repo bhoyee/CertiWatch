@@ -277,8 +277,6 @@ function TopBar({
         <div className="hidden bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-sm font-extrabold uppercase tracking-wider text-transparent md:block">
           Dashboard
         </div>
-        <div className="h-5 w-px bg-slate-200 md:block" />
-        <div className="text-xs font-normal text-slate-400">Stay on top of your compliance records and review queue</div>
       </div>
       <div className="flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 md:justify-end">
         <GlobalSearch isBlocked={isBlocked} role={role} isSuper={isSuper} />
