@@ -250,7 +250,7 @@ export default function DevicesPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-100">
                 <tr>
                   <Header>Name</Header>
                   <Header>OS</Header>
@@ -301,7 +301,11 @@ export default function DevicesPage() {
 }
 
 function Header({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</th>;
+  return (
+    <th className="border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+      {children}
+    </th>
+  );
 }
 
 function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {

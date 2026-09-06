@@ -152,13 +152,13 @@ export default function PlatformDashboardPage() {
           ) : (
             <div className="overflow-hidden rounded-lg border border-slate-200">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   <tr>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Plan</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Created</th>
-                    <th className="px-4 py-3 text-right">Records</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-3">Name</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-3">Plan</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-3">Status</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-3">Created</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-3 text-right">Records</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">

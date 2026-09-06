@@ -501,9 +501,9 @@ export default function StaffPage() {
         {/* Table: md and up */}
         <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-100">
               <tr>
-                <th className="w-8 px-3 py-2">
+                <th className="w-8 border-b-2 border-slate-300 px-3 py-2">
                   <input
                     type="checkbox"
                     checked={visible.length > 0 && visible.every((s) => selectedIds.has(s.id))}
@@ -823,7 +823,7 @@ function Header({
 }) {
   return (
     <th
-      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
+      className={`border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
         onClick ? "cursor-pointer select-none" : ""
       }`}
       onClick={onClick}

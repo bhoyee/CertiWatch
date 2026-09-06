@@ -55,13 +55,13 @@ export default function PlatformSecurityPage() {
         </div>
         <div className="max-h-[420px] overflow-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+            <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="px-4 py-2">Time</th>
-                <th className="px-4 py-2">Tenant</th>
-                <th className="px-4 py-2">Actor</th>
-                <th className="px-4 py-2">Action</th>
-                <th className="px-4 py-2">Meta</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Time</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Tenant</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Actor</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Action</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Meta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -93,12 +93,12 @@ export default function PlatformSecurityPage() {
         </div>
         <div className="max-h-[320px] overflow-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+            <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="px-4 py-2">Time</th>
-                <th className="px-4 py-2">Tenant</th>
-                <th className="px-4 py-2">User</th>
-                <th className="px-4 py-2">Action</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Time</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Tenant</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">User</th>
+                <th className="border-b-2 border-slate-300 px-4 py-2">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

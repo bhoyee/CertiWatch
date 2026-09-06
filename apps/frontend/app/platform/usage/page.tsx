@@ -186,11 +186,11 @@ export default function PlatformUsagePage() {
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="px-3 py-2">Tenant</th>
-                  <th className="px-3 py-2">Needs review</th>
-                  <th className="px-3 py-2">Total</th>
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Tenant</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Needs review</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Total</th>
                 </tr>
               </thead>
               <tbody>

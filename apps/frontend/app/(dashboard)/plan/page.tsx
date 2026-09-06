@@ -251,7 +251,7 @@ export default function PlanPage() {
             </div>
             <div className="-mx-3 overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-100">
                   <tr>
                     <Th>ID</Th>
                     <Th>Date</Th>
@@ -334,7 +334,11 @@ function StatusBadge({ status }: { status: Invoice["status"] }) {
 }
 
 function Th({ children }: { children: ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</th>;
+  return (
+    <th className="border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+      {children}
+    </th>
+  );
 }
 
 function Td({ children }: { children: ReactNode }) {

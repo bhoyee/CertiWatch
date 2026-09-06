@@ -310,7 +310,7 @@ export default function UploadsPage() {
               </div>
             </div>
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-100">
                 <tr>
                   <Header onClick={() => setBulkSortKey("file")} sorted={bulkSort.key === "file"} dir={bulkSort.dir}>
                     File
@@ -462,7 +462,7 @@ export default function UploadsPage() {
           </div>
           <div className="-mx-3 overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-100">
                 <tr>
                   <Header onClick={() => setHistorySortKey("staff")} sorted={historySort.key === "staff"} dir={historySort.dir}>
                     Staff
@@ -596,7 +596,7 @@ function Header({
 }) {
   return (
     <th
-      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
+      className={`border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
         onClick ? "cursor-pointer select-none" : ""
       }`}
       onClick={onClick}

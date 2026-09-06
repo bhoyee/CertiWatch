@@ -65,15 +65,15 @@ export default function PlatformTenantsPage() {
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+          <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
             <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Subscription</th>
-              <th className="px-4 py-3">Users</th>
-              <th className="px-4 py-3">Records</th>
-              <th className="px-4 py-3">Created</th>
-              <th className="px-4 py-3">Details</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Name</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Plan</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Subscription</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Users</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Records</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Created</th>
+              <th className="border-b-2 border-slate-300 px-4 py-3">Details</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
