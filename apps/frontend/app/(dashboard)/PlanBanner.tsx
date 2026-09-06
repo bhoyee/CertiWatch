@@ -53,25 +53,32 @@ export function PlanBanner({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-slate-500">Current plan</p>
-          <p className="text-lg font-semibold text-slate-900">
-            {plan.planName} <span className="text-sm font-normal text-slate-500">({plan.tenantName})</span>
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${usageColor}`}>
+          {/* Name + status sit together, since status describes the plan itself; usage counts are
+              a separate fact below. Only Records and Status are badged - they're the two things
+              here with a real state (a threshold, an active/past-due/canceled distinction).
+              Devices/Sources are plain counts with no such state, so they stay as plain text
+              rather than being badged just for visual consistency. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-slate-900">
+              {plan.planName} <span className="text-sm font-normal text-slate-500">({plan.tenantName})</span>
+            </p>
+            {plan.subscriptionStatus && <StatusBadge status={plan.subscriptionStatus} />}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${usageColor}`}>
               Records: {plan.recordCount}
               {plan.recordLimit > 0 ? ` / ${plan.recordLimit}` : " (no limit)"}
             </span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              Devices: {plan.deviceCount}
-            </span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              Sources: {plan.sourceCount}
-            </span>
-            {plan.subscriptionStatus && <StatusBadge status={plan.subscriptionStatus} />}
+            <span>Devices: {plan.deviceCount}</span>
+            <span className="text-slate-300">·</span>
+            <span>Sources: {plan.sourceCount}</span>
+            {plan.currentPeriodEndUtc && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-500">Renews {new Date(plan.currentPeriodEndUtc).toLocaleDateString()}</span>
+              </>
+            )}
           </div>
-          {plan.currentPeriodEndUtc && (
-            <p className="mt-1 text-xs text-slate-500">Renews {new Date(plan.currentPeriodEndUtc).toLocaleDateString()}</p>
-          )}
           {!isActive && (
             <p className="mt-2 text-sm font-semibold text-rose-700">
               Trial expired or payment failed. Please update your billing to continue using CertiWatch.
