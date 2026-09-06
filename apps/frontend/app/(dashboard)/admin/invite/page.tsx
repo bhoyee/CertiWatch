@@ -556,9 +556,9 @@ export default function InvitePage() {
 
         <div className="overflow-x-auto rounded-md border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="w-8 border-r border-slate-200 px-3 py-2">
+                <th className="w-8 border-b-2 border-r border-slate-300 px-3 py-2">
                   <input
                     type="checkbox"
                     checked={pageItems.length > 0 && pageItems.every((u) => selectedIds.has(u.id) || (!!currentEmail && u.email.toLowerCase() === currentEmail.toLowerCase()))}
@@ -572,21 +572,21 @@ export default function InvitePage() {
                     className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                 </th>
-                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("name")}>
+                <th className="cursor-pointer border-b-2 border-r border-slate-300 px-3 py-2" onClick={() => toggleSort("name")}>
                   Name
                 </th>
-                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("email")}>
+                <th className="cursor-pointer border-b-2 border-r border-slate-300 px-3 py-2" onClick={() => toggleSort("email")}>
                   Email
                 </th>
-                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("role")}>
+                <th className="cursor-pointer border-b-2 border-r border-slate-300 px-3 py-2" onClick={() => toggleSort("role")}>
                   Role
                 </th>
-                {isAdmin && <th className="border-r border-slate-200 px-3 py-2">Manager</th>}
-                <th className="border-r border-slate-200 px-3 py-2">Status</th>
-                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("createdAt")}>
+                {isAdmin && <th className="border-b-2 border-r border-slate-300 px-3 py-2">Manager</th>}
+                <th className="border-b-2 border-r border-slate-300 px-3 py-2">Status</th>
+                <th className="cursor-pointer border-b-2 border-r border-slate-300 px-3 py-2" onClick={() => toggleSort("createdAt")}>
                   Created
                 </th>
-                <th className="px-3 py-2 text-right">Actions</th>
+                <th className="border-b-2 border-slate-300 px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">

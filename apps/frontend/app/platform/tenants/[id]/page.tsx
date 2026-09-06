@@ -184,14 +184,14 @@ export default function TenantDetailPage() {
           <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100 text-sm">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-100">
                   <tr>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Name</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Email</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Role</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Status</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Joined</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-600">Last login</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Name</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Email</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Role</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Status</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Joined</th>
+                    <th className="border-b-2 border-slate-300 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Last login</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

@@ -172,12 +172,12 @@ export default function PlatformBillingPage() {
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500">
-                      <th className="px-3 py-2">Tenant</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Renewal</th>
-                      <th className="px-3 py-2">Subscription</th>
+                  <thead className="bg-slate-100">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      <th className="border-b-2 border-slate-300 px-3 py-2">Tenant</th>
+                      <th className="border-b-2 border-slate-300 px-3 py-2">Status</th>
+                      <th className="border-b-2 border-slate-300 px-3 py-2">Renewal</th>
+                      <th className="border-b-2 border-slate-300 px-3 py-2">Subscription</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -212,14 +212,14 @@ export default function PlatformBillingPage() {
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="px-3 py-2">Tenant</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Renewal</th>
-                  <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">Plan</th>
-                  <th className="px-3 py-2">Actions</th>
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Tenant</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Status</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Renewal</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Amount</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Plan</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -318,14 +318,14 @@ export default function PlatformBillingPage() {
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="px-3 py-2">Tenant</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Links</th>
-                  <th className="px-3 py-2">Actions</th>
+              <thead className="bg-slate-100">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Tenant</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Status</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Amount</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Created</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Links</th>
+                  <th className="border-b-2 border-slate-300 px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>

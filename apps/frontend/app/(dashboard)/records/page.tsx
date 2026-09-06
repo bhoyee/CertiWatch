@@ -417,10 +417,10 @@ function RecordsPageInner() {
             <col style={{ width: `${colWidths.status}%` }} />
             {canManage && <col style={{ width: `${colWidths.actions}%` }} />}
           </colgroup>
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-100">
             <tr>
               {canManage && (
-                <th className="border-r-2 border-slate-300 px-2 py-2 text-left">
+                <th className="border-b-2 border-r-2 border-slate-300 px-2 py-2 text-left">
                   <input
                     type="checkbox"
                     aria-label="Select all visible rows"
@@ -673,7 +673,7 @@ function Header({
 }) {
   const isActive = field && sortField?.toLowerCase() === field.toLowerCase();
   return (
-    <th className="relative border-r-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
+    <th className="relative border-b-2 border-r-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
       <span
         onClick={onClick}
         className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
