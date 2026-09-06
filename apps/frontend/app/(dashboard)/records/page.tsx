@@ -144,8 +144,13 @@ function RecordsPageInner() {
   };
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkConfirmText, setBulkConfirmText] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const toggleSort = (field: string) => {
     setPage(1);
@@ -214,6 +219,7 @@ function RecordsPageInner() {
   const requestDelete = (rec: RecordDto) => {
     setConfirmDeleteId(rec.id);
     setConfirmDeleteName(`${rec.staffName} - ${rec.courseName}`);
+    setDeleteConfirmText("");
   };
 
   const performDelete = async () => {
@@ -227,11 +233,64 @@ function RecordsPageInner() {
       }
       setConfirmDeleteId(null);
       setConfirmDeleteName(null);
+      setDeleteConfirmText("");
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(confirmDeleteId);
+        return next;
+      });
       await load();
     } catch (err: any) {
       setError(err.message ?? "Failed to delete record");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    if (!data) return;
+    const visibleIds = data.items.map((r) => r.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const performBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const results = await Promise.all(
+        ids.map((id) => fetch(`${apiBase}/api/records/${id}`, { method: "DELETE" }).then((res) => ({ id, ok: res.ok })))
+      );
+      const failed = results.filter((r) => !r.ok);
+      setSelectedIds(new Set(failed.map((f) => f.id)));
+      setBulkConfirming(false);
+      setBulkConfirmText("");
+      if (failed.length > 0) {
+        setError(`${failed.length} of ${ids.length} records could not be deleted.`);
+      }
+      await load();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to delete selected records");
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -319,12 +378,36 @@ function RecordsPageInner() {
         </div>
       </div>
 
+      {canManage && selectedIds.size > 0 && (
+        <div className="flex items-center justify-between rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm">
+          <span className="font-medium text-indigo-800">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => {
+                setBulkConfirming(true);
+                setBulkConfirmText("");
+              }}
+              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Delete selected
+            </button>
+          </div>
+        </div>
+      )}
+
       <div ref={tableWrapperRef}>
         {/* Column widths are percentages that always sum to 100 (see startResize) and the table
             is w-full, so it always exactly fills this wrapper - no horizontal scrolling, just
             like before resizing was added. */}
         <table className="w-full divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
           <colgroup>
+            {canManage && <col style={{ width: "34px" }} />}
             <col style={{ width: `${colWidths.staffName}%` }} />
             <col style={{ width: `${colWidths.courseName}%` }} />
             <col style={{ width: `${colWidths.issuer}%` }} />
@@ -336,6 +419,17 @@ function RecordsPageInner() {
           </colgroup>
           <thead className="bg-slate-50">
             <tr>
+              {canManage && (
+                <th className="border-r-2 border-slate-300 px-2 py-2 text-left">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible rows"
+                    checked={data.items.length > 0 && data.items.every((r) => selectedIds.has(r.id))}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
+              )}
               <Header
                 onClick={() => toggleSort("staffName")}
                 sortField={sortField}
@@ -404,7 +498,18 @@ function RecordsPageInner() {
           </thead>
           <tbody className="divide-y divide-slate-200">
             {data.items.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50">
+              <tr key={r.id} className={`hover:bg-slate-50 ${selectedIds.has(r.id) ? "bg-indigo-50/60" : ""}`}>
+                {canManage && (
+                  <td className="border-r-2 border-slate-200 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${r.staffName}`}
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </td>
+                )}
                 <Cell>{r.staffName}</Cell>
                 <Cell>{r.courseName}</Cell>
                 <Cell>{r.issuer ?? "--"}</Cell>
@@ -420,13 +525,13 @@ function RecordsPageInner() {
                     <div className="flex items-center gap-2">
                       <a
                         href={`/review?recordId=${r.id}`}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
                       >
                         View
                       </a>
                       <button
                         onClick={() => requestDelete(r)}
-                        className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                        className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
                       >
                         Delete
                       </button>
@@ -469,12 +574,23 @@ function RecordsPageInner() {
               This will permanently delete the record{confirmDeleteName ? ` "${confirmDeleteName}"` : ""} and its file (if
               unused elsewhere). This cannot be undone.
             </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => {
                   if (!deleting) {
                     setConfirmDeleteId(null);
                     setConfirmDeleteName(null);
+                    setDeleteConfirmText("");
                   }
                 }}
                 className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -485,9 +601,52 @@ function RecordsPageInner() {
               <button
                 onClick={performDelete}
                 className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
-                disabled={deleting}
+                disabled={deleting || deleteConfirmText.trim().toUpperCase() !== "DELETE"}
               >
                 {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkConfirming && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Delete {selectedIds.size} records?</h3>
+            <p className="mt-2 text-sm text-slate-700">
+              This will permanently delete {selectedIds.size} selected record{selectedIds.size === 1 ? "" : "s"} and their
+              files (if unused elsewhere). This cannot be undone.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={bulkConfirmText}
+              onChange={(e) => setBulkConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (!bulkDeleting) {
+                    setBulkConfirming(false);
+                    setBulkConfirmText("");
+                  }
+                }}
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                disabled={bulkDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performBulkDelete}
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+                disabled={bulkDeleting || bulkConfirmText.trim().toUpperCase() !== "DELETE"}
+              >
+                {bulkDeleting ? "Deleting..." : `Delete ${selectedIds.size}`}
               </button>
             </div>
           </div>

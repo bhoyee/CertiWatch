@@ -41,6 +41,12 @@ export function PlanBanner({
 
   const isActive = isSubscriptionActive(plan.subscriptionStatus, plan.currentPeriodEndUtc);
   const nearLimit = plan.recordLimit > 0 && plan.recordCount >= plan.recordLimit * 0.8;
+  const atLimit = plan.recordLimit > 0 && plan.recordCount >= plan.recordLimit;
+  const usageColor = atLimit
+    ? "bg-rose-100 text-rose-700"
+    : nearLimit
+      ? "bg-amber-100 text-amber-700"
+      : "bg-emerald-100 text-emerald-700";
 
   return (
     <div className={`mb-4 rounded-lg border px-4 py-3 shadow-sm ${isActive ? "border-slate-200 bg-white" : "border-rose-200 bg-rose-50"}`}>
@@ -50,16 +56,21 @@ export function PlanBanner({
           <p className="text-lg font-semibold text-slate-900">
             {plan.planName} <span className="text-sm font-normal text-slate-500">({plan.tenantName})</span>
           </p>
-          <p className="text-sm text-slate-600">
-            Records: {plan.recordCount}
-            {plan.recordLimit > 0 ? ` / ${plan.recordLimit} limit` : " (no limit)"}  -  Devices: {plan.deviceCount}  -  Sources:{" "}
-            {plan.sourceCount}
-          </p>
-          {plan.subscriptionStatus && (
-            <p className="text-xs text-slate-500">
-              Status: {plan.subscriptionStatus.replace("-", " ")}{" "}
-              {plan.currentPeriodEndUtc && ` -  Renews ${new Date(plan.currentPeriodEndUtc).toLocaleDateString()}`}
-            </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${usageColor}`}>
+              Records: {plan.recordCount}
+              {plan.recordLimit > 0 ? ` / ${plan.recordLimit}` : " (no limit)"}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              Devices: {plan.deviceCount}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              Sources: {plan.sourceCount}
+            </span>
+            {plan.subscriptionStatus && <StatusBadge status={plan.subscriptionStatus} />}
+          </div>
+          {plan.currentPeriodEndUtc && (
+            <p className="mt-1 text-xs text-slate-500">Renews {new Date(plan.currentPeriodEndUtc).toLocaleDateString()}</p>
           )}
           {!isActive && (
             <p className="mt-2 text-sm font-semibold text-rose-700">
@@ -90,6 +101,17 @@ export function PlanBanner({
       )}
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = status.trim().toLowerCase();
+  const color =
+    normalized === "active" || normalized === "trialing"
+      ? "bg-emerald-100 text-emerald-700"
+      : normalized === "past_due" || normalized === "past-due" || normalized === "incomplete"
+        ? "bg-amber-100 text-amber-700"
+        : "bg-rose-100 text-rose-700";
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${color}`}>{status.replace(/[-_]/g, " ")}</span>;
 }
 
 function isSubscriptionActive(status?: string | null, currentPeriodEndUtc?: string | null) {
