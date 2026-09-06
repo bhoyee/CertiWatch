@@ -11,6 +11,7 @@ type UserRow = {
   invitedByUserId?: string | null;
   createdAt: string;
   isDisabled: boolean;
+  lastLoginAt?: string | null;
 };
 
 const ROLE_STYLES: Record<string, string> = {
@@ -24,16 +25,17 @@ function RoleBadge({ role }: { role: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${color}`}>{role}</span>;
 }
 
-function StatusBadge({ isDisabled }: { isDisabled: boolean }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-        isDisabled ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"
-      }`}
-    >
-      {isDisabled ? "Disabled" : "Active"}
-    </span>
-  );
+// "Active" only once the invite has actually been used at least once (a real login recorded) -
+// otherwise the badge said "Active" for someone who had never even clicked their invite link,
+// which reads as if they already have access when really the invite is just sitting unopened.
+function StatusBadge({ isDisabled, lastLoginAt }: { isDisabled: boolean; lastLoginAt?: string | null }) {
+  if (isDisabled) {
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">Disabled</span>;
+  }
+  if (!lastLoginAt) {
+    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Pending</span>;
+  }
+  return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Active</span>;
 }
 
 export default function InvitePage() {
@@ -53,6 +55,9 @@ export default function InvitePage() {
   const [pageSize, setPageSize] = useState(10);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [confirmDeactivateUser, setConfirmDeactivateUser] = useState<UserRow | null>(null);
+  const [deactivateConfirmText, setDeactivateConfirmText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
 
@@ -144,10 +149,23 @@ export default function InvitePage() {
     }
   };
 
-  const toggleDisabled = async (user: UserRow) => {
+  // Re-activating is benign and immediate; deactivating cuts off someone's access, so that
+  // direction goes through the type-to-confirm modal below instead of firing on a single click.
+  const requestToggleDisabled = (user: UserRow) => {
+    if (user.isDisabled) {
+      performToggleDisabled(user);
+    } else {
+      setConfirmDeactivateUser(user);
+      setDeactivateConfirmText("");
+    }
+  };
+
+  const performToggleDisabled = async (user: UserRow) => {
     setSavingId(user.id);
     try {
       await patchUser(user.id, { isDisabled: !user.isDisabled });
+      setConfirmDeactivateUser(null);
+      setDeactivateConfirmText("");
       loadUsers();
     } catch (err: any) {
       setTableError(err.message ?? "Failed to update status");
@@ -169,12 +187,13 @@ export default function InvitePage() {
   };
 
   const deleteUser = async (id: string) => {
-    setConfirmDeleteId(null);
     setSavingId(id);
     try {
       const res = await fetch(`${apiBase}/api/users/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       setUsers((prev) => prev.filter((u) => u.id !== id));
+      setConfirmDeleteId(null);
+      setDeleteConfirmText("");
     } catch (err: any) {
       setTableError(err.message ?? "Failed to delete user");
     } finally {
@@ -442,9 +461,9 @@ export default function InvitePage() {
                       </td>
                     )}
                     <td className="border-r border-slate-100 px-3 py-2">
-                      <StatusBadge isDisabled={u.isDisabled} />
+                      <StatusBadge isDisabled={u.isDisabled} lastLoginAt={u.lastLoginAt} />
                     </td>
-                    <td className="border-r border-slate-100 px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
+                    <td className="border-r border-slate-100 px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleString()}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -455,7 +474,7 @@ export default function InvitePage() {
                           {savingId === u.id ? "..." : "Save"}
                         </button>
                         <button
-                          onClick={() => toggleDisabled(u)}
+                          onClick={() => requestToggleDisabled(u)}
                           disabled={savingId === u.id || isSelf}
                           title={isSelf ? "You can't disable your own account" : undefined}
                           className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
@@ -463,7 +482,10 @@ export default function InvitePage() {
                           {u.isDisabled ? "Activate" : "Deactivate"}
                         </button>
                         <button
-                          onClick={() => setConfirmDeleteId(u.id)}
+                          onClick={() => {
+                            setConfirmDeleteId(u.id);
+                            setDeleteConfirmText("");
+                          }}
                           disabled={isSelf}
                           className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
                         >
@@ -509,19 +531,76 @@ export default function InvitePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
             <h3 className="text-base font-semibold text-slate-900">Remove user?</h3>
-            <p className="mt-2 text-sm text-slate-600">This will revoke access for this user. Continue?</p>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently revoke access for this user. This cannot be undone.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
-                onClick={() => setConfirmDeleteId(null)}
+                onClick={() => {
+                  setConfirmDeleteId(null);
+                  setDeleteConfirmText("");
+                }}
               >
                 Cancel
               </button>
               <button
-                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500"
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
                 onClick={() => deleteUser(confirmDeleteId)}
+                disabled={savingId === confirmDeleteId || deleteConfirmText.trim().toUpperCase() !== "DELETE"}
               >
-                Delete
+                {savingId === confirmDeleteId ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeactivateUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">
+              Deactivate {confirmDeactivateUser.name ?? confirmDeactivateUser.email}?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              They will immediately lose access to CertiWatch. You can reactivate them again later.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-amber-700">DEACTIVATE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={deactivateConfirmText}
+              onChange={(e) => setDeactivateConfirmText(e.target.value)}
+              placeholder="DEACTIVATE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
+                onClick={() => {
+                  setConfirmDeactivateUser(null);
+                  setDeactivateConfirmText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-amber-600 px-3 py-1 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+                onClick={() => performToggleDisabled(confirmDeactivateUser)}
+                disabled={savingId === confirmDeactivateUser.id || deactivateConfirmText.trim().toUpperCase() !== "DEACTIVATE"}
+              >
+                {savingId === confirmDeactivateUser.id ? "Deactivating..." : "Deactivate"}
               </button>
             </div>
           </div>
