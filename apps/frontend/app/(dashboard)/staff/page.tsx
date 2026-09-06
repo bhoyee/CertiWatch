@@ -402,10 +402,10 @@ export default function StaffPage() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {visible.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <Cell>{s.name}</Cell>
-                  <Cell>{s.jobTitle ?? "—"}</Cell>
-                  <Cell>{formatDate(s.startDate)}</Cell>
+                <tr key={s.id} className={s.isActive ? "hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-50"}>
+                  <Cell muted={!s.isActive}>{s.name}</Cell>
+                  <Cell muted={!s.isActive}>{s.jobTitle ?? "—"}</Cell>
+                  <Cell muted={!s.isActive}>{formatDate(s.startDate)}</Cell>
                   <Cell>
                     <StatusPill isActive={s.isActive} />
                   </Cell>
@@ -443,11 +443,15 @@ export default function StaffPage() {
         {/* Cards: below md */}
         <div className="space-y-3 md:hidden">
           {visible.map((s) => (
-            <div key={s.id} className="rounded-lg border border-slate-200 p-3">
+            <div key={s.id} className={`rounded-lg border border-slate-200 p-3 ${s.isActive ? "" : "bg-slate-50/60"}`}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-slate-900">{s.name}</p>
-                  <p className="text-sm text-slate-600">{s.jobTitle ?? "—"}</p>
+                  <p className={`font-semibold ${s.isActive ? "text-slate-900" : "text-slate-400 line-through decoration-slate-400"}`}>
+                    {s.name}
+                  </p>
+                  <p className={`text-sm ${s.isActive ? "text-slate-600" : "text-slate-400 line-through decoration-slate-400"}`}>
+                    {s.jobTitle ?? "—"}
+                  </p>
                 </div>
                 <StatusPill isActive={s.isActive} />
               </div>
@@ -649,8 +653,12 @@ function Header({
   );
 }
 
-function Cell({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 text-slate-800">{children}</td>;
+function Cell({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+  return (
+    <td className={`px-3 py-2 ${muted ? "text-slate-400 line-through decoration-slate-400" : "text-slate-800"}`}>
+      {children}
+    </td>
+  );
 }
 
 function StatusPill({ isActive }: { isActive: boolean }) {
@@ -677,14 +685,23 @@ function RowActions({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <button onClick={onEdit} className="text-xs font-semibold text-blue-600 hover:underline">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        onClick={onEdit}
+        className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+      >
         Edit
       </button>
-      <button onClick={onToggleActive} className="text-xs font-semibold text-slate-600 hover:underline">
+      <button
+        onClick={onToggleActive}
+        className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+      >
         {staff.isActive ? "Deactivate" : "Reactivate"}
       </button>
-      <button onClick={onDelete} className="text-xs font-semibold text-rose-600 hover:underline">
+      <button
+        onClick={onDelete}
+        className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+      >
         Delete
       </button>
     </div>
