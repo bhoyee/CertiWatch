@@ -43,6 +43,9 @@ export default function InvitePage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("admin");
+  const [addToStaff, setAddToStaff] = useState(false);
+  const [jobTitle, setJobTitle] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
   const [error, setError] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -111,7 +114,14 @@ export default function InvitePage() {
           ...(currentEmail ? { "X-Admin-Email": currentEmail } : {})
         },
         credentials: "include",
-        body: JSON.stringify({ email, name, role: inviteRole })
+        body: JSON.stringify({
+          email,
+          name,
+          role: inviteRole,
+          addToStaff,
+          jobTitle: addToStaff && jobTitle ? jobTitle : null,
+          startDate: addToStaff && startDate ? startDate : null
+        })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -120,6 +130,9 @@ export default function InvitePage() {
       setStatus("sent");
       setEmail("");
       setName("");
+      setAddToStaff(false);
+      setJobTitle("");
+      setStartDate("");
       loadUsers();
     } catch (err: any) {
       setStatus("error");
@@ -329,6 +342,44 @@ export default function InvitePage() {
           >
             {status === "loading" ? "Sending..." : "Send invite"}
           </button>
+
+          {/* Not automatic: a login account and a tracked-for-compliance staff record are
+              different things that don't always overlap (an invited admin may just need system
+              access, while a manager who's also a line supervisor may need their own DBS/NVQ
+              tracked) - so this is an opt-in per invite, not tied to role. */}
+          <div className="md:col-span-4">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={addToStaff}
+                onChange={(e) => setAddToStaff(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Also add {name || "this person"} to the Staff list, for tracking their own certificates
+            </label>
+            {addToStaff && (
+              <div className="mt-2 grid gap-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-3 md:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600">Job title (optional)</label>
+                  <input
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="Care Assistant"
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600">Start date (optional)</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </form>
       </div>
 
