@@ -110,6 +110,12 @@ export default function StaffPage() {
   const [editForm, setEditForm] = useState<StaffForm | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<StaffMemberDto | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDeactivate, setConfirmBulkDeactivate] = useState(false);
+  const [bulkDeactivateConfirmText, setBulkDeactivateConfirmText] = useState("");
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -164,6 +170,59 @@ export default function StaffPage() {
 
   const setSortKey = (key: typeof sort.key) => {
     setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    const ids = visible.map((s) => s.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+
+  const performBulkDeactivate = async () => {
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => patchStaff(id, { isActive: false }).catch(() => null)));
+      setConfirmBulkDeactivate(false);
+      setBulkDeactivateConfirmText("");
+      setSelectedIds(new Set());
+      load();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to deactivate selected staff");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const performBulkDelete = async () => {
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) => fetch(`${apiBase()}/api/staff/${id}`, { method: "DELETE", credentials: "include" }).catch(() => null))
+      );
+      setConfirmBulkDelete(false);
+      setBulkDeleteConfirmText("");
+      setSelectedIds(new Set());
+      load();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to delete selected staff");
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   const handleFileSelect = async (file: File) => {
@@ -334,57 +393,124 @@ export default function StaffPage() {
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">Staff</h1>
-            <p className="text-sm text-slate-600">
-              Everyone you're tracking compliance for — including anyone who hasn't had a certificate uploaded yet.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search name, role..."
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none md:w-64"
-            />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as any);
-                setPage(1);
-              }}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="active">Active only</option>
-              <option value="inactive">Inactive only</option>
-              <option value="all">All statuses</option>
-            </select>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              {[10, 25, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="mb-3">
+          <h1 className="text-lg font-semibold text-slate-900">Staff</h1>
+          <p className="text-xs text-slate-500">
+            Everyone you're tracking compliance for — including anyone who hasn't had a certificate uploaded yet.
+          </p>
         </div>
+
+        {/* Search, status filter, page size and pagination all in one responsive toolbar - wraps
+            onto multiple lines on narrow screens instead of overflowing. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search name, role..."
+            className="basis-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none sm:basis-auto sm:w-56"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as any);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+            <option value="all">All statuses</option>
+          </select>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          >
+            {[10, 25, 50].map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
+
+          {sorted.length > 0 && (
+            <div className="flex w-full flex-wrap items-center gap-2 text-xs text-slate-600 sm:ml-auto sm:w-auto">
+              <span className="whitespace-nowrap">
+                {pageStart + 1}–{Math.min(sorted.length, pageStart + pageSize)} of {sorted.length}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 px-2.5 py-1 font-medium text-slate-700 disabled:opacity-50"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span className="whitespace-nowrap text-slate-700">
+                Page {currentPage}/{totalPages}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 px-2.5 py-1 font-medium text-slate-700 disabled:opacity-50"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm">
+            <span className="font-semibold text-indigo-800">{selectedIds.size} selected</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmBulkDeactivate(true);
+                setBulkDeactivateConfirmText("");
+              }}
+              className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              Deactivate selected
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmBulkDelete(true);
+                setBulkDeleteConfirmText("");
+              }}
+              className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Delete selected
+            </button>
+          </div>
+        )}
 
         {/* Table: md and up */}
         <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={visible.length > 0 && visible.every((s) => selectedIds.has(s.id))}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 <Header onClick={() => setSortKey("name")} sorted={sort.key === "name"} dir={sort.dir}>
                   Name
                 </Header>
@@ -403,6 +529,14 @@ export default function StaffPage() {
             <tbody className="divide-y divide-slate-200">
               {visible.map((s) => (
                 <tr key={s.id} className={s.isActive ? "hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-50"}>
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(s.id)}
+                      onChange={() => toggleSelect(s.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </td>
                   <Cell muted={!s.isActive}>{s.name}</Cell>
                   <Cell muted={!s.isActive}>{s.jobTitle ?? "—"}</Cell>
                   <Cell muted={!s.isActive}>{formatDate(s.startDate)}</Cell>
@@ -431,7 +565,7 @@ export default function StaffPage() {
               ))}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-3 py-4 text-center text-sm text-slate-500">
                     {staff.length === 0 ? "No staff added yet — add your first one below." : "No staff match your filters."}
                   </td>
                 </tr>
@@ -445,13 +579,21 @@ export default function StaffPage() {
           {visible.map((s) => (
             <div key={s.id} className={`rounded-lg border border-slate-200 p-3 ${s.isActive ? "" : "bg-slate-50/60"}`}>
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className={`font-semibold ${s.isActive ? "text-slate-900" : "text-slate-400 line-through decoration-slate-400"}`}>
-                    {s.name}
-                  </p>
-                  <p className={`text-sm ${s.isActive ? "text-slate-600" : "text-slate-400 line-through decoration-slate-400"}`}>
-                    {s.jobTitle ?? "—"}
-                  </p>
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(s.id)}
+                    onChange={() => toggleSelect(s.id)}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <p className={`font-semibold ${s.isActive ? "text-slate-900" : "text-slate-400 line-through decoration-slate-400"}`}>
+                      {s.name}
+                    </p>
+                    <p className={`text-sm ${s.isActive ? "text-slate-600" : "text-slate-400 line-through decoration-slate-400"}`}>
+                      {s.jobTitle ?? "—"}
+                    </p>
+                  </div>
                 </div>
                 <StatusPill isActive={s.isActive} />
               </div>
@@ -482,33 +624,6 @@ export default function StaffPage() {
             </p>
           )}
         </div>
-
-        {sorted.length > 0 && (
-          <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-            <span>
-              Showing {pageStart + 1}–{Math.min(sorted.length, pageStart + pageSize)} of {sorted.length} staff
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Prev
-              </button>
-              <span className="text-slate-700">
-                Page {currentPage} / {totalPages}
-              </span>
-              <button
-                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {editing && editForm && (
@@ -597,6 +712,75 @@ export default function StaffPage() {
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmBulkDeactivate && (
+        <Modal onClose={() => setConfirmBulkDeactivate(false)} title={`Deactivate ${selectedIds.size} staff member${selectedIds.size === 1 ? "" : "s"}?`}>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">Their compliance history is kept — you can reactivate them again later.</p>
+            <label className="block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-amber-700">DEACTIVATE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={bulkDeactivateConfirmText}
+              onChange={(e) => setBulkDeactivateConfirmText(e.target.value)}
+              placeholder="DEACTIVATE"
+              className="w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-100"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmBulkDeactivate(false)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performBulkDeactivate}
+                disabled={bulkSaving || bulkDeactivateConfirmText.trim().toUpperCase() !== "DEACTIVATE"}
+                className="rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+              >
+                {bulkSaving ? "Deactivating..." : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmBulkDelete && (
+        <Modal onClose={() => setConfirmBulkDelete(false)} title={`Delete ${selectedIds.size} staff member${selectedIds.size === 1 ? "" : "s"}?`}>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              This will permanently delete them from the staff directory. This cannot be undone — if they've just left,
+              use Deactivate instead to keep their history.
+            </p>
+            <label className="block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={bulkDeleteConfirmText}
+              onChange={(e) => setBulkDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmBulkDelete(false)}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performBulkDelete}
+                disabled={bulkSaving || bulkDeleteConfirmText.trim().toUpperCase() !== "DELETE"}
+                className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {bulkSaving ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
