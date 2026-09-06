@@ -43,7 +43,10 @@ export default function InvitePage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("admin");
-  const [addToStaff, setAddToStaff] = useState(false);
+  // Deliberately starts at null (not false) - a checkbox defaulting to unchecked is invisible
+  // and nobody clicks it, so we make Staff-list inclusion a forced Yes/No choice with neither
+  // pre-selected instead, and block submit until one is picked.
+  const [addToStaff, setAddToStaff] = useState<boolean | null>(null);
   const [jobTitle, setJobTitle] = useState("");
   const [startDate, setStartDate] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
@@ -63,6 +66,12 @@ export default function InvitePage() {
   const [deactivateConfirmText, setDeactivateConfirmText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDeactivate, setConfirmBulkDeactivate] = useState(false);
+  const [bulkDeactivateConfirmText, setBulkDeactivateConfirmText] = useState("");
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
   const isAdmin = currentRole?.toLowerCase() === "admin" || currentRole?.toLowerCase() === "superadmin";
@@ -103,6 +112,11 @@ export default function InvitePage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addToStaff === null) {
+      setStatus("error");
+      setError("Please choose whether to add this person to the Staff list.");
+      return;
+    }
     setStatus("loading");
     setError("");
     try {
@@ -130,7 +144,7 @@ export default function InvitePage() {
       setStatus("sent");
       setEmail("");
       setName("");
-      setAddToStaff(false);
+      setAddToStaff(null);
       setJobTitle("");
       setStartDate("");
       loadUsers();
@@ -211,6 +225,59 @@ export default function InvitePage() {
       setTableError(err.message ?? "Failed to delete user");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = (ids: string[], allSelected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+
+  const performBulkDeactivate = async () => {
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => patchUser(id, { isDisabled: true }).catch(() => null)));
+      setConfirmBulkDeactivate(false);
+      setBulkDeactivateConfirmText("");
+      setSelectedIds(new Set());
+      loadUsers();
+    } catch (err: any) {
+      setTableError(err.message ?? "Failed to deactivate selected users");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const performBulkDelete = async () => {
+    setBulkSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`${apiBase}/api/users/${id}`, { method: "DELETE", credentials: "include" }).catch(() => null)
+        )
+      );
+      setConfirmBulkDelete(false);
+      setBulkDeleteConfirmText("");
+      setSelectedIds(new Set());
+      loadUsers();
+    } catch (err: any) {
+      setTableError(err.message ?? "Failed to delete selected users");
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -337,7 +404,7 @@ export default function InvitePage() {
           </div>
           <button
             type="submit"
-            disabled={status === "loading"}
+            disabled={status === "loading" || addToStaff === null}
             className="rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
           >
             {status === "loading" ? "Sending..." : "Send invite"}
@@ -346,18 +413,44 @@ export default function InvitePage() {
           {/* Not automatic: a login account and a tracked-for-compliance staff record are
               different things that don't always overlap (an invited admin may just need system
               access, while a manager who's also a line supervisor may need their own DBS/NVQ
-              tracked) - so this is an opt-in per invite, not tied to role. */}
+              tracked) - so this is an opt-in per invite, not tied to role. A checkbox here went
+              unnoticed and defaulted to "no" by inaction, so this is instead a forced Yes/No
+              choice with neither option pre-selected - Send invite stays disabled until one is picked. */}
           <div className="md:col-span-4">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={addToStaff}
-                onChange={(e) => setAddToStaff(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              Also add {name || "this person"} to the Staff list, for tracking their own certificates
+            <label className="block text-xs font-semibold text-slate-600">
+              Add {name || "this person"} to the Staff list, for tracking their own certificates?
+              <span className="ml-1 text-rose-500">*</span>
             </label>
-            {addToStaff && (
+            <div className="mt-1.5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAddToStaff(true)}
+                aria-pressed={addToStaff === true}
+                className={`rounded-md border-2 px-4 py-1.5 text-sm font-semibold transition ${
+                  addToStaff === true
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                }`}
+              >
+                Yes, add to Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddToStaff(false)}
+                aria-pressed={addToStaff === false}
+                className={`rounded-md border-2 px-4 py-1.5 text-sm font-semibold transition ${
+                  addToStaff === false
+                    ? "border-slate-500 bg-slate-100 text-slate-700"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                }`}
+              >
+                No
+              </button>
+            </div>
+            {addToStaff === null && (
+              <p className="mt-1.5 text-xs font-medium text-amber-600">Choose Yes or No before sending the invite.</p>
+            )}
+            {addToStaff === true && (
               <div className="mt-2 grid gap-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-3 md:grid-cols-2">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600">Job title (optional)</label>
@@ -428,10 +521,57 @@ export default function InvitePage() {
           <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{tableError}</div>
         )}
 
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm">
+            <span className="font-semibold text-indigo-800">{selectedIds.size} selected</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmBulkDeactivate(true);
+                setBulkDeactivateConfirmText("");
+              }}
+              className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              Deactivate selected
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmBulkDelete(true);
+                setBulkDeleteConfirmText("");
+              }}
+              className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Delete selected
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto rounded-md border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="w-8 border-r border-slate-200 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={pageItems.length > 0 && pageItems.every((u) => selectedIds.has(u.id) || (!!currentEmail && u.email.toLowerCase() === currentEmail.toLowerCase()))}
+                    onChange={() => {
+                      const selectableIds = pageItems
+                        .filter((u) => !(!!currentEmail && u.email.toLowerCase() === currentEmail.toLowerCase()))
+                        .map((u) => u.id);
+                      const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+                      toggleSelectAllOnPage(selectableIds, allSelected);
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("name")}>
                   Name
                 </th>
@@ -452,7 +592,7 @@ export default function InvitePage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {pageItems.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={isAdmin ? 8 : 7} className="px-3 py-6 text-center text-slate-500">
                     No invites yet.
                   </td>
                 </tr>
@@ -464,12 +604,30 @@ export default function InvitePage() {
                   <tr key={u.id} className={u.isDisabled ? "bg-slate-50/60" : ""}>
                     <td className="border-r border-slate-100 px-3 py-2">
                       <input
-                        value={u.name ?? ""}
-                        onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, name: e.target.value } : row)))}
-                        className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                        type="checkbox"
+                        checked={selectedIds.has(u.id)}
+                        onChange={() => toggleSelect(u.id)}
+                        disabled={isSelf}
+                        title={isSelf ? "You can't include your own account in a bulk action" : undefined}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
                       />
                     </td>
-                    <td className="border-r border-slate-100 px-3 py-2 font-mono text-xs text-slate-700">{u.email}</td>
+                    <td className="border-r border-slate-100 px-3 py-2">
+                      <input
+                        value={u.name ?? ""}
+                        onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, name: e.target.value } : row)))}
+                        className={`w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none ${
+                          u.isDisabled ? "text-slate-400 line-through decoration-slate-400" : ""
+                        }`}
+                      />
+                    </td>
+                    <td
+                      className={`border-r border-slate-100 px-3 py-2 font-mono text-xs ${
+                        u.isDisabled ? "text-slate-400 line-through decoration-slate-400" : "text-slate-700"
+                      }`}
+                    >
+                      {u.email}
+                    </td>
                     <td className="border-r border-slate-100 px-3 py-2">
                       {canEditRole ? (
                         <select
@@ -652,6 +810,84 @@ export default function InvitePage() {
                 disabled={savingId === confirmDeactivateUser.id || deactivateConfirmText.trim().toUpperCase() !== "DEACTIVATE"}
               >
                 {savingId === confirmDeactivateUser.id ? "Deactivating..." : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkDeactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">Deactivate {selectedIds.size} people?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              They will immediately lose access to CertiWatch. You can reactivate them again later.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-amber-700">DEACTIVATE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={bulkDeactivateConfirmText}
+              onChange={(e) => setBulkDeactivateConfirmText(e.target.value)}
+              placeholder="DEACTIVATE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
+                onClick={() => {
+                  setConfirmBulkDeactivate(false);
+                  setBulkDeactivateConfirmText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-amber-600 px-3 py-1 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+                onClick={performBulkDeactivate}
+                disabled={bulkSaving || bulkDeactivateConfirmText.trim().toUpperCase() !== "DEACTIVATE"}
+              >
+                {bulkSaving ? "Deactivating..." : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">Remove {selectedIds.size} people?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently revoke access for these users. This cannot be undone.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={bulkDeleteConfirmText}
+              onChange={(e) => setBulkDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
+                onClick={() => {
+                  setConfirmBulkDelete(false);
+                  setBulkDeleteConfirmText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+                onClick={performBulkDelete}
+                disabled={bulkSaving || bulkDeleteConfirmText.trim().toUpperCase() !== "DELETE"}
+              >
+                {bulkSaving ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
