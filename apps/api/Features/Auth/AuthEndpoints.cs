@@ -189,6 +189,31 @@ public static class AuthEndpoints
             await db.SaveChangesAsync(token);
         }
 
+        // Opt-in only: a User (login access) and a StaffMember (compliance tracking) are separate
+        // concepts that often don't overlap (e.g. an office admin isn't necessarily tracked staff),
+        // so this never happens automatically - only when the inviter explicitly asks for it. Skips
+        // creating a duplicate if a staff record with this exact name already exists in the tenant.
+        if (request.AddToStaff == true)
+        {
+            var staffName = user.Name;
+            var existingStaff = await db.StaffMembers
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Name.ToLower() == staffName.ToLower(), token);
+            if (existingStaff is null)
+            {
+                db.StaffMembers.Add(new StaffMember
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    Name = staffName,
+                    JobTitle = string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim(),
+                    StartDate = request.StartDate,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync(token);
+            }
+        }
+
         var tenantName = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
             .Select(t => t.Name)
@@ -213,4 +238,4 @@ public static class AuthEndpoints
 
 public sealed record MagicLinkRequest(string Email, string? FallbackEmail, bool RememberDevice, string? DeviceId);
 
-public sealed record InviteUserRequest(string Email, string? Name, string Role);
+public sealed record InviteUserRequest(string Email, string? Name, string Role, bool? AddToStaff = null, string? JobTitle = null, DateOnly? StartDate = null);
