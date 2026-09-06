@@ -16,7 +16,7 @@ public static class UserManagementEndpoints
         return routes;
     }
 
-    private sealed record UserListItem(Guid Id, string Email, string? Name, string Role, Guid? InvitedByUserId, DateTime CreatedAt, bool IsDisabled);
+    private sealed record UserListItem(Guid Id, string Email, string? Name, string Role, Guid? InvitedByUserId, DateTime CreatedAt, bool IsDisabled, DateTime? LastLoginAt);
     private sealed record UpdateUserRequest(string? Name, string? Role, bool? IsDisabled, Guid? ManagerId);
 
     private static bool IsAdmin(ITenantContextAccessor accessor) =>
@@ -51,10 +51,29 @@ public static class UserManagementEndpoints
         var users = await query
             .Where(u => u.TenantId == tenantId)
             .OrderBy(u => u.Email)
-            .Select(u => new UserListItem(u.Id, u.Email, u.Name, u.Role, u.InvitedByUserId, u.CreatedAt, u.IsDisabled))
+            .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.InvitedByUserId, u.CreatedAt, u.IsDisabled })
             .ToListAsync(token);
 
-        return Results.Ok(users);
+        // Precomputed to a plain List<Guid> so the GroupBy below is a well-supported EF "IN"
+        // translation - the same pattern used for the platform tenant users' last-login column.
+        var userIds = users.Select(u => u.Id).ToList();
+        var lastLogins = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.Action == "auth_login" && a.ActorId.HasValue && userIds.Contains(a.ActorId.Value))
+            .GroupBy(a => a.ActorId!.Value)
+            .Select(g => new { UserId = g.Key, LastLoginAt = g.Max(a => a.CreatedAt) })
+            .ToDictionaryAsync(x => x.UserId, x => x.LastLoginAt, token);
+
+        var result = users.Select(u => new UserListItem(
+            u.Id,
+            u.Email,
+            u.Name,
+            u.Role,
+            u.InvitedByUserId,
+            u.CreatedAt,
+            u.IsDisabled,
+            lastLogins.TryGetValue(u.Id, out var lastLogin) ? lastLogin : null));
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> UpdateAsync(Guid id, UpdateUserRequest request, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
