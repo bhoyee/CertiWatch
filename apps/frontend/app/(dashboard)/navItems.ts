@@ -7,7 +7,6 @@ export const navItems = [
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/records", label: "Records", icon: "table" },
   { href: "/review", label: "Review", icon: "flag", viewerHidden: true },
-  { href: "/team", label: "Team", icon: "users", viewerHidden: true, managerHidden: true },
   { href: "/staff", label: "Staff", icon: "users", viewerHidden: true },
   { href: "/compliance", label: "Compliance", icon: "table", viewerHidden: true },
   { href: "/support", label: "Support", icon: "life-buoy" },

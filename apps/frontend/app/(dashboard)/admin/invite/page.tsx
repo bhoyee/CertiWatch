@@ -10,7 +10,31 @@ type UserRow = {
   role: string;
   invitedByUserId?: string | null;
   createdAt: string;
+  isDisabled: boolean;
 };
+
+const ROLE_STYLES: Record<string, string> = {
+  admin: "bg-indigo-100 text-indigo-700",
+  manager: "bg-blue-100 text-blue-700",
+  viewer: "bg-slate-100 text-slate-600"
+};
+
+function RoleBadge({ role }: { role: string }) {
+  const color = ROLE_STYLES[role.toLowerCase()] ?? "bg-slate-100 text-slate-600";
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${color}`}>{role}</span>;
+}
+
+function StatusBadge({ isDisabled }: { isDisabled: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+        isDisabled ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"
+      }`}
+    >
+      {isDisabled ? "Disabled" : "Active"}
+    </span>
+  );
+}
 
 export default function InvitePage() {
   const { role: currentRole } = useRole();
@@ -33,6 +57,7 @@ export default function InvitePage() {
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+  const isAdmin = currentRole?.toLowerCase() === "admin" || currentRole?.toLowerCase() === "superadmin";
   const isViewer = currentRole?.toLowerCase() === "viewer";
   const isManager = currentRole?.toLowerCase() === "manager";
 
@@ -43,8 +68,7 @@ export default function InvitePage() {
       const data = await res.json();
       setCurrentUserId(data.id ?? null);
       setCurrentEmail(data.email ?? null);
-    }
-    catch {
+    } catch {
       // ignore profile errors; invite list will simply be empty for managers
     }
   };
@@ -98,21 +122,47 @@ export default function InvitePage() {
     }
   };
 
+  const patchUser = async (id: string, body: Record<string, unknown>) => {
+    const res = await fetch(`${apiBase}/api/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+  };
+
   const updateUser = async (user: UserRow) => {
     setSavingId(user.id);
     try {
-      const res = await fetch(`${apiBase}/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        credentials: "include",
-        body: JSON.stringify({ name: user.name, role: user.role })
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await patchUser(user.id, { name: user.name, role: user.role });
       loadUsers();
     } catch (err: any) {
       setTableError(err.message ?? "Failed to update user");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const toggleDisabled = async (user: UserRow) => {
+    setSavingId(user.id);
+    try {
+      await patchUser(user.id, { isDisabled: !user.isDisabled });
+      loadUsers();
+    } catch (err: any) {
+      setTableError(err.message ?? "Failed to update status");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const reassignManager = async (viewerId: string, managerId: string) => {
+    setSavingId(viewerId);
+    try {
+      await patchUser(viewerId, { managerId });
+      loadUsers();
+    } catch (err: any) {
+      setTableError(err.message ?? "Failed to reassign manager");
     } finally {
       setSavingId(null);
     }
@@ -132,13 +182,13 @@ export default function InvitePage() {
     }
   };
 
+  const managers = useMemo(() => users.filter((u) => u.role.toLowerCase() === "manager"), [users]);
+
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     const scoped = isManager
       ? users.filter(
-          (u) =>
-            u.role.toLowerCase() === "viewer" &&
-            (!!currentUserId ? u.invitedByUserId === currentUserId : false)
+          (u) => u.role.toLowerCase() === "viewer" && (!!currentUserId ? u.invitedByUserId === currentUserId : false)
         )
       : users;
     const base = term
@@ -191,73 +241,85 @@ export default function InvitePage() {
       ];
 
   return (
-    <div className="cw-card space-y-4 p-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Invite teammates</h1>
-        <p className="text-sm text-slate-600">Send a magic-link invite to a teammate and manage existing invites.</p>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6">
+            <path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="9.5" cy="7.5" r="3.5" />
+            <path d="M19 8v4M21 10h-4" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Team & invites</h1>
+          <p className="text-sm text-slate-600">Invite teammates, manage their roles, and see who reports to whom.</p>
+        </div>
       </div>
 
-      {status === "sent" && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          Invite sent!
-        </div>
-      )}
-      {status === "error" && (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-      )}
-
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Full name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="Ada Lovelace"
-          />
-        </div>
-        <div className="md:col-span-1">
-          <label className="block text-sm font-medium text-slate-700">Email</label>
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="teammate@example.com"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Role</label>
-          <select
-            value={isManager ? "viewer" : role}
-            onChange={(e) => setRole(e.target.value)}
-            disabled={isManager}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
-          >
-            {roleOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2 flex items-center gap-2">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Send an invite</h2>
+        {status === "sent" && (
+          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Invite sent!
+          </div>
+        )}
+        {status === "error" && (
+          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+        )}
+        <form className="mt-3 grid gap-4 md:grid-cols-[1.2fr_1.2fr_1fr_auto] md:items-end" onSubmit={submit}>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600">Full name</label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-3 py-2 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+              placeholder="Ada Lovelace"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600">Email</label>
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-3 py-2 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+              placeholder="teammate@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600">Role</label>
+            <select
+              value={isManager ? "viewer" : role}
+              onChange={(e) => setRole(e.target.value)}
+              disabled={isManager}
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-3 py-2 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100 disabled:bg-slate-50"
+            >
+              {roleOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             disabled={status === "loading"}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            className="rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
           >
             {status === "loading" ? "Sending..." : "Send invite"}
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
 
-      <div className="pt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-slate-800">People & invites</h2>
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Team members</h2>
+            <p className="text-xs text-slate-500">{filtered.length} people</p>
+          </div>
+          <div className="flex items-center gap-2">
             <input
               value={search}
               onChange={(e) => {
@@ -265,111 +327,161 @@ export default function InvitePage() {
                 setPage(1);
               }}
               placeholder="Search name, email, role"
-              className="rounded-md border border-slate-200 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
+              className="rounded-md border-2 border-slate-300 px-3 py-1.5 text-sm shadow-inner transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100"
             />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-600">Rows</label>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+              className="rounded-md border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
             >
               {[5, 10, 20, 50].map((n) => (
                 <option key={n} value={n}>
-                  {n}
+                  {n} / page
                 </option>
               ))}
             </select>
             <button
               type="button"
               onClick={loadUsers}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-500"
               disabled={tableLoading}
+              className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
             >
               {tableLoading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
-        {tableError && <div className="mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{tableError}</div>}
-        <div className="overflow-auto rounded-md border border-slate-200">
+
+        {tableError && (
+          <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{tableError}</div>
+        )}
+
+        <div className="overflow-x-auto rounded-md border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("name")}>
+                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("name")}>
                   Name
                 </th>
-                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("email")}>
+                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("email")}>
                   Email
                 </th>
-                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("role")}>
+                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("role")}>
                   Role
                 </th>
-                <th className="px-3 py-2 cursor-pointer" onClick={() => toggleSort("createdAt")}>
+                {isAdmin && <th className="border-r border-slate-200 px-3 py-2">Manager</th>}
+                <th className="border-r border-slate-200 px-3 py-2">Status</th>
+                <th className="cursor-pointer border-r border-slate-200 px-3 py-2" onClick={() => toggleSort("createdAt")}>
                   Created
                 </th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {pageItems.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={isAdmin ? 7 : 6} className="px-3 py-6 text-center text-slate-500">
                     No invites yet.
                   </td>
                 </tr>
               )}
-              {pageItems.map((u) => (
-                <tr key={u.id}>
-                  <td className="px-3 py-2">
-                    <input
-                      value={u.name ?? ""}
-                      onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, name: e.target.value } : row)))}
-                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-700">{u.email}</td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={isManager ? "viewer" : u.role}
-                      onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, role: e.target.value } : row)))}
-                      disabled={isManager}
-                      className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
-                    >
-                      {roleOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
-                  <td className="px-3 py-2 space-x-2 text-right">
-                    <button
-                      onClick={() => updateUser(u)}
-                      disabled={savingId === u.id}
-                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-50"
-                    >
-                      {savingId === u.id ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(u.id)}
-                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {pageItems.map((u) => {
+                const isSelf = !!currentEmail && u.email.toLowerCase() === currentEmail.toLowerCase();
+                const canEditRole = isAdmin || (isManager && u.role.toLowerCase() === "viewer");
+                return (
+                  <tr key={u.id} className={u.isDisabled ? "bg-slate-50/60" : ""}>
+                    <td className="border-r border-slate-100 px-3 py-2">
+                      <input
+                        value={u.name ?? ""}
+                        onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, name: e.target.value } : row)))}
+                        className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                    </td>
+                    <td className="border-r border-slate-100 px-3 py-2 font-mono text-xs text-slate-700">{u.email}</td>
+                    <td className="border-r border-slate-100 px-3 py-2">
+                      {canEditRole ? (
+                        <select
+                          value={isManager ? "viewer" : u.role}
+                          onChange={(e) => setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, role: e.target.value } : row)))}
+                          disabled={isManager}
+                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
+                        >
+                          {roleOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <RoleBadge role={u.role} />
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="border-r border-slate-100 px-3 py-2">
+                        {u.role.toLowerCase() === "viewer" ? (
+                          <select
+                            value={u.invitedByUserId ?? ""}
+                            onChange={(e) => reassignManager(u.id, e.target.value)}
+                            disabled={savingId === u.id || managers.length === 0}
+                            className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none disabled:bg-slate-50"
+                          >
+                            <option value="" disabled>
+                              {managers.length === 0 ? "No managers yet" : "Unassigned"}
+                            </option>
+                            {managers.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name ?? m.email}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="border-r border-slate-100 px-3 py-2">
+                      <StatusBadge isDisabled={u.isDisabled} />
+                    </td>
+                    <td className="border-r border-slate-100 px-3 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => updateUser(u)}
+                          disabled={savingId === u.id}
+                          className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                        >
+                          {savingId === u.id ? "..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => toggleDisabled(u)}
+                          disabled={savingId === u.id || isSelf}
+                          title={isSelf ? "You can't disable your own account" : undefined}
+                          className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          {u.isDisabled ? "Activate" : "Deactivate"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(u.id)}
+                          disabled={isSelf}
+                          className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+
         <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
           <div>
-            Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
+            Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} of{" "}
+            {filtered.length}
           </div>
           <div className="flex items-center gap-2">
             <button
