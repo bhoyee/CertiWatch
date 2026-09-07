@@ -106,3 +106,4 @@ New-Service -Name CertiWatchAgent `
 Start-Service -Name CertiWatchAgent
 
 Write-Host "Installed and started. Check status with: Get-Service CertiWatchAgent"
+Write-Host "If the device doesn't show up on the Devices page within a minute, check the log: $InstallDir\logs\agent-*.log"

@@ -3,8 +3,25 @@ using CertiWatch.Agent.Services;
 using CertiWatch.Agent.Workers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Serilog;
+
+// Running as a Windows Service means there's no attached console for AddConsole() to write to -
+// those log lines (including exactly the "why didn't my device show up" enrollment failures this
+// was added to diagnose) were going nowhere. A rolling file next to the executable means a
+// failure is always inspectable after the fact, regardless of how the process is hosted.
+var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDirectory);
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.File(
+        Path.Combine(logDirectory, "agent-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14)
+    .CreateLogger();
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.ClearProviders();
+builder.Services.AddSerilog();
 
 // Lets the one-line installer write a single plain JSON file next to the binary instead of
 // dealing with per-OS environment-variable registration (particularly awkward for a Windows
@@ -36,8 +53,6 @@ builder.Services.AddHostedService<AgentWorker>();
 // without AddWindowsService(), so New-Service-created services would otherwise fail to start.
 builder.Services.AddWindowsService();
 builder.Services.AddSystemd();
-
-builder.Services.AddLogging(logging => logging.AddConsole());
 
 var host = builder.Build();
 host.Run();
