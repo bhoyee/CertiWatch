@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { deleteJson, fetchJson, postJson } from "../../../lib/api";
 
@@ -62,6 +62,8 @@ export default function DevicesPage() {
   const [folderPath, setFolderPath] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [justReconnected, setJustReconnected] = useState(false);
+  const enrollPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setOs(detectOs());
@@ -99,6 +101,19 @@ export default function DevicesPage() {
     } finally {
       setMinting(false);
     }
+  };
+
+  // There's no channel from the web page to a locally-installed agent - it can only ever be told
+  // to connect by re-running the install command with a fresh code, never "pinged" remotely. So
+  // "Reconnect" is really: mint a fresh code (revoking any stale/expired one still baked into a
+  // struggling install) and jump straight to the command to copy-paste and re-run, instead of
+  // making the user scroll back up and click Generate enrollment code themselves.
+  const reconnect = async () => {
+    await mintCode();
+    await load();
+    enrollPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setJustReconnected(true);
+    setTimeout(() => setJustReconnected(false), 2500);
   };
 
   const copyCode = async () => {
@@ -160,7 +175,12 @@ export default function DevicesPage() {
           </p>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div
+          ref={enrollPanelRef}
+          className={`rounded-lg border bg-slate-50 p-4 transition-shadow duration-500 ${
+            justReconnected ? "border-blue-400 ring-4 ring-blue-100" : "border-slate-200"
+          }`}
+        >
           <h2 className="text-md font-semibold text-slate-900">Enroll a device</h2>
           <p className="mt-1 text-sm text-slate-600">
             Tell it which folder to watch, then generate a one-time code — the install command below will have
@@ -258,20 +278,41 @@ export default function DevicesPage() {
             <h2 className="text-md font-semibold text-slate-900">Enrolled devices</h2>
             <p className="text-sm text-slate-600">Agents enrolled for this tenant. Refreshes automatically every few seconds.</p>
           </div>
-          <button
-            onClick={() => load()}
-            disabled={refreshing}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => load()}
+              disabled={refreshing}
+              title="Re-check the list for devices that have already enrolled"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
+            <button
+              onClick={reconnect}
+              disabled={minting}
+              title="A device that isn't showing up hasn't enrolled yet - this gets you a fresh code and command to run on it"
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M21 3v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3 21v-5h5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {minting ? "Reconnecting..." : "Reconnect a device"}
+            </button>
+          </div>
         </div>
         {error && devices && <p className="mb-3 text-sm text-rose-700">Couldn't refresh: {error}</p>}
         {deleteError && <p className="mb-3 text-sm text-rose-700">{deleteError}</p>}
         {!devices ? (
           <p className="text-sm text-slate-600">Loading devices...</p>
         ) : devices.length === 0 ? (
-          <p className="text-sm text-slate-600">No devices enrolled yet — generate a code above to add one.</p>
+          <p className="text-sm text-slate-600">
+            No devices enrolled yet — generate a code above to add one. Already ran the install command and don't
+            see it here? Its code may have expired or been revoked by a newer one — click{" "}
+            <span className="font-semibold text-blue-700">Reconnect a device</span> for a fresh code and command.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
