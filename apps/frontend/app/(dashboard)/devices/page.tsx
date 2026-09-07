@@ -258,8 +258,15 @@ export default function DevicesPage() {
                 <p className="mt-1 text-xs text-amber-800">Runs with sudo — registers a system service.</p>
               )}
               {!folderPath.trim() && (
-                <p className="mt-1 text-xs text-amber-800">
-                  No folder specified — this will open a folder picker on the target machine during install.
+                <p className="mt-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+                      <path d="M12 4 3 20h18L12 4Z" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M12 10v4" strokeLinecap="round" />
+                      <path d="M12 17h.01" />
+                    </svg>
+                    No folder specified — this will open a folder picker on the target machine during install.
+                  </span>
                 </p>
               )}
 
