@@ -62,6 +62,8 @@ export default function DevicesPage() {
   const [folderPath, setFolderPath] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Device | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [justReconnected, setJustReconnected] = useState(false);
   const enrollPanelRef = useRef<HTMLDivElement>(null);
 
@@ -143,15 +145,16 @@ export default function DevicesPage() {
     }
   };
 
-  const deleteDevice = async (device: Device) => {
-    if (!window.confirm(`Remove "${device.name}"? Its device token stops working immediately, and it'll need a new enrollment code to reconnect.`)) {
-      return;
-    }
+  const performDelete = async () => {
+    if (!confirmDelete) return;
+    const device = confirmDelete;
     setDeleteError(null);
     setDeletingId(device.id);
     try {
       await deleteJson(`/api/devices/${device.id}`);
       setDevices((prev) => prev?.filter((d) => d.id !== device.id) ?? prev);
+      setConfirmDelete(null);
+      setDeleteConfirmText("");
     } catch (err: any) {
       setDeleteError(err?.message ?? "Failed to remove device");
     } finally {
@@ -348,9 +351,12 @@ export default function DevicesPage() {
                     <Cell>{formatRelative(d.lastSeenAt)}</Cell>
                     <Cell>
                       <button
-                        onClick={() => deleteDevice(d)}
+                        onClick={() => {
+                          setConfirmDelete(d);
+                          setDeleteConfirmText("");
+                        }}
                         disabled={deletingId === d.id}
-                        className="text-xs font-semibold text-rose-600 hover:underline disabled:opacity-50"
+                        className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
                       >
                         {deletingId === d.id ? "Removing..." : "Remove"}
                       </button>
@@ -362,6 +368,45 @@ export default function DevicesPage() {
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-slate-900">Remove "{confirmDelete.name}"?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Its device token stops working immediately, and it'll need a new enrollment code to reconnect.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-slate-600">
+              Type <span className="font-mono text-rose-600">REMOVE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="REMOVE"
+              className="mt-1 w-full rounded-md border-2 border-slate-300 px-2 py-1.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-4 focus:ring-rose-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:border-slate-300"
+                onClick={() => {
+                  setConfirmDelete(null);
+                  setDeleteConfirmText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+                onClick={performDelete}
+                disabled={deletingId === confirmDelete.id || deleteConfirmText.trim().toUpperCase() !== "REMOVE"}
+              >
+                {deletingId === confirmDelete.id ? "Removing..." : "Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
