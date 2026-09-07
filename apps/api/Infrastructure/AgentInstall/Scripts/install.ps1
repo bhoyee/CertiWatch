@@ -92,6 +92,16 @@ $settings = @{
 } | ConvertTo-Json -Depth 3
 Set-Content -Path (Join-Path $InstallDir "agent.settings.json") -Value $settings -Encoding UTF8
 
+# A fresh -Code is an explicit signal to (re-)enroll - reinstalling over a previous install (same
+# machine, new code) must not silently keep the old device identity, or the new code is accepted
+# by this script but never actually used by the agent, which just reconnects as whatever it was
+# enrolled as before (or worse, under a different tenant if the code is for a different account).
+$credentialsPath = Join-Path $InstallDir "device-credentials.json"
+if (Test-Path $credentialsPath) {
+    Write-Host "Clearing previous device identity so this install enrolls fresh with the new code."
+    Remove-Item $credentialsPath -Force
+}
+
 $exePath = Join-Path $InstallDir "CertiWatch.Agent.exe"
 
 if (Get-Service -Name CertiWatchAgent -ErrorAction SilentlyContinue) {
