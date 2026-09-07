@@ -461,10 +461,10 @@ export default function SupportPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="Total tickets" value={tickets.length} tone="slate" />
-        <SummaryCard label="Open" value={openCount} tone="amber" />
-        <SummaryCard label="Urgent (unresolved)" value={urgentCount} tone="rose" />
-        <SummaryCard label="Closed" value={tickets.filter((t) => t.status === "closed").length} tone="emerald" />
+        <SummaryCard index={0} label="Total tickets" value={tickets.length} tone="slate" icon="tickets" />
+        <SummaryCard index={1} label="Open" value={openCount} tone="amber" icon="clock" />
+        <SummaryCard index={2} label="Urgent (unresolved)" value={urgentCount} tone="rose" icon="alert" />
+        <SummaryCard index={3} label="Closed" value={tickets.filter((t) => t.status === "closed").length} tone="emerald" icon="check" />
       </div>
 
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
@@ -778,12 +778,30 @@ export default function SupportPage() {
   );
 }
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone: "slate" | "amber" | "rose" | "emerald" }) {
+function SummaryCard({
+  label,
+  value,
+  tone,
+  icon,
+  index
+}: {
+  label: string;
+  value: number;
+  tone: "slate" | "amber" | "rose" | "emerald";
+  icon: "tickets" | "clock" | "alert" | "check";
+  index: number;
+}) {
   const tints: Record<string, string> = {
     slate: "border-slate-200 bg-slate-50/70",
     amber: "border-amber-100 bg-amber-50/70",
     rose: "border-rose-100 bg-rose-50/70",
     emerald: "border-emerald-100 bg-emerald-50/70"
+  };
+  const badges: Record<string, string> = {
+    slate: "bg-slate-200 text-slate-600",
+    amber: "bg-amber-100 text-amber-600",
+    rose: "bg-rose-100 text-rose-600",
+    emerald: "bg-emerald-100 text-emerald-600"
   };
   const lines: Record<string, string> = {
     slate: "bg-slate-300",
@@ -792,10 +810,52 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
     emerald: "bg-emerald-400"
   };
   return (
-    <div className={`rounded-xl border p-3 shadow-sm ${tints[tone]}`}>
-      <p className="text-xs text-slate-600">{label}</p>
-      <p className="mt-0.5 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
+    <div
+      className={`group animate-fade-in rounded-xl border p-3 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg ${tints[tone]}`}
+      style={{ animationDelay: `${index * 70}ms` }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-600">{label}</p>
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${badges[tone]}`}>
+          <SummaryIcon name={icon} />
+        </div>
+      </div>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
       <div className={`mt-2 h-0.5 w-full rounded-full ${lines[tone]}`} />
     </div>
   );
+}
+
+function SummaryIcon({ name }: { name: "tickets" | "clock" | "alert" | "check" }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, className: "h-4 w-4" };
+  switch (name) {
+    case "tickets":
+      return (
+        <svg {...common}>
+          <path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a1.5 1.5 0 0 0 0-3Z" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3.5 2" />
+        </svg>
+      );
+    case "alert":
+      return (
+        <svg {...common}>
+          <path d="M12 4 3 20h18L12 4Z" />
+          <path d="M12 10v4" />
+          <path d="M12 17h.01" />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+        </svg>
+      );
+  }
 }
