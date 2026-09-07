@@ -23,6 +23,7 @@ type Os = "linux" | "macos" | "windows";
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
+const REFRESH_MS = 8000;
 
 function detectOs(): Os {
   if (typeof navigator === "undefined") return "linux";
@@ -50,6 +51,7 @@ function installCommand(os: Os, code: string, folderPath: string): string {
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[] | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentCode | null>(null);
   const [minting, setMinting] = useState(false);
@@ -65,14 +67,24 @@ export default function DevicesPage() {
     setOs(detectOs());
   }, []);
 
-  const load = () => {
-    fetchJson<Device[]>("/api/devices")
-      .then(setDevices)
-      .catch((err) => setError(err.message ?? "Failed to load devices"));
+  const load = (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setRefreshing(true);
+    return fetchJson<Device[]>("/api/devices")
+      .then((data) => {
+        setDevices(data);
+        setError(null);
+      })
+      .catch((err) => setError(err.message ?? "Failed to load devices"))
+      .finally(() => setRefreshing(false));
   };
 
   useEffect(() => {
     load();
+    // Enrolling a device is an external, out-of-band action (running a script on another
+    // machine) - poll so a freshly enrolled device shows up without the user having to reload
+    // the page themselves.
+    const id = setInterval(() => load({ silent: true }), REFRESH_MS);
+    return () => clearInterval(id);
   }, []);
 
   const mintCode = async () => {
@@ -132,7 +144,10 @@ export default function DevicesPage() {
     }
   };
 
-  if (error) return <ErrorCard message={error} />;
+  // Only block the whole page on an error before we've ever loaded anything - once the list has
+  // loaded once, a later background poll hiccup shouldn't wipe the page (and any enrollment code
+  // being shown) out from under the user.
+  if (error && !devices) return <ErrorCard message={error} />;
 
   return (
     <div className="space-y-6">
@@ -238,10 +253,20 @@ export default function DevicesPage() {
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-md font-semibold text-slate-900">Enrolled devices</h2>
-          <p className="text-sm text-slate-600">Agents enrolled for this tenant.</p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-md font-semibold text-slate-900">Enrolled devices</h2>
+            <p className="text-sm text-slate-600">Agents enrolled for this tenant. Refreshes automatically every few seconds.</p>
+          </div>
+          <button
+            onClick={() => load()}
+            disabled={refreshing}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
         </div>
+        {error && devices && <p className="mb-3 text-sm text-rose-700">Couldn't refresh: {error}</p>}
         {deleteError && <p className="mb-3 text-sm text-rose-700">{deleteError}</p>}
         {!devices ? (
           <p className="text-sm text-slate-600">Loading devices...</p>
