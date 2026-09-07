@@ -94,6 +94,25 @@ export default function AgentInstallPage() {
           </li>
         </ul>
       </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <h2 className="text-md font-semibold text-slate-900">Device not showing up?</h2>
+        <p className="mt-1 text-sm text-slate-700">
+          The service can look "installed and running" locally even if it never successfully enrolled with
+          CertiWatch — a device only appears on the Devices page once enrollment succeeds, which needs a working
+          connection to CertiWatch at the moment the service first starts.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+          <li>
+            Check the agent's own log for the actual reason: <code className="rounded bg-white px-1 py-0.5 font-mono text-xs">logs\agent-*.log</code>{" "}
+            next to the installed binary (<code className="rounded bg-white px-1 py-0.5 font-mono text-xs">C:\Program Files\CertiWatch\Agent</code>{" "}
+            on Windows, the install directory on Linux/macOS).
+          </li>
+          <li>The agent retries enrollment automatically every 60 seconds if it fails, so a brief network hiccup right after install resolves itself — no need to reinstall.</li>
+          <li>Enrollment codes expire after 24 hours and generating a new one revokes the last — if the code used is no longer the latest one shown on this page, mint a fresh one and re-run the install command.</li>
+          <li>The Devices list refreshes automatically every few seconds, but you can also click Refresh there directly.</li>
+        </ul>
+      </div>
     </div>
   );
 }

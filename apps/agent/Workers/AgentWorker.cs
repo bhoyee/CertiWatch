@@ -35,6 +35,11 @@ public sealed class AgentWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Enrollment is attempted up front, but a failure here (DNS not yet ready right after a
+        // fresh install, a momentary network blip, the API being mid-deploy) must not strand the
+        // service in a permanently unenrolled state - the retry loop below keeps trying every
+        // RescanInterval until it succeeds or the one-time code expires (24h), instead of giving
+        // up forever after a single attempt.
         await EnsureEnrolledAsync(stoppingToken);
 
         if (_options.WatchPaths.Count == 0)
@@ -63,6 +68,11 @@ public sealed class AgentWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (_deviceId == Guid.Empty)
+            {
+                await EnsureEnrolledAsync(stoppingToken);
+            }
+
             if (_deviceId != Guid.Empty)
             {
                 await _client.HeartbeatAsync(_deviceId, _deviceToken, stoppingToken);
@@ -72,10 +82,12 @@ public sealed class AgentWorker : BackgroundService
         }
     }
 
-    // Enrollment only ever needs to happen once per install - enrollment codes are one-time and
-    // expire in 24h / get revoked when a new one is minted, so re-enrolling on every restart would
-    // break the service permanently once the code is gone, and would silently create a new Device
-    // row server-side on every restart in the meantime. Reuse persisted credentials if present.
+    // Enrollment only ever needs to succeed once per install - enrollment codes are one-time and
+    // expire in 24h / get revoked when a new one is minted, so once _deviceId is set this is never
+    // called again (re-enrolling on every restart would silently create a new Device row
+    // server-side every time). Reuse persisted credentials if present; otherwise attempt
+    // enrollment - a failure here just leaves _deviceId empty so the caller retries later, rather
+    // than treating it as fatal.
     private async Task EnsureEnrolledAsync(CancellationToken token)
     {
         var saved = await _credentialStore.LoadAsync(token);
@@ -90,7 +102,7 @@ public sealed class AgentWorker : BackgroundService
         var enrollment = await _client.EnrollAsync(token);
         if (enrollment is null)
         {
-            _logger.LogError("Agent enrollment failed; the agent cannot upload documents until it is re-enrolled with a valid enrollment code");
+            _logger.LogWarning("Agent enrollment failed; will retry in {Seconds}s - the agent cannot upload documents until it enrolls with a valid, unexpired enrollment code", RescanInterval.TotalSeconds);
             return;
         }
 

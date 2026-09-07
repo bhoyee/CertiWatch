@@ -129,6 +129,7 @@ UNIT
   systemctl daemon-reload
   systemctl enable --now certiwatch-agent
   echo "Installed and started. Check status with: systemctl status certiwatch-agent"
+  echo "If the device doesn't show up on the Devices page within a minute, check the log: ${INSTALL_DIR}/logs/agent-*.log"
 else
   PLIST=/Library/LaunchDaemons/com.certiwatch.agent.plist
   cat > "$PLIST" <<PLIST_EOF
@@ -149,4 +150,5 @@ else
 PLIST_EOF
   launchctl load -w "$PLIST"
   echo "Installed and started. Check status with: launchctl list | grep certiwatch"
+  echo "If the device doesn't show up on the Devices page within a minute, check the log: ${INSTALL_DIR}/logs/agent-*.log"
 fi
