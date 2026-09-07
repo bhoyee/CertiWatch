@@ -110,6 +110,15 @@ cat > "$INSTALL_DIR/agent.settings.json" <<SETTINGS
 }
 SETTINGS
 
+# A fresh --code is an explicit signal to (re-)enroll - reinstalling over a previous install (same
+# machine, new code) must not silently keep the old device identity, or the new code is accepted
+# by this script but never actually used by the agent, which just reconnects as whatever it was
+# enrolled as before (or worse, under a different tenant if the code is for a different account).
+if [ -f "${INSTALL_DIR}/device-credentials.json" ]; then
+  echo "Clearing previous device identity so this install enrolls fresh with the new code."
+  rm -f "${INSTALL_DIR}/device-credentials.json"
+fi
+
 if [ "$OS" = "Linux" ]; then
   cat > /etc/systemd/system/certiwatch-agent.service <<UNIT
 [Unit]
@@ -127,7 +136,11 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
   systemctl daemon-reload
-  systemctl enable --now certiwatch-agent
+  systemctl enable certiwatch-agent
+  # restart, not enable --now - if the service was already running from a previous install,
+  # "--now" is a no-op on an already-active unit and would leave the old process running with the
+  # old settings/credentials in memory, ignoring everything this script just wrote to disk.
+  systemctl restart certiwatch-agent
   echo "Installed and started. Check status with: systemctl status certiwatch-agent"
   echo "If the device doesn't show up on the Devices page within a minute, check the log: ${INSTALL_DIR}/logs/agent-*.log"
 else
@@ -148,6 +161,10 @@ else
 </dict>
 </plist>
 PLIST_EOF
+  # unload first (ignore failure if it wasn't loaded) - same reasoning as the systemd restart
+  # above: a plain "load" on an already-loaded daemon is a no-op and would leave the old process
+  # running with the old settings/credentials, ignoring everything this script just wrote to disk.
+  launchctl unload "$PLIST" 2>/dev/null || true
   launchctl load -w "$PLIST"
   echo "Installed and started. Check status with: launchctl list | grep certiwatch"
   echo "If the device doesn't show up on the Devices page within a minute, check the log: ${INSTALL_DIR}/logs/agent-*.log"
