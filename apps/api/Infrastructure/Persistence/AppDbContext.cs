@@ -20,6 +20,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UploadRequest> UploadRequests => Set<UploadRequest>();
     public DbSet<SupportTicket> SupportTickets => Set<SupportTicket>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
+    public DbSet<SupportAttachment> SupportAttachments => Set<SupportAttachment>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<DeviceEnrollmentCode> DeviceEnrollmentCodes => Set<DeviceEnrollmentCode>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
@@ -121,6 +122,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(m => m.AuthorUserId);
             entity.Property(m => m.Body).HasColumnType("text");
+        });
+
+        modelBuilder.Entity<SupportAttachment>(entity =>
+        {
+            entity.HasIndex(a => new { a.TenantId, a.TicketId });
+            entity.HasIndex(a => a.UploadedByUserId);
+            entity.Property(a => a.FileName).HasMaxLength(256);
+            entity.Property(a => a.MimeType).HasMaxLength(128);
+            entity.Property(a => a.PathOrUrl).HasMaxLength(1024);
         });
 
         modelBuilder.Entity<ApiKey>(entity =>

@@ -72,6 +72,27 @@ export async function postVoid(path: string, body: Record<string, unknown> = {})
   }
 }
 
+export async function postFile<TResponse>(path: string, file: File, fieldName = "file"): Promise<TResponse> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const formData = new FormData();
+  formData.append(fieldName, file);
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+export function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+}
+
 export async function deleteJson(path: string): Promise<void> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const response = await fetch(url, {

@@ -1,8 +1,12 @@
+using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Linq;
 using System.Net;
 
@@ -10,6 +14,9 @@ namespace CertiWatch.Api.Features.Support;
 
 public static class SupportEndpoints
 {
+    private static readonly string[] ValidPriorities = ["low", "normal", "high", "urgent"];
+    private static readonly FileExtensionContentTypeProvider MimeProvider = new();
+
     public static IEndpointRouteBuilder MapSupportEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/support").RequireAuthorization();
@@ -19,7 +26,10 @@ public static class SupportEndpoints
         group.MapPost("/tickets/{id:guid}/messages", ReplyAsync);
         group.MapPatch("/tickets/{id:guid}/assign", AssignAsync);
         group.MapPatch("/tickets/{id:guid}/status", UpdateStatusAsync);
+        group.MapPatch("/tickets/{id:guid}/priority", UpdatePriorityAsync);
         group.MapDelete("/tickets/{id:guid}", DeleteAsync);
+        group.MapPost("/attachments", UploadAttachmentAsync).DisableAntiforgery();
+        group.MapGet("/attachments/{id:guid}/file", StreamAttachmentAsync);
         return routes;
     }
 
@@ -27,6 +37,7 @@ public static class SupportEndpoints
         Guid Id,
         string Subject,
         string Status,
+        string Priority,
         string AssignedRole,
         Guid? AssignedToUserId,
         string? AssignedToName,
@@ -40,6 +51,7 @@ public static class SupportEndpoints
         string Subject,
         string Body,
         string Status,
+        string Priority,
         string AssignedRole,
         Guid? AssignedToUserId,
         string? AssignedToName,
@@ -47,13 +59,21 @@ public static class SupportEndpoints
         string? CreatedByName,
         DateTime CreatedAt,
         DateTime UpdatedAt,
-        IEnumerable<MessageDto> Messages);
+        IEnumerable<MessageDto> Messages,
+        IEnumerable<AttachmentDto> Attachments);
 
     private sealed record MessageDto(Guid Id, Guid? AuthorUserId, string? AuthorName, string Body, DateTime CreatedAt);
-    private sealed record CreateTicketRequest(string Subject, string Body, Guid? RecordId, string? PageContext);
-    private sealed record ReplyRequest(string Body);
+    private sealed record AttachmentDto(Guid Id, string FileName, string? MimeType, long SizeBytes, string Url, Guid? MessageId, string? UploadedByName, DateTime CreatedAt);
+    private sealed record CreateTicketRequest(string Subject, string Body, string? Priority, Guid? RecordId, string? PageContext, List<Guid>? AttachmentIds);
+    private sealed record ReplyRequest(string Body, List<Guid>? AttachmentIds);
     private sealed record AssignRequest(Guid? AssignedToUserId, string? AssignedRole);
     private sealed record StatusRequest(string Status);
+    private sealed record PriorityRequest(string Priority);
+
+    private static string NormalizePriority(string? priority) =>
+        !string.IsNullOrWhiteSpace(priority) && ValidPriorities.Contains(priority.Trim().ToLowerInvariant())
+            ? priority.Trim().ToLowerInvariant()
+            : "normal";
 
     private static bool IsAdmin(ITenantContextAccessor accessor) =>
         accessor.Current.Role.Equals("admin", StringComparison.OrdinalIgnoreCase) ||
@@ -91,6 +111,7 @@ public static class SupportEndpoints
                 .ToListAsync(token);
 
             query = query.Where(t =>
+                t.CreatedByUserId == userId ||
                 (t.CreatedByUserId != null && invitedByAdminIds.Contains(t.CreatedByUserId.Value)) ||
                 t.AssignedRole == "admin" ||
                 t.AssignedToUserId == userId);
@@ -114,6 +135,7 @@ public static class SupportEndpoints
                 t.Id,
                 t.Subject,
                 t.Status,
+                NormalizePriority(t.Priority),
                 t.AssignedRole,
                 t.AssignedToUserId,
                 t.AssignedToUserId.HasValue && userLookup.TryGetValue(t.AssignedToUserId.Value, out var an) ? an : null,
@@ -137,9 +159,15 @@ public static class SupportEndpoints
             return Results.NotFound();
         }
 
+        var attachments = await db.SupportAttachments.AsNoTracking()
+            .Where(a => a.TenantId == accessor.Current.TenantId && a.TicketId == id)
+            .OrderBy(a => a.CreatedAt)
+            .ToListAsync(token);
+
         var ids = ticket.Messages.Select(m => m.AuthorUserId).Where(x => x.HasValue).Select(x => x!.Value).ToList();
         if (ticket.CreatedByUserId.HasValue) ids.Add(ticket.CreatedByUserId.Value);
         if (ticket.AssignedToUserId.HasValue) ids.Add(ticket.AssignedToUserId.Value);
+        ids.AddRange(attachments.Where(a => a.UploadedByUserId.HasValue).Select(a => a.UploadedByUserId!.Value));
         var userLookup = await db.Users.AsNoTracking()
             .Where(u => ids.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email, token);
@@ -149,6 +177,7 @@ public static class SupportEndpoints
             ticket.Subject,
             ticket.Body,
             ticket.Status,
+            NormalizePriority(ticket.Priority),
             ticket.AssignedRole,
             ticket.AssignedToUserId,
             ticket.AssignedToUserId.HasValue && userLookup.TryGetValue(ticket.AssignedToUserId.Value, out var an) ? an : null,
@@ -162,7 +191,17 @@ public static class SupportEndpoints
                     m.AuthorUserId,
                     m.AuthorUserId.HasValue && userLookup.TryGetValue(m.AuthorUserId.Value, out var mn) ? mn : null,
                     m.Body,
-                    m.CreatedAt)).ToList());
+                    m.CreatedAt)).ToList(),
+            attachments.Select(a =>
+                new AttachmentDto(
+                    a.Id,
+                    a.FileName,
+                    a.MimeType,
+                    a.SizeBytes,
+                    $"/api/support/attachments/{a.Id}/file",
+                    a.MessageId,
+                    a.UploadedByUserId.HasValue && userLookup.TryGetValue(a.UploadedByUserId.Value, out var upn) ? upn : null,
+                    a.CreatedAt)).ToList());
 
         return Results.Ok(dto);
     }
@@ -187,6 +226,7 @@ public static class SupportEndpoints
             CreatedByUserId = userId,
             Subject = request.Subject.Trim(),
             Body = request.Body.Trim(),
+            Priority = NormalizePriority(request.Priority),
             RecordId = request.RecordId,
             PageContext = request.PageContext,
             Status = "open"
@@ -214,19 +254,49 @@ public static class SupportEndpoints
             ticket.AssignedRole = "support";
         }
 
-        db.SupportTickets.Add(ticket);
-        db.SupportMessages.Add(new SupportMessage
+        var openingMessage = new SupportMessage
         {
             TicketId = ticket.Id,
             AuthorUserId = userId,
             Body = ticket.Body
-        });
+        };
+        db.SupportTickets.Add(ticket);
+        db.SupportMessages.Add(openingMessage);
+
+        await ReparentAttachmentsAsync(db, tenantId, userId, request.AttachmentIds, ticket.Id, openingMessage.Id, token);
 
         await db.SaveChangesAsync(token);
 
         await NotifyAssigneesAsync(db, emailService, ticket, "created", token);
 
         return Results.Ok(new { ticket.Id, ticket.AssignedRole, ticket.Status });
+    }
+
+    // Attachments (inline images from the rich text editor, or picked files) are uploaded to a
+    // tenant-scoped holding area before the ticket/message they belong to exists, since the "new
+    // ticket" form and reply composer both need to accept them pre-submit. This claims whichever
+    // of the caller's own not-yet-attached uploads were referenced, tying them to the real ticket
+    // (and message, for a reply) that was just created.
+    private static async Task ReparentAttachmentsAsync(
+        AppDbContext db,
+        Guid tenantId,
+        Guid userId,
+        List<Guid>? attachmentIds,
+        Guid ticketId,
+        Guid messageId,
+        CancellationToken token)
+    {
+        if (attachmentIds is null || attachmentIds.Count == 0) return;
+
+        var attachments = await db.SupportAttachments
+            .Where(a => a.TenantId == tenantId && a.TicketId == null && a.UploadedByUserId == userId && attachmentIds.Contains(a.Id))
+            .ToListAsync(token);
+
+        foreach (var attachment in attachments)
+        {
+            attachment.TicketId = ticketId;
+            attachment.MessageId = messageId;
+        }
     }
 
     private static async Task<IResult> ReplyAsync(
@@ -248,12 +318,16 @@ public static class SupportEndpoints
         }
 
         ticket.UpdatedAt = DateTime.UtcNow;
-        db.SupportMessages.Add(new SupportMessage
+        var message = new SupportMessage
         {
             TicketId = ticket.Id,
             AuthorUserId = accessor.Current.UserId,
             Body = request.Body.Trim()
-        });
+        };
+        db.SupportMessages.Add(message);
+
+        await ReparentAttachmentsAsync(db, accessor.Current.TenantId, accessor.Current.UserId, request.AttachmentIds, ticket.Id, message.Id, token);
+
         await db.SaveChangesAsync(token);
         return Results.NoContent();
     }
@@ -273,10 +347,30 @@ public static class SupportEndpoints
         }
 
         // Allow delete for: creator, manager of creator, admin (if invited/assigned as per access rules).
+        var attachments = await db.SupportAttachments
+            .Where(a => a.TenantId == accessor.Current.TenantId && a.TicketId == id)
+            .ToListAsync(token);
+        foreach (var attachment in attachments)
+        {
+            TryDeleteFile(attachment.PathOrUrl);
+        }
+        db.SupportAttachments.RemoveRange(attachments);
         db.SupportMessages.RemoveRange(ticket.Messages);
         db.SupportTickets.Remove(ticket);
         await db.SaveChangesAsync(token);
         return Results.NoContent();
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch
+        {
+            // best-effort cleanup; an orphaned file on disk is harmless
+        }
     }
 
     private static async Task<IResult> AssignAsync(
@@ -331,6 +425,117 @@ public static class SupportEndpoints
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(token);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> UpdatePriorityAsync(
+        Guid id,
+        PriorityRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        var ticket = await db.SupportTickets.FirstOrDefaultAsync(t => t.Id == id && t.TenantId == accessor.Current.TenantId, token);
+        if (ticket is null || !await CanAccessAsync(db, accessor, ticket, token))
+        {
+            return Results.NotFound();
+        }
+
+        if (!ValidPriorities.Contains(request.Priority?.Trim().ToLowerInvariant()))
+        {
+            return Results.BadRequest(new { error = "invalid_priority" });
+        }
+
+        ticket.Priority = request.Priority!.Trim().ToLowerInvariant();
+        ticket.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> UploadAttachmentAsync(
+        IFormFile file,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IOptions<StorageOptions> storageOptions,
+        CancellationToken token)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return Results.BadRequest(new { error = "no_file" });
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var root = string.IsNullOrWhiteSpace(storageOptions.Value.UploadsRoot) ? "/uploads" : storageOptions.Value.UploadsRoot;
+        var dir = Path.Combine(root.TrimEnd(Path.DirectorySeparatorChar), tenantId.ToString(), "support");
+        Directory.CreateDirectory(dir);
+
+        var safeName = Path.GetFileName(file.FileName);
+        var storedName = $"{Guid.NewGuid():N}-{safeName}";
+        var destPath = Path.Combine(dir, storedName);
+        await using (var stream = File.Create(destPath))
+        {
+            await file.CopyToAsync(stream, token);
+        }
+
+        var attachment = new SupportAttachment
+        {
+            TenantId = tenantId,
+            FileName = safeName,
+            MimeType = string.IsNullOrWhiteSpace(file.ContentType) ? null : file.ContentType,
+            SizeBytes = file.Length,
+            PathOrUrl = destPath,
+            UploadedByUserId = accessor.Current.UserId
+        };
+        db.SupportAttachments.Add(attachment);
+        await db.SaveChangesAsync(token);
+
+        return Results.Ok(new
+        {
+            attachment.Id,
+            attachment.FileName,
+            attachment.MimeType,
+            attachment.SizeBytes,
+            Url = $"/api/support/attachments/{attachment.Id}/file"
+        });
+    }
+
+    private static async Task<IResult> StreamAttachmentAsync(
+        Guid id,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        HttpContext httpContext,
+        CancellationToken token)
+    {
+        var attachment = await db.SupportAttachments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == accessor.Current.TenantId, token);
+        if (attachment is null || !File.Exists(attachment.PathOrUrl))
+        {
+            return Results.NotFound();
+        }
+
+        // Freshly uploaded, not-yet-attached files are only visible to the person who uploaded
+        // them (the ticket/reply they belong to hasn't been submitted yet); once attached, normal
+        // ticket access rules apply.
+        if (attachment.TicketId is null)
+        {
+            if (attachment.UploadedByUserId != accessor.Current.UserId) return Results.NotFound();
+        }
+        else
+        {
+            var ticket = await db.SupportTickets.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == attachment.TicketId.Value && t.TenantId == accessor.Current.TenantId, token);
+            if (ticket is null || !await CanAccessAsync(db, accessor, ticket, token)) return Results.NotFound();
+        }
+
+        var contentType = attachment.MimeType;
+        if (string.IsNullOrWhiteSpace(contentType) && !MimeProvider.TryGetContentType(attachment.FileName, out contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        var stream = File.OpenRead(attachment.PathOrUrl);
+        httpContext.Response.Headers["Content-Disposition"] = $"inline; filename=\"{attachment.FileName}\"";
+        httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return Results.File(stream, contentType, enableRangeProcessing: true);
     }
 
     private static async Task NotifyAssigneesAsync(
@@ -424,7 +629,7 @@ public static class SupportEndpoints
 
         if (IsAdmin(accessor))
         {
-            if (ticket.AssignedRole == "admin" || ticket.AssignedToUserId == userId) return true;
+            if (ticket.AssignedRole == "admin" || ticket.AssignedToUserId == userId || ticket.CreatedByUserId == userId) return true;
             if (ticket.CreatedByUserId is Guid creatorId)
             {
                 var invitedByAdmin = await db.Users.AsNoTracking()
