@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
+using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Services;
 using CertiWatch.Parsing;
@@ -370,15 +371,22 @@ public sealed class DocumentIngestionWorker : BackgroundService
                                     ? uploaderName
                                     : (!string.IsNullOrWhiteSpace(uploaderEmail) ? uploaderEmail : "Your team member");
                                 var needsReview = processingStatus == ProcessingStatus.NeedsReview;
-                                var html = $"""
-                                    <p>Hello {manager.Name ?? "Manager"},</p>
-                                    <p>A certificate was uploaded by your team.</p>
-                                    <p><strong>Uploaded by:</strong> {uploaderLabel}</p>
-                                    <p>Status: {statusLabel}</p>
-                                    <p>Log in to review the record{(needsReview ? " for approval or rejection" : string.Empty)}.</p>
-                                """;
+                                var baseUrl = scope.ServiceProvider.GetRequiredService<IOptions<MagicLinkOptions>>().Value.BaseUrl;
+                                var link = $"{baseUrl.TrimEnd('/')}/{(needsReview ? "review" : "records")}";
+                                var (badgeColor, badgeBg) = needsReview ? ("#b45309", "#fef3c7") : ("#047857", "#d1fae5");
 
-                                await emailService.SendAsync(manager.Email, $"Upload {statusLabel}", html, stoppingToken);
+                                var subject = $"Upload {statusLabel}";
+                                var bodyHtml = EmailLayout.Heading("A certificate was uploaded") +
+                                    EmailLayout.Paragraph($"Hi {System.Net.WebUtility.HtmlEncode(manager.Name ?? "there")},") +
+                                    EmailLayout.Paragraph("A certificate was uploaded by your team.") +
+                                    EmailLayout.InfoBox(
+                                        EmailLayout.InfoRow("Uploaded by", System.Net.WebUtility.HtmlEncode(uploaderLabel)) +
+                                        EmailLayout.InfoRow("Status", EmailLayout.Badge(statusLabel, badgeColor, badgeBg))) +
+                                    EmailLayout.Paragraph(needsReview ? "This record needs your review before it can be approved." : "It's already been processed and filed.") +
+                                    EmailLayout.Button(link, needsReview ? "Review it now" : "View records");
+                                var html = EmailLayout.Wrap(subject, bodyHtml);
+
+                                await emailService.SendAsync(manager.Email, subject, html, stoppingToken);
                             }
                         }
                     }
@@ -444,15 +452,18 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 .ToListAsync(token);
 
             var link = $"{baseUrl.TrimEnd('/')}/review?recordId={recordId}";
+            var subject = $"{courseName} needs review";
+            var encodedCourse = System.Net.WebUtility.HtmlEncode(courseName);
+            var encodedStaff = System.Net.WebUtility.HtmlEncode(staffName);
             foreach (var recipient in recipients)
             {
                 if (string.IsNullOrWhiteSpace(recipient.Email)) continue;
-                var html = $"""
-                    <p>Hello {recipient.Name ?? "there"},</p>
-                    <p><strong>{courseName}</strong> for <strong>{staffName}</strong> needs review before it can be approved.</p>
-                    <p><a href="{link}">Review it now</a></p>
-                    """;
-                await emailService.SendAsync(recipient.Email, $"{courseName} needs review", html, token);
+                var bodyHtml = EmailLayout.Heading("A record needs your review") +
+                    EmailLayout.Paragraph($"Hi {System.Net.WebUtility.HtmlEncode(recipient.Name ?? "there")},") +
+                    EmailLayout.Paragraph($"<strong>{encodedCourse}</strong> for <strong>{encodedStaff}</strong> couldn't be fully matched automatically and needs a quick look before it can be approved.") +
+                    EmailLayout.Button(link, "Review it now");
+                var html = EmailLayout.Wrap(subject, bodyHtml);
+                await emailService.SendAsync(recipient.Email, subject, html, token);
             }
         }
         catch (Exception ex)

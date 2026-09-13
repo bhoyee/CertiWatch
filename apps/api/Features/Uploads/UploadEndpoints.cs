@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Features.Auth;
+using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
@@ -91,14 +92,16 @@ public static class UploadEndpoints
 
         if (!string.IsNullOrWhiteSpace(request.StaffEmail))
         {
-            var html = $"""
-                <p>Hello{(string.IsNullOrWhiteSpace(request.StaffName) ? "" : $" {request.StaffName}")},</p>
-                <p>You have been invited to upload your certificate.</p>
-                <p>This link expires at {expiresAt:u}:</p>
-                <p><a href="{link}">{link}</a></p>
-                <p>If you did not expect this, please ignore this email.</p>
-            """;
-            await emailService.SendAsync(request.StaffEmail!, "Upload your certificate", html, token);
+            var greeting = string.IsNullOrWhiteSpace(request.StaffName) ? "Hi there," : $"Hi {System.Net.WebUtility.HtmlEncode(request.StaffName)},";
+            var subject = "Upload your certificate";
+            var bodyHtml = EmailLayout.Heading(subject) +
+                EmailLayout.Paragraph(greeting) +
+                EmailLayout.Paragraph("You've been asked to upload your certificate to CertiWatch. Click below to get started — no account or password needed.") +
+                EmailLayout.Button(link, "Upload my certificate") +
+                EmailLayout.MutedText($"This link expires {expiresAt:dddd, d MMMM yyyy 'at' HH:mm} UTC.") +
+                EmailLayout.MutedText("If you weren't expecting this, you can safely ignore this email.");
+            var html = EmailLayout.Wrap(subject, bodyHtml);
+            await emailService.SendAsync(request.StaffEmail!, subject, html, token);
         }
 
         return Results.Ok(new UploadLinkResponse(rawToken, link, expiresAt));
