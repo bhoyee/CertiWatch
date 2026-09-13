@@ -1024,9 +1024,14 @@ public static class PlatformEndpoints
             var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == ticket.AssignedToUserId.Value, token);
             if (user != null && !string.IsNullOrWhiteSpace(user.Email))
             {
-                var html =
-                    $"<p>Hello,</p><p>A support ticket was assigned to you.</p><p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(ticket.Subject)}</p><p>Status: {ticket.Status}</p><p>Tenant: {ticket.TenantId}</p>";
-                await emailService.SendAsync(user.Email, "Support ticket assigned to you", html, token);
+                var subject = "Support ticket assigned to you";
+                var bodyHtml = EmailLayout.Heading(System.Net.WebUtility.HtmlEncode(ticket.Subject)) +
+                    EmailLayout.Paragraph("A platform support ticket was assigned to you.") +
+                    EmailLayout.InfoBox(
+                        EmailLayout.InfoRow("Status", System.Net.WebUtility.HtmlEncode(ticket.Status)) +
+                        EmailLayout.InfoRow("Tenant", System.Net.WebUtility.HtmlEncode(ticket.TenantId.ToString())));
+                var html = EmailLayout.Wrap(subject, bodyHtml);
+                await emailService.SendAsync(user.Email, subject, html, token);
             }
         }
 
@@ -1131,11 +1136,12 @@ public static class PlatformEndpoints
                 .FirstOrDefaultAsync(token);
             if (!string.IsNullOrWhiteSpace(creatorEmail))
             {
-                var html =
-                    $"<p>Hello,</p><p>CertiWatch support replied to your ticket.</p>" +
-                    $"<p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(ticket.Subject)}</p>" +
-                    $"<p>{System.Net.WebUtility.HtmlEncode(request.Body)}</p>";
-                await emailService.SendAsync(creatorEmail, $"Re: {ticket.Subject}", html, token);
+                var subject = $"Re: {ticket.Subject}";
+                var bodyHtml = EmailLayout.Heading(System.Net.WebUtility.HtmlEncode(ticket.Subject)) +
+                    EmailLayout.Paragraph("CertiWatch support replied to your ticket:") +
+                    EmailLayout.InfoBox($"""<span style="white-space:pre-wrap;">{System.Net.WebUtility.HtmlEncode(request.Body)}</span>""");
+                var html = EmailLayout.Wrap(subject, bodyHtml);
+                await emailService.SendAsync(creatorEmail, subject, html, token);
             }
         }
 

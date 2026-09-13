@@ -1,5 +1,6 @@
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
+using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
@@ -211,6 +212,7 @@ public static class SupportEndpoints
         AppDbContext db,
         ITenantContextAccessor accessor,
         IEmailService emailService,
+        IOptions<MagicLinkOptions> magicOptions,
         CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Body))
@@ -225,7 +227,7 @@ public static class SupportEndpoints
             TenantId = tenantId,
             CreatedByUserId = userId,
             Subject = request.Subject.Trim(),
-            Body = request.Body.Trim(),
+            Body = RichTextSanitizer.Sanitize(request.Body),
             Priority = NormalizePriority(request.Priority),
             RecordId = request.RecordId,
             PageContext = request.PageContext,
@@ -267,7 +269,7 @@ public static class SupportEndpoints
 
         await db.SaveChangesAsync(token);
 
-        await NotifyAssigneesAsync(db, emailService, ticket, "created", token);
+        await NotifyAssigneesAsync(db, emailService, ticket, "created", magicOptions.Value.BaseUrl, token);
 
         return Results.Ok(new { ticket.Id, ticket.AssignedRole, ticket.Status });
     }
@@ -322,7 +324,7 @@ public static class SupportEndpoints
         {
             TicketId = ticket.Id,
             AuthorUserId = accessor.Current.UserId,
-            Body = request.Body.Trim()
+            Body = RichTextSanitizer.Sanitize(request.Body)
         };
         db.SupportMessages.Add(message);
 
@@ -379,6 +381,7 @@ public static class SupportEndpoints
         AppDbContext db,
         ITenantContextAccessor accessor,
         IEmailService emailService,
+        IOptions<MagicLinkOptions> magicOptions,
         CancellationToken token)
     {
         if (!IsAdmin(accessor) && !IsManager(accessor))
@@ -399,7 +402,7 @@ public static class SupportEndpoints
         }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(token);
-        await NotifyAssigneesAsync(db, emailService, ticket, "assigned", token);
+        await NotifyAssigneesAsync(db, emailService, ticket, "assigned", magicOptions.Value.BaseUrl, token);
         return Results.NoContent();
     }
 
@@ -543,6 +546,7 @@ public static class SupportEndpoints
         IEmailService emailService,
         SupportTicket ticket,
         string action,
+        string baseUrl,
         CancellationToken token)
     {
         var recipientEmails = new List<string>();
@@ -599,21 +603,46 @@ public static class SupportEndpoints
                 .FirstOrDefaultAsync(token)
             : null;
 
-        var subject = $"Support ticket {action}: {ticket.Subject}";
+        var subjectLine = action == "created" ? "New support ticket" : "Support ticket assigned to you";
+        var subject = $"{subjectLine}: {ticket.Subject}";
         var assignmentText = ticket.AssignedToUserId.HasValue
             ? await db.Users.AsNoTracking().Where(u => u.Id == ticket.AssignedToUserId.Value)
                 .Select(u => u.Name ?? u.Email ?? "Unassigned").FirstOrDefaultAsync(token) ?? "Unassigned"
             : ticket.AssignedRole ?? "Unassigned";
 
-        var body = $@"
-<p>A support ticket was {WebUtility.HtmlEncode(action)}.</p>
-<ul>
-  <li><strong>Subject:</strong> {WebUtility.HtmlEncode(ticket.Subject)}</li>
-  <li><strong>Status:</strong> {WebUtility.HtmlEncode(ticket.Status)}</li>
-  <li><strong>From:</strong> {WebUtility.HtmlEncode(creator?.Name ?? creator?.Email ?? "" )}</li>
-  <li><strong>Assigned:</strong> {WebUtility.HtmlEncode(assignmentText)}</li>
-</ul>
-<p><strong>Description</strong><br/>{WebUtility.HtmlEncode(ticket.Body)}</p>";
+        var (statusColor, statusBg) = ticket.Status switch
+        {
+            "closed" => ("#047857", "#d1fae5"),
+            "pending" => ("#1d4ed8", "#dbeafe"),
+            _ => ("#b45309", "#fef3c7")
+        };
+        var (priorityColor, priorityBg) = ticket.Priority switch
+        {
+            "urgent" => ("#be123c", "#ffe4e6"),
+            "high" => ("#b45309", "#fef3c7"),
+            "low" => ("#475569", "#f1f5f9"),
+            _ => ("#1d4ed8", "#dbeafe")
+        };
+        var link = $"{baseUrl.TrimEnd('/')}/support";
+
+        var bodyHtml = EmailLayout.Heading(WebUtility.HtmlEncode(ticket.Subject)) +
+            EmailLayout.Paragraph(
+                action == "created"
+                    ? $"A new support ticket was submitted by <strong>{WebUtility.HtmlEncode(creator?.Name ?? creator?.Email ?? "someone")}</strong>."
+                    : "A support ticket was assigned to you.") +
+            EmailLayout.InfoBox(
+                EmailLayout.InfoRow("Status", EmailLayout.Badge(WebUtility.HtmlEncode(ticket.Status), statusColor, statusBg)) +
+                EmailLayout.InfoRow("Priority", EmailLayout.Badge(WebUtility.HtmlEncode(NormalizePriority(ticket.Priority)), priorityColor, priorityBg)) +
+                EmailLayout.InfoRow("From", WebUtility.HtmlEncode(creator?.Name ?? creator?.Email ?? "Unknown")) +
+                EmailLayout.InfoRow("Assigned to", WebUtility.HtmlEncode(assignmentText))) +
+            EmailLayout.Paragraph("<strong>Description</strong>") +
+            // ticket.Body is sanitized rich text HTML (RichTextSanitizer, applied at write time in
+            // CreateAsync/ReplyAsync) - it's real markup meant to render, not text to escape, so
+            // it's embedded directly rather than HtmlEncode'd like the plain-string fields above.
+            $"""<div style="color:#334155;">{ticket.Body}</div>""" +
+            EmailLayout.Button(link, "View ticket");
+
+        var body = EmailLayout.Wrap(subject, bodyHtml);
 
         foreach (var email in recipientEmails.Distinct(StringComparer.OrdinalIgnoreCase))
         {
