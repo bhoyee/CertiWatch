@@ -25,6 +25,7 @@ public static class BillingEndpoints
         group.MapPost("/webhook", HandleWebhookAsync).AllowAnonymous();
         group.MapPost("/portal", CreatePortalSessionAsync).RequireAuthorization();
         group.MapGet("/invoices", ListInvoicesAsync).RequireAuthorization();
+        group.MapGet("/invoices/{stripeInvoiceId}/pdf", GetInvoicePdfAsync).RequireAuthorization();
         return routes;
     }
 
@@ -61,24 +62,67 @@ public static class BillingEndpoints
         }
 
         var tenantId = accessor.Current.TenantId;
-        var invoices = await db.BillingInvoices
+        var raw = await db.BillingInvoices
             .AsNoTracking()
             .Where(i => i.TenantId == tenantId)
             .OrderByDescending(i => i.InvoiceDateUtc ?? i.CreatedAt)
-            .Select(i => new
-            {
-                i.StripeInvoiceId,
-                i.AmountDue,
-                i.AmountPaid,
-                i.Currency,
-                i.Status,
-                i.HostedInvoiceUrl,
-                i.PdfUrl,
-                i.InvoiceDateUtc
-            })
             .ToListAsync(token);
 
+        // A stable, always-ours URL rather than handing the frontend Stripe's own link directly -
+        // this is what actually serves the archived PDF (or falls back to Stripe's link) at
+        // request time, so a tenant's download button keeps working even if Stripe's copy doesn't.
+        var invoices = raw.Select(i => new
+        {
+            i.StripeInvoiceId,
+            i.AmountDue,
+            i.AmountPaid,
+            i.Currency,
+            i.Status,
+            i.HostedInvoiceUrl,
+            i.PdfUrl,
+            i.InvoiceDateUtc,
+            DownloadUrl = $"/api/billing/invoices/{i.StripeInvoiceId}/pdf"
+        });
+
         return Results.Ok(invoices);
+    }
+
+    // Serves our own archived copy of the invoice PDF when we have one (the durable path), and
+    // falls back to redirecting to Stripe's own link otherwise - covers invoices archived before
+    // this existed, or the rare case the archive download itself failed at webhook time.
+    private static async Task<IResult> GetInvoicePdfAsync(
+        string stripeInvoiceId,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        HttpContext httpContext,
+        CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var invoice = await db.BillingInvoices.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.TenantId == tenantId && i.StripeInvoiceId == stripeInvoiceId, token);
+        if (invoice is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!string.IsNullOrWhiteSpace(invoice.ArchivedPdfPath) && System.IO.File.Exists(invoice.ArchivedPdfPath))
+        {
+            var stream = System.IO.File.OpenRead(invoice.ArchivedPdfPath);
+            httpContext.Response.Headers["Content-Disposition"] = $"inline; filename=\"invoice-{stripeInvoiceId}.pdf\"";
+            return Results.File(stream, "application/pdf", enableRangeProcessing: true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(invoice.PdfUrl))
+        {
+            return Results.Redirect(invoice.PdfUrl);
+        }
+
+        return Results.NotFound();
     }
 
     private static async Task<IResult> CreateCheckoutSessionAsync(
@@ -261,9 +305,11 @@ public static class BillingEndpoints
         HttpContext context,
         IOptions<StripeOptions> stripeOptions,
         IOptions<MagicLinkOptions> magicOptions,
+        IOptions<StorageOptions> storageOptions,
         ITenantProvisioningService provisioningService,
         IEmailTemplateRenderer renderer,
         IEmailService emailService,
+        ILoggerFactory loggerFactory,
         AppDbContext db,
         CancellationToken cancellationToken)
     {
@@ -294,7 +340,7 @@ public static class BillingEndpoints
             case Events.InvoicePaymentSucceeded:
             case Events.InvoicePaymentFailed:
             case Events.InvoiceUpcoming:
-                await HandleInvoice(stripeEvent, db, cancellationToken);
+                await HandleInvoice(stripeEvent, db, storageOptions.Value, loggerFactory, cancellationToken);
                 break;
         }
 
@@ -362,7 +408,7 @@ public static class BillingEndpoints
         await db.SaveChangesAsync(token);
     }
 
-    private static async Task HandleInvoice(Event stripeEvent, AppDbContext db, CancellationToken token)
+    private static async Task HandleInvoice(Event stripeEvent, AppDbContext db, StorageOptions storageOptions, ILoggerFactory loggerFactory, CancellationToken token)
     {
         if (stripeEvent.Data.Object is not Invoice invoice || string.IsNullOrWhiteSpace(invoice.CustomerId))
         {
@@ -398,6 +444,48 @@ public static class BillingEndpoints
         existing.PeriodEndUtc = invoice.PeriodEnd.ToUniversalTime();
         existing.InvoiceDateUtc = invoice.Created.ToUniversalTime();
 
+        // invoice.upcoming fires before the invoice is finalized, when InvoicePdf is still null -
+        // there's nothing to archive yet at that point, only once payment_succeeded/failed fires
+        // with a real, finalized PDF.
+        if (!string.IsNullOrWhiteSpace(invoice.InvoicePdf))
+        {
+            await TryArchiveInvoicePdfAsync(existing, invoice.InvoicePdf, storageOptions, loggerFactory, token);
+        }
+
         await db.SaveChangesAsync(token);
+    }
+
+    // One shared static client for these infrequent, best-effort outbound downloads - avoids the
+    // socket-exhaustion problem of a fresh HttpClient per call without needing a full
+    // IHttpClientFactory registration for what's a single call site.
+    private static readonly HttpClient InvoicePdfClient = new();
+
+    // Best-effort: a failed download must never break webhook processing (the invoice metadata is
+    // already saved either way, and Stripe retries the webhook on a non-2xx response, not on our
+    // internal archiving succeeding).
+    private static async Task TryArchiveInvoicePdfAsync(BillingInvoice existing, string pdfUrl, StorageOptions storageOptions, ILoggerFactory loggerFactory, CancellationToken token)
+    {
+        // A finalized Stripe invoice's PDF content never changes, so if we already have a copy on
+        // disk there's no reason to re-download it on every webhook retry/replay.
+        if (!string.IsNullOrWhiteSpace(existing.ArchivedPdfPath) && System.IO.File.Exists(existing.ArchivedPdfPath))
+        {
+            return;
+        }
+
+        var root = string.IsNullOrWhiteSpace(storageOptions.UploadsRoot) ? "/uploads" : storageOptions.UploadsRoot.TrimEnd(Path.DirectorySeparatorChar);
+        var dir = Path.Combine(root, existing.TenantId.ToString(), "invoices");
+        var path = Path.Combine(dir, $"{existing.StripeInvoiceId}.pdf");
+
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var bytes = await InvoicePdfClient.GetByteArrayAsync(pdfUrl, token);
+            await System.IO.File.WriteAllBytesAsync(path, bytes, token);
+            existing.ArchivedPdfPath = path;
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger("Billing").LogWarning(ex, "Failed to archive invoice PDF for {InvoiceId}", existing.StripeInvoiceId);
+        }
     }
 }

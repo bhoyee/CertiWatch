@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { fetchJson, postJson } from "../../../lib/api";
+import { apiUrl, fetchJson, postJson } from "../../../lib/api";
 
 type TenantPlanDto = {
   tenantName: string;
@@ -73,7 +73,10 @@ export default function PlanPage() {
             date: inv.invoiceDateUtc ?? "",
             amount: formatAmount(inv.amountPaid ?? inv.amountDue, inv.currency),
             status: normalized,
-            downloadUrl: inv.pdfUrl ?? inv.hostedInvoiceUrl
+            // Our own stable endpoint (serves the archived copy, falls back to Stripe's own link
+            // server-side) rather than handing Stripe's link straight to the browser - keeps
+            // working even if Stripe's copy of a given invoice later goes away.
+            downloadUrl: inv.downloadUrl ? apiUrl(inv.downloadUrl) : (inv.pdfUrl ?? inv.hostedInvoiceUrl)
           } as Invoice;
         });
         setInvoices(mapped.filter((inv) => inv.id));
