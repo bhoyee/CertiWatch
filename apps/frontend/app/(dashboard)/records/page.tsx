@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchJson } from "../../../lib/api";
+import { fetchJson, deleteJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
@@ -226,11 +226,7 @@ function RecordsPageInner() {
     if (!confirmDeleteId) return;
     setDeleting(true);
     try {
-      const res = await fetch(`${apiBase}/api/records/${confirmDeleteId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Delete failed (${res.status})`);
-      }
+      await deleteJson(`/api/records/${confirmDeleteId}`);
       setConfirmDeleteId(null);
       setConfirmDeleteName(null);
       setDeleteConfirmText("");
@@ -277,7 +273,11 @@ function RecordsPageInner() {
     try {
       const ids = Array.from(selectedIds);
       const results = await Promise.all(
-        ids.map((id) => fetch(`${apiBase}/api/records/${id}`, { method: "DELETE" }).then((res) => ({ id, ok: res.ok })))
+        ids.map((id) =>
+          deleteJson(`/api/records/${id}`)
+            .then(() => ({ id, ok: true }))
+            .catch(() => ({ id, ok: false }))
+        )
       );
       const failed = results.filter((r) => !r.ok);
       setSelectedIds(new Set(failed.map((f) => f.id)));
