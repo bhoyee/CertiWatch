@@ -63,7 +63,7 @@ public static class SupportEndpoints
         IEnumerable<MessageDto> Messages,
         IEnumerable<AttachmentDto> Attachments);
 
-    private sealed record MessageDto(Guid Id, Guid? AuthorUserId, string? AuthorName, string Body, DateTime CreatedAt);
+    private sealed record MessageDto(Guid Id, Guid? AuthorUserId, string? AuthorName, bool AuthorIsPlatform, string Body, DateTime CreatedAt);
     private sealed record AttachmentDto(Guid Id, string FileName, string? MimeType, long SizeBytes, string Url, Guid? MessageId, string? UploadedByName, DateTime CreatedAt);
     private sealed record CreateTicketRequest(string Subject, string Body, string? Priority, Guid? RecordId, string? PageContext, List<Guid>? AttachmentIds);
     private sealed record ReplyRequest(string Body, List<Guid>? AttachmentIds);
@@ -169,9 +169,10 @@ public static class SupportEndpoints
         if (ticket.CreatedByUserId.HasValue) ids.Add(ticket.CreatedByUserId.Value);
         if (ticket.AssignedToUserId.HasValue) ids.Add(ticket.AssignedToUserId.Value);
         ids.AddRange(attachments.Where(a => a.UploadedByUserId.HasValue).Select(a => a.UploadedByUserId!.Value));
-        var userLookup = await db.Users.AsNoTracking()
+        var userDetails = await db.Users.AsNoTracking()
             .Where(u => ids.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email, token);
+            .ToDictionaryAsync(u => u.Id, u => new { Name = u.Name ?? u.Email, u.Role }, token);
+        var userLookup = userDetails.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
 
         var dto = new TicketDetailDto(
             ticket.Id,
@@ -191,6 +192,7 @@ public static class SupportEndpoints
                     m.Id,
                     m.AuthorUserId,
                     m.AuthorUserId.HasValue && userLookup.TryGetValue(m.AuthorUserId.Value, out var mn) ? mn : null,
+                    m.AuthorUserId.HasValue && userDetails.TryGetValue(m.AuthorUserId.Value, out var mr) && mr.Role.Equals("superadmin", StringComparison.OrdinalIgnoreCase),
                     m.Body,
                     m.CreatedAt)).ToList(),
             attachments.Select(a =>
@@ -330,8 +332,46 @@ public static class SupportEndpoints
 
         await ReparentAttachmentsAsync(db, accessor.Current.TenantId, accessor.Current.UserId, request.AttachmentIds, ticket.Id, message.Id, token);
 
+        var authorName = await db.Users.AsNoTracking().Where(u => u.Id == accessor.Current.UserId)
+            .Select(u => u.Name ?? u.Email).FirstOrDefaultAsync(token) ?? "Someone";
+        AddTenantNotification(db, ticket, "support_reply", ticket.Subject, $"{authorName} replied to this ticket.");
+        MaybeAddPlatformNotification(db, ticket, "support_reply", ticket.Subject, $"{authorName} replied to a ticket assigned to platform support.");
+
         await db.SaveChangesAsync(token);
         return Results.NoContent();
+    }
+
+    // Tenant staff act as one team on this bell already (see Notification's own doc comment), so
+    // any ticket activity - including a tenant user replying to their own ticket - surfaces here
+    // the same way an "expiring" or "needs_review" notification would.
+    private static void AddTenantNotification(AppDbContext db, SupportTicket ticket, string type, string title, string body)
+    {
+        db.Notifications.Add(new Notification
+        {
+            TenantId = ticket.TenantId,
+            TicketId = ticket.Id,
+            Type = type,
+            Title = title,
+            Body = body
+        });
+    }
+
+    // Only tickets actually escalated to CertiWatch's own staff are worth surfacing on the
+    // platform console - a purely internal manager/admin ticket never reaches a superadmin's
+    // queue, so it shouldn't page one either.
+    private static void MaybeAddPlatformNotification(AppDbContext db, SupportTicket ticket, string type, string title, string body)
+    {
+        var role = ticket.AssignedRole?.ToLowerInvariant();
+        if (role != "support" && role != "superadmin") return;
+
+        db.PlatformNotifications.Add(new PlatformNotification
+        {
+            TicketId = ticket.Id,
+            TenantId = ticket.TenantId,
+            Type = type,
+            Title = title,
+            Body = body
+        });
     }
 
     private static async Task<IResult> DeleteAsync(
@@ -424,8 +464,22 @@ public static class SupportEndpoints
             return Results.BadRequest(new { error = "status_required" });
         }
 
-        ticket.Status = request.Status.Trim().ToLower();
+        var newStatus = request.Status.Trim().ToLower();
+        var changed = !string.Equals(ticket.Status, newStatus, StringComparison.OrdinalIgnoreCase);
+        ticket.Status = newStatus;
         ticket.UpdatedAt = DateTime.UtcNow;
+
+        if (changed)
+        {
+            var actorName = await db.Users.AsNoTracking().Where(u => u.Id == accessor.Current.UserId)
+                .Select(u => u.Name ?? u.Email).FirstOrDefaultAsync(token) ?? "Someone";
+            var text = newStatus == "closed"
+                ? $"{actorName} closed this ticket."
+                : $"{actorName} reopened this ticket ({newStatus}).";
+            AddTenantNotification(db, ticket, "support_status", ticket.Subject, text);
+            MaybeAddPlatformNotification(db, ticket, "support_status", ticket.Subject, text);
+        }
+
         await db.SaveChangesAsync(token);
         return Results.NoContent();
     }

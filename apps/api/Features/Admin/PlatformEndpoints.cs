@@ -33,6 +33,10 @@ public static class PlatformEndpoints
         group.MapGet("/support/tickets/{id:guid}", GetSupportTicketAsync);
         group.MapPost("/support/tickets/{id:guid}/messages", ReplySupportTicketAsync);
         group.MapPost("/support/tickets/{id:guid}/status", UpdateSupportTicketAsync);
+        group.MapGet("/support/notifications/unread-count", PlatformNotificationsUnreadCountAsync);
+        group.MapGet("/support/notifications/feed", PlatformNotificationsFeedAsync);
+        group.MapPost("/support/notifications/{id:guid}/read", MarkPlatformNotificationReadAsync);
+        group.MapPost("/support/notifications/read-all", MarkAllPlatformNotificationsReadAsync);
         group.MapGet("/billing/overview", BillingOverviewAsync);
         group.MapPost("/billing/invoices/{invoiceId}/resend", ResendInvoiceAsync);
         group.MapPost("/billing/subscriptions/{id}/cancel", CancelSubscriptionAsync);
@@ -1003,6 +1007,19 @@ public static class PlatformEndpoints
         }
 
         ticket.UpdatedAt = DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            db.Notifications.Add(new Domain.Entities.Notification
+            {
+                TenantId = ticket.TenantId,
+                TicketId = ticket.Id,
+                Type = "support_status",
+                Title = ticket.Subject,
+                Body = $"CertiWatch support changed this ticket's status to {ticket.Status}."
+            });
+        }
+
         await db.SaveChangesAsync(token);
         await LogAuditAsync(
             db,
@@ -1125,6 +1142,16 @@ public static class PlatformEndpoints
             AuthorUserId = accessor.Current.UserId,
             Body = request.Body.Trim()
         });
+
+        db.Notifications.Add(new Domain.Entities.Notification
+        {
+            TenantId = ticket.TenantId,
+            TicketId = ticket.Id,
+            Type = "support_reply",
+            Title = ticket.Subject,
+            Body = "CertiWatch support replied to this ticket."
+        });
+
         await db.SaveChangesAsync(token);
         await LogAuditAsync(db, ticket.TenantId, accessor, "platform_support_reply", new { ticketId = id }, token);
 
@@ -1145,6 +1172,45 @@ public static class PlatformEndpoints
             }
         }
 
+        return Results.NoContent();
+    }
+
+    private sealed record PlatformNotificationDto(Guid Id, Guid TicketId, string Type, string Title, string Body, bool IsRead, DateTime CreatedAt);
+
+    private static async Task<IResult> PlatformNotificationsUnreadCountAsync(AppDbContext db, CancellationToken token)
+    {
+        var count = await db.PlatformNotifications.CountAsync(n => !n.IsRead, token);
+        return Results.Ok(new { count });
+    }
+
+    private static async Task<IResult> PlatformNotificationsFeedAsync(AppDbContext db, int? take, CancellationToken token)
+    {
+        var limit = Math.Clamp(take ?? 20, 5, 100);
+        var items = await db.PlatformNotifications.AsNoTracking()
+            .OrderByDescending(n => n.CreatedAt)
+            .Take(limit)
+            .Select(n => new PlatformNotificationDto(n.Id, n.TicketId, n.Type, n.Title, n.Body, n.IsRead, n.CreatedAt))
+            .ToListAsync(token);
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> MarkPlatformNotificationReadAsync(Guid id, AppDbContext db, CancellationToken token)
+    {
+        var notification = await db.PlatformNotifications.FirstOrDefaultAsync(n => n.Id == id, token);
+        if (notification is null) return Results.NotFound();
+
+        notification.IsRead = true;
+        notification.ReadAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> MarkAllPlatformNotificationsReadAsync(AppDbContext db, CancellationToken token)
+    {
+        var now = DateTime.UtcNow;
+        await db.PlatformNotifications
+            .Where(n => !n.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, now), token);
         return Results.NoContent();
     }
 

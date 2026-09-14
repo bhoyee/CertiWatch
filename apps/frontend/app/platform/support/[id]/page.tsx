@@ -46,20 +46,31 @@ export default function PlatformTicketDetailPage() {
   const [sending, setSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const load = async () => {
+  const load = async (silent = false) => {
     try {
       const data = await fetchJson<TicketDetail>(`/api/platform/support/tickets/${params.id}`);
       setTicket(data);
-      setError(null);
+      if (!silent) setError(null);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to load ticket");
+      if (!silent) setError(e?.message ?? "Failed to load ticket");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    setLoading(true);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
+
+  // Silent refresh so a tenant's reply shows up here without a manual reload, mirroring the
+  // tenant-side support page's own polling.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 6000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
@@ -202,17 +213,23 @@ export default function PlatformTicketDetailPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-semibold text-slate-900">Reply as CertiWatch support</p>
+        {ticket.status === "closed" && (
+          <p className="mt-1 text-xs text-amber-700">
+            This ticket is closed - use the <span className="font-semibold">Open</span> button above to reopen it before replying.
+          </p>
+        )}
         <textarea
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           rows={4}
+          disabled={ticket.status === "closed"}
           placeholder="Write a reply…"
-          className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none"
+          className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
         />
         <div className="mt-3 flex justify-end">
           <button
             onClick={sendReply}
-            disabled={sending || !reply.trim()}
+            disabled={sending || !reply.trim() || ticket.status === "closed"}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sending ? "Sending…" : "Send reply"}
