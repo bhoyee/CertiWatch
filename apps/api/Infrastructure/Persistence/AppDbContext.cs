@@ -70,6 +70,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<BillingInvoice>(entity =>
         {
             entity.HasIndex(i => new { i.TenantId, i.StripeInvoiceId }).IsUnique();
+            entity.Property(i => i.ArchivedPdfPath).HasMaxLength(1024);
         });
 
         modelBuilder.Entity<CourseRule>(entity =>
