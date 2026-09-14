@@ -10,6 +10,7 @@ using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Stripe;
 using Stripe.Checkout;
 using PortalSessionService = Stripe.BillingPortal.SessionService;
@@ -452,8 +453,22 @@ public static class BillingEndpoints
             await TryArchiveInvoicePdfAsync(existing, invoice.InvoicePdf, storageOptions, loggerFactory, token);
         }
 
-        await db.SaveChangesAsync(token);
+        try
+        {
+            await db.SaveChangesAsync(token);
+        }
+        catch (DbUpdateException ex) when (IsDuplicateInvoiceRow(ex))
+        {
+            // Stripe delivers webhooks at-least-once, so the same event can legitimately arrive
+            // twice in close succession (e.g. after a slow response). If a concurrent delivery of
+            // this same event already inserted the row first, that row already carries the same
+            // invoice data we just computed - there's nothing to reconcile, just drop our copy.
+            db.Entry(existing).State = EntityState.Detached;
+        }
     }
+
+    private static bool IsDuplicateInvoiceRow(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_BillingInvoices_TenantId_StripeInvoiceId" };
 
     // One shared static client for these infrequent, best-effort outbound downloads - avoids the
     // socket-exhaustion problem of a fresh HttpClient per call without needing a full
