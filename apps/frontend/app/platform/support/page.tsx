@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson, postVoid } from "@/lib/api";
 
 type Ticket = {
@@ -54,11 +54,13 @@ function PlatformSupportPageContent() {
   const page = Number(search.get("page") ?? "1");
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
 
+  const loadRef = useRef<(silent?: boolean) => Promise<void>>(async () => {});
+
   useEffect(() => {
     let active = true;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
+    const load = async (silent = false) => {
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
       try {
         const qs = new URLSearchParams();
         if (tenantId) qs.set("tenantId", tenantId);
@@ -74,17 +76,26 @@ function PlatformSupportPageContent() {
         setTotal(tixResp.total);
         setTenants(tnts.map((t) => ({ id: t.id, name: t.name })));
       } catch (e: any) {
-        if (!active) return;
+        if (!active || silent) return;
         setError(e?.message ?? "Failed to load tickets");
       } finally {
-        if (active) setLoading(false);
+        if (active && !silent) setLoading(false);
       }
     };
+    loadRef.current = load;
     load();
     return () => {
       active = false;
     };
   }, [tenantId, status, safePage]);
+
+  // Silent refresh so newly updated tickets (and new ones) show up without a manual reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void loadRef.current(true);
+    }, 8000);
+    return () => clearInterval(id);
+  }, []);
 
   const onFilterChange = (nextTenantId: string, nextStatus: string) => {
     const qs = new URLSearchParams();

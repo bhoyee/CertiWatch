@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiUrl, fetchJson, patchJson, postFile, postJson, postVoid } from "../../../lib/api";
 import { RichTextContent, RichTextEditor } from "../../../components/RichTextEditor";
 import { useRole } from "../RoleContext";
@@ -34,6 +35,7 @@ type Message = {
   id: string;
   authorUserId?: string | null;
   authorName?: string | null;
+  authorIsPlatform: boolean;
   body: string;
   createdAt: string;
 };
@@ -236,7 +238,16 @@ function Modal({ children, onClose, title, wide }: { children: React.ReactNode; 
 }
 
 export default function SupportPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-slate-600">Loading support…</div>}>
+      <SupportPageInner />
+    </Suspense>
+  );
+}
+
+function SupportPageInner() {
   const { role } = useRole();
+  const searchParams = useSearchParams();
   const isAdmin = role?.toLowerCase() === "admin" || role?.toLowerCase() === "superadmin";
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -282,8 +293,14 @@ export default function SupportPage() {
   const openCount = useMemo(() => tickets.filter((t) => t.status === "open").length, [tickets]);
   const urgentCount = useMemo(() => tickets.filter((t) => t.priority === "urgent" && t.status !== "closed").length, [tickets]);
 
+  const detailRef = useRef<TicketDetail | null>(null);
   useEffect(() => {
-    void loadTickets();
+    detailRef.current = detail;
+  }, [detail]);
+
+  useEffect(() => {
+    const ticketFromLink = searchParams.get("ticket");
+    void loadTickets(false, ticketFromLink);
   }, []);
 
   useEffect(() => {
@@ -294,32 +311,48 @@ export default function SupportPage() {
     setPage((p) => Math.min(Math.max(p, 1), totalPages));
   }, [totalPages]);
 
-  async function loadTickets() {
-    setTicketsLoading(true);
-    setError(null);
+  // Silent refresh: polls the list and whichever ticket is open, without touching the loading
+  // flags that show spinners - so a reply from the other side just appears, instead of the whole
+  // panel flashing back to "Loading..." every few seconds. Paused while the tab isn't visible so
+  // an idle background tab isn't polling the API for nothing.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadTickets(true);
+      if (detailRef.current) void loadDetail(detailRef.current.id, true);
+    };
+    const id = setInterval(tick, 6000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function loadTickets(silent = false, selectTicketId?: string | null) {
+    if (!silent) setTicketsLoading(true);
+    if (!silent) setError(null);
     try {
       const data = await fetchJson<Ticket[]>("/api/support/tickets");
       setTickets(data);
-      if (data.length && !detail) {
+      if (selectTicketId && data.some((t) => t.id === selectTicketId)) {
+        void loadDetail(selectTicketId);
+      } else if (data.length && !detailRef.current) {
         void loadDetail(data[0].id);
       }
     } catch (e: any) {
-      setError(e.message ?? "Failed to load tickets");
+      if (!silent) setError(e.message ?? "Failed to load tickets");
     } finally {
-      setTicketsLoading(false);
+      if (!silent) setTicketsLoading(false);
     }
   }
 
-  async function loadDetail(id: string) {
-    setDetailLoading(true);
-    setError(null);
+  async function loadDetail(id: string, silent = false) {
+    if (!silent) setDetailLoading(true);
+    if (!silent) setError(null);
     try {
       const data = await fetchJson<TicketDetail>(`/api/support/tickets/${id}`);
       setDetail(data);
     } catch (e: any) {
-      setError(e.message ?? "Failed to load ticket");
+      if (!silent) setError(e.message ?? "Failed to load ticket");
     } finally {
-      setDetailLoading(false);
+      if (!silent) setDetailLoading(false);
     }
   }
 
@@ -442,7 +475,7 @@ export default function SupportPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={loadTickets}
+            onClick={() => void loadTickets()}
             disabled={ticketsLoading}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
@@ -638,15 +671,24 @@ export default function SupportPage() {
                 {detail.messages.map((m, i) => {
                   const isOpening = i === 0;
                   const msgAttachments = detail.attachments.filter((a) => a.messageId === m.id && !m.body.includes(a.url));
+                  // Opening message keeps its own tint regardless of author; after that, a
+                  // platform-support reply gets the same indigo treatment the platform console
+                  // uses for its own messages, so a conversation with CertiWatch reads clearly
+                  // against messages from your own team (plain white/slate).
+                  const bgClass = isOpening
+                    ? "border-indigo-100 bg-indigo-50/40"
+                    : m.authorIsPlatform
+                      ? "border-indigo-200 bg-indigo-50"
+                      : "border-slate-100 bg-white";
                   return (
-                    <div
-                      key={m.id}
-                      className={`rounded-lg border p-3 ${isOpening ? "border-indigo-100 bg-indigo-50/40" : "border-slate-100 bg-white"}`}
-                    >
+                    <div key={m.id} className={`rounded-lg border p-3 ${bgClass}`}>
                       <div className="flex items-center justify-between text-xs text-slate-500">
                         <span className="font-semibold text-slate-700">
                           {m.authorName ?? "System"}
                           {isOpening && <span className="ml-2 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">Original request</span>}
+                          {!isOpening && m.authorIsPlatform && (
+                            <span className="ml-2 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">CertiWatch</span>
+                          )}
                         </span>
                         <span>{new Date(m.createdAt).toLocaleString()}</span>
                       </div>
@@ -666,41 +708,55 @@ export default function SupportPage() {
                 {!detail.messages.length && <div className="text-xs text-slate-500">No messages yet.</div>}
               </div>
 
-              <div className="space-y-2 border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reply</p>
-                <RichTextEditor value={replyBody} onChange={setReplyBody} onUploadImage={uploadInlineImageForReply} placeholder="Write a reply..." />
-                {replyFileChips.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {replyFileChips.map((f) => (
-                      <AttachmentChip
-                        key={f.id}
-                        attachment={f}
-                        onRemove={() => {
-                          setReplyFileChips((prev) => prev.filter((x) => x.id !== f.id));
-                          setReplyAttachmentIds((prev) => prev.filter((id) => id !== f.id));
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <AttachFilesButton
-                    uploading={replyUploading}
-                    setUploading={setReplyUploading}
-                    onUploaded={(a) => {
-                      setReplyFileChips((prev) => [...prev, a]);
-                      setReplyAttachmentIds((prev) => [...prev, a.id]);
-                    }}
-                  />
+              {detail.status === "closed" ? (
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-slate-700">This ticket is closed.</p>
+                  <p className="text-xs text-slate-500">Reopen it to add a reply.</p>
                   <button
-                    onClick={sendReply}
-                    disabled={replying || replyUploading}
-                    className="inline-flex items-center rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-50"
+                    onClick={() => void changeStatus("open")}
+                    disabled={updatingStatus}
+                    className="mt-1 inline-flex items-center rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-50"
                   >
-                    {replying ? "Sending..." : "Send reply"}
+                    {updatingStatus ? "Reopening..." : "Reopen ticket"}
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2 border-t border-slate-200 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reply</p>
+                  <RichTextEditor value={replyBody} onChange={setReplyBody} onUploadImage={uploadInlineImageForReply} placeholder="Write a reply..." />
+                  {replyFileChips.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {replyFileChips.map((f) => (
+                        <AttachmentChip
+                          key={f.id}
+                          attachment={f}
+                          onRemove={() => {
+                            setReplyFileChips((prev) => prev.filter((x) => x.id !== f.id));
+                            setReplyAttachmentIds((prev) => prev.filter((id) => id !== f.id));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <AttachFilesButton
+                      uploading={replyUploading}
+                      setUploading={setReplyUploading}
+                      onUploaded={(a) => {
+                        setReplyFileChips((prev) => [...prev, a]);
+                        setReplyAttachmentIds((prev) => [...prev, a.id]);
+                      }}
+                    />
+                    <button
+                      onClick={sendReply}
+                      disabled={replying || replyUploading}
+                      className="inline-flex items-center rounded-md bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-50"
+                    >
+                      {replying ? "Sending..." : "Send reply"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

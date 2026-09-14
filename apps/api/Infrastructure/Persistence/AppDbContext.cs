@@ -26,6 +26,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<RequirementType> RequirementTypes => Set<RequirementType>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<PlatformNotification> PlatformNotifications => Set<PlatformNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(n => new { n.TenantId, n.IsRead, n.CreatedAt });
             entity.HasIndex(n => new { n.RecordId, n.Type }).HasDatabaseName("idx_notifications_record_type");
+        });
+
+        modelBuilder.Entity<PlatformNotification>(entity =>
+        {
+            entity.HasIndex(n => new { n.IsRead, n.CreatedAt });
+            entity.HasIndex(n => n.TicketId);
         });
 
         modelBuilder.Entity<Reminder>(entity =>

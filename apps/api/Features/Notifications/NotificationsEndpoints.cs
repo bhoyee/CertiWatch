@@ -21,7 +21,7 @@ public static class NotificationsEndpoints
         return group;
     }
 
-    private sealed record NotificationDto(Guid Id, Guid? RecordId, string Type, string Title, string Body, bool IsRead, DateTime CreatedAt);
+    private sealed record NotificationDto(Guid Id, Guid? RecordId, Guid? TicketId, string Type, string Title, string Body, bool IsRead, DateTime CreatedAt);
 
     // The bell mirrors who the email reminders already go to (tenant admins) plus managers, who
     // can see the same compliance picture elsewhere in the app - not viewers, matching every
@@ -31,15 +31,19 @@ public static class NotificationsEndpoints
 
     private static async Task<IResult> FeedAsync(AppDbContext db, ITenantContextAccessor accessor, int? take, CancellationToken token)
     {
-        if (!CanSeeBell(accessor)) return Results.Ok(Array.Empty<NotificationDto>());
-
         var limit = Math.Clamp(take ?? 20, 5, 100);
         var tenantId = accessor.Current.TenantId;
-        var items = await db.Notifications.AsNoTracking()
-            .Where(n => n.TenantId == tenantId)
+        var query = db.Notifications.AsNoTracking().Where(n => n.TenantId == tenantId);
+
+        if (!CanSeeBell(accessor))
+        {
+            query = await ScopeToOwnTicketsAsync(db, accessor, query, token);
+        }
+
+        var items = await query
             .OrderByDescending(n => n.CreatedAt)
             .Take(limit)
-            .Select(n => new NotificationDto(n.Id, n.RecordId, n.Type, n.Title, n.Body, n.IsRead, n.CreatedAt))
+            .Select(n => new NotificationDto(n.Id, n.RecordId, n.TicketId, n.Type, n.Title, n.Body, n.IsRead, n.CreatedAt))
             .ToListAsync(token);
 
         return Results.Ok(items);
@@ -47,11 +51,34 @@ public static class NotificationsEndpoints
 
     private static async Task<IResult> UnreadCountAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
     {
-        if (!CanSeeBell(accessor)) return Results.Ok(new { count = 0 });
-
         var tenantId = accessor.Current.TenantId;
-        var count = await db.Notifications.CountAsync(n => n.TenantId == tenantId && !n.IsRead, token);
+        var query = db.Notifications.Where(n => n.TenantId == tenantId && !n.IsRead);
+
+        if (!CanSeeBell(accessor))
+        {
+            query = await ScopeToOwnTicketsAsync(db, accessor, query, token);
+        }
+
+        var count = await query.CountAsync(token);
         return Results.Ok(new { count });
+    }
+
+    // A viewer doesn't get the general compliance bell (see CanSeeBell), but they should still
+    // hear about their own support tickets - narrow the feed to just that instead of opening the
+    // whole tenant-wide bell to them.
+    private static async Task<IQueryable<CertiWatch.Api.Domain.Entities.Notification>> ScopeToOwnTicketsAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IQueryable<CertiWatch.Api.Domain.Entities.Notification> query,
+        CancellationToken token)
+    {
+        var tenantId = accessor.Current.TenantId;
+        var userId = accessor.Current.UserId;
+        var ownTicketIds = await db.SupportTickets.AsNoTracking()
+            .Where(t => t.TenantId == tenantId && t.CreatedByUserId == userId)
+            .Select(t => t.Id)
+            .ToListAsync(token);
+        return query.Where(n => n.TicketId != null && ownTicketIds.Contains(n.TicketId.Value));
     }
 
     private static async Task<IResult> MarkReadAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, IDateTimeProvider clock, CancellationToken token)
@@ -70,9 +97,14 @@ public static class NotificationsEndpoints
     {
         var tenantId = accessor.Current.TenantId;
         var now = clock.UtcNow;
-        await db.Notifications
-            .Where(n => n.TenantId == tenantId && !n.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, now), token);
+        var query = db.Notifications.Where(n => n.TenantId == tenantId && !n.IsRead);
+
+        if (!CanSeeBell(accessor))
+        {
+            query = await ScopeToOwnTicketsAsync(db, accessor, query, token);
+        }
+
+        await query.ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, now), token);
         return Results.NoContent();
     }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 import { LogoMark } from "../../components/LogoMark";
+import { PlatformNotificationBell } from "./PlatformNotificationBell";
 
 type NavItem = {
   href: string;
@@ -71,12 +72,15 @@ export default function PlatformLayout({
               {activeSection}
             </h1>
           </div>
-          <Link
-            href="/logout"
-            className="text-sm font-medium text-slate-600 hover:text-slate-900"
-          >
-            Logout
-          </Link>
+          <div className="flex items-center gap-3">
+            <PlatformNotificationBell />
+            <Link
+              href="/logout"
+              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              Logout
+            </Link>
+          </div>
         </header>
 
         <main className="flex-1 p-6">{children}</main>
