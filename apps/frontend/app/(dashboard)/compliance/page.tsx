@@ -19,6 +19,7 @@ type Status = "compliant" | "expiring" | "expired" | "missing";
 type ComplianceCellDto = {
   requirementTypeId: string;
   status: Status;
+  expiryDate: string | null;
 };
 
 type ComplianceRowDto = {
@@ -419,7 +420,7 @@ function ComplianceTable({
                           key={cell.requirementTypeId}
                           className="border-b border-slate-100 px-3 py-2.5 group-hover:bg-slate-50"
                         >
-                          <StatusIcon status={cell.status} title={`${req?.name ?? ""}: ${statusLabel(cell.status)}`} />
+                          <StatusIcon status={cell.status} title={cellTooltip(req?.name ?? "", cell.status, cell.expiryDate)} />
                         </td>
                       );
                     })}
@@ -679,8 +680,13 @@ function ComplianceCard({
                 <div key={cell.requirementTypeId} className="flex items-center justify-between gap-2 text-sm">
                   <span className="truncate text-slate-700">{req?.name ?? "Unknown"}</span>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    <StatusIcon status={cell.status} />
-                    <span className={`text-xs font-medium ${statusTextClass(cell.status)}`}>{statusLabel(cell.status)}</span>
+                    <StatusIcon status={cell.status} title={cellTooltip(req?.name ?? "", cell.status, cell.expiryDate)} />
+                    <span className={`text-xs font-medium ${statusTextClass(cell.status)}`}>
+                      {statusLabel(cell.status)}
+                      {(cell.status === "expired" || cell.status === "expiring") && formatCellDate(cell.expiryDate) && (
+                        <span className="font-normal text-slate-400"> · {formatCellDate(cell.expiryDate)}</span>
+                      )}
+                    </span>
                   </span>
                 </div>
               );
@@ -756,6 +762,26 @@ function Legend({
 
 function statusLabel(status: Status): string {
   return { compliant: "Compliant", expiring: "Expiring soon", expired: "Expired", missing: "Missing" }[status];
+}
+
+function formatCellDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+// "Expired 8 Apr 2024" / "Expires 8 Apr 2026" reads naturally for both states this ever applies
+// to (expired and expiring-soon); other statuses (compliant/missing) don't carry a meaningful
+// single date the same way, so the plain status label is left alone for those.
+function cellTooltip(name: string, status: Status, expiryDate: string | null): string {
+  const label = statusLabel(status);
+  const date = formatCellDate(expiryDate);
+  if (!date || (status !== "expired" && status !== "expiring")) {
+    return `${name}: ${label}`;
+  }
+  const verb = status === "expired" ? "Expired" : "Expires";
+  return `${name}: ${label} (${verb} ${date})`;
 }
 
 function statusTextClass(status: Status): string {
