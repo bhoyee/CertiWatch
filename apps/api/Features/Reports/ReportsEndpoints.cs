@@ -103,18 +103,22 @@ public static class ReportsEndpoints
             .GroupBy(r => r.ProcessingStatus.ToString())
             .ToDictionary(g => g.Key, g => g.Count());
 
-        // okRecordCreatedDates drives both the trend line and the week-over-week delta, so the
-        // sparkline under "Total records" and the number beside it always tell the same story.
+        // "Successfully processed" means the moment a record actually became Ok, not when its
+        // document was first ingested - a record uploaded months ago that only got reviewed and
+        // approved today processed today, as far as this chart is concerned. ReviewedAt captures
+        // that for manually-reviewed records; records that were auto-approved with no review ever
+        // fall back to UpdatedAt, which for them still coincides with when they became Ok.
         var okRecordSet = records.Where(r => r.ProcessingStatus == ProcessingStatus.Ok).ToList();
+        DateTime ProcessedAt(SimpleRecord r) => r.ReviewedAt ?? r.UpdatedAt;
         var trendStart = today.AddDays(-29);
         var recordsTrend = Enumerable.Range(0, 30)
             .Select(i => trendStart.AddDays(i))
-            .Select(d => new DayCountDto(d, okRecordSet.Count(r => DateOnly.FromDateTime(r.CreatedAt) == d)))
+            .Select(d => new DayCountDto(d, okRecordSet.Count(r => DateOnly.FromDateTime(ProcessedAt(r)) == d)))
             .ToList();
 
         var nowUtc = DateTime.UtcNow;
-        var newThisWeek = okRecordSet.Count(r => r.CreatedAt >= nowUtc.AddDays(-7));
-        var newLastWeek = okRecordSet.Count(r => r.CreatedAt >= nowUtc.AddDays(-14) && r.CreatedAt < nowUtc.AddDays(-7));
+        var newThisWeek = okRecordSet.Count(r => ProcessedAt(r) >= nowUtc.AddDays(-7));
+        var newLastWeek = okRecordSet.Count(r => ProcessedAt(r) >= nowUtc.AddDays(-14) && ProcessedAt(r) < nowUtc.AddDays(-7));
 
         var forwardLooking = recordDtos.Where(r => r.ExpiryDate != null && r.ExpiryDate >= today).ToList();
         var expiryBuckets = new ExpiryBucketsDto(
