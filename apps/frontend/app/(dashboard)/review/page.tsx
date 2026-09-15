@@ -402,6 +402,13 @@ function ReviewCard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Surfaces the tenant's closest-named existing requirement (e.g. "Moving & Handling" already in
+  // the catalog vs. a document reading "Moving and Handling for Children and Adults") so a reviewer
+  // can reuse it instead of accidentally creating a near-duplicate requirement type.
+  const closestRequirementMatch = useMemo(
+    () => findClosestRequirement(courseName, requirementTypeNames),
+    [courseName, requirementTypeNames]
+  );
   // Keep form in sync when a fresh extraction/refresh brings new data
   useEffect(() => {
     setStaffName(record.staffName ?? "");
@@ -497,6 +504,25 @@ function ReviewCard({
           suggestions={requirementTypeNames}
           listId="requirement-type-suggestions"
         />
+        {closestRequirementMatch && (
+          <p className="-mt-1 text-xs text-slate-500">
+            Close to existing requirement{" "}
+            <button
+              type="button"
+              onClick={() => setCourseName(closestRequirementMatch.name)}
+              className="font-semibold text-blue-600 underline hover:text-blue-700"
+            >
+              {closestRequirementMatch.name}
+            </button>
+            ? Or{" "}
+            <a
+              href={`/requirements?name=${encodeURIComponent(courseName.trim())}`}
+              className="font-semibold text-blue-600 underline hover:text-blue-700"
+            >
+              add &ldquo;{courseName.trim()}&rdquo; as a new requirement &rarr;
+            </a>
+          </p>
+        )}
         <Field label="Issuer" value={issuer} onChange={setIssuer} />
         <Field label="Issue date" value={issueDate} onChange={setIssueDate} placeholder="YYYY-MM-DD" />
         <Field label="Expiry date" value={expiryDate} onChange={setExpiryDate} placeholder="YYYY-MM-DD" />
@@ -851,6 +877,51 @@ function Field({
       )}
     </div>
   );
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+// Fraction of the smaller token set shared with the other - rewards a short canonical name (e.g.
+// "moving and handling") that's fully contained in a longer, more specific extracted phrase (e.g.
+// "moving and handling for children and adults") with a perfect 1.0 score.
+function similarityScore(a: string, b: string): number {
+  const tokensA = new Set(tokenize(a));
+  const tokensB = new Set(tokenize(b));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let shared = 0;
+  for (const token of tokensA) {
+    if (tokensB.has(token)) shared++;
+  }
+  return shared / Math.min(tokensA.size, tokensB.size);
+}
+
+function findClosestRequirement(
+  value: string,
+  candidates: string[]
+): { name: string; score: number } | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const candidate of candidates) {
+    if (candidate.trim().toLowerCase() === trimmed.toLowerCase()) {
+      // Already an exact match to something in the catalog - nothing to suggest.
+      return null;
+    }
+    const score = similarityScore(trimmed, candidate);
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+
+  return best && bestScore >= 0.5 ? { name: best, score: bestScore } : null;
 }
 
 function normalizeDate(value?: string | null): string {
