@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
@@ -9,6 +10,7 @@ using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.IO;
 using System.Text;
 
@@ -29,10 +31,11 @@ public static class RecordsEndpoints
         return group;
     }
 
-    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
+        var activeIds = await PlanLimits.GetActiveRecordIdsAsync(db, stripeOptions, tenantAccessor.Current.TenantId, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope, activeIds);
         // For managers/viewers we have already moved to in-memory filtering.
         var sorted = ApplySort(baseQuery, query.Sort).ToList();
 
@@ -48,11 +51,16 @@ public static class RecordsEndpoints
         });
     }
 
-    private static async Task<IResult> ReviewCountAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
+    private static async Task<IResult> ReviewCountAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, CancellationToken token)
     {
         var tenantId = tenantAccessor.Current.TenantId;
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
+        var activeIds = await PlanLimits.GetActiveRecordIdsAsync(db, stripeOptions, tenantId, token);
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+        if (activeIds is not null)
+        {
+            baseQuery = baseQuery.Where(r => activeIds.Contains(r.Id));
+        }
         var scoped = RecordVisibility.ApplyScope(baseQuery, scope).AsEnumerable();
         var count = scoped.Count(r => r.ProcessingStatus == ProcessingStatus.NeedsReview);
 
@@ -221,10 +229,11 @@ public static class RecordsEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> ExportCsvAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    private static async Task<IResult> ExportCsvAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
+        var activeIds = await PlanLimits.GetActiveRecordIdsAsync(db, stripeOptions, tenantAccessor.Current.TenantId, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope, activeIds);
         var rows = baseQuery
             .OrderBy(r => r.CreatedAt)
             .Select(r => new
@@ -257,10 +266,11 @@ public static class RecordsEndpoints
         return Results.File(bytes, "text/csv", "records-export.csv");
     }
 
-    private static async Task<IResult> ExportPdfAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    private static async Task<IResult> ExportPdfAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope);
+        var activeIds = await PlanLimits.GetActiveRecordIdsAsync(db, stripeOptions, tenantAccessor.Current.TenantId, token);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope, activeIds);
         var rows = baseQuery
             .OrderBy(r => r.CreatedAt)
             .Take(500)
@@ -279,10 +289,19 @@ public static class RecordsEndpoints
         return Results.File(pdfBytes, "application/pdf", "records-export.pdf");
     }
 
-    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status, RecordVisibility.Scope? scope)
+    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status, RecordVisibility.Scope? scope, HashSet<Guid>? activeIds = null)
     {
         var tenantId = tenantAccessor.Current.TenantId;
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
+
+        // A tenant over their plan's record limit still gets every record fully processed and
+        // stored - this just keeps the "extra" ones (the newest, past the plan's allowance) out of
+        // every tenant-facing list/export/count until the plan covers them, rather than silently
+        // showing more than what they're actually paying for.
+        if (activeIds is not null)
+        {
+            baseQuery = baseQuery.Where(r => activeIds.Contains(r.Id));
+        }
 
         if (!string.IsNullOrWhiteSpace(status))
         {

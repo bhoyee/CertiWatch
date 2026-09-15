@@ -93,6 +93,8 @@ function ReviewQueuePageInner() {
   // normal "stay selected if still in the queue, else pick the first item" behavior.
   const deepLinkPendingRef = useRef<boolean>(!!searchParams?.get("recordId"));
 
+  const [pendingCount, setPendingCount] = useState(0);
+
   const load = useCallback(() => {
     if (isViewer) {
       setRecords([]);
@@ -100,13 +102,26 @@ function ReviewQueuePageInner() {
       return;
     }
     setLoading(true);
-    fetchJson<PagedResult<RecordDto>>("/api/records?take=50")
-      .then((res) => {
+    // A document that's still being OCR'd/extracted (ProcessingStatus.Pending) hasn't been
+    // flagged as needs-review yet, so it never appears in the list below at all - fetched
+    // alongside the real queue purely to power the "N still processing" banner, so uploading a
+    // large batch doesn't look like nothing is happening while it works through the backlog.
+    Promise.all([
+      // Filtering server-side by status (rather than fetching an arbitrary top-N and filtering in
+      // the browser) is what guarantees every needs-review record shows up here regardless of how
+      // many total records the tenant has - the previous "just grab 50 and filter" approach
+      // silently hid needs-review records past the 50th once a tenant had more records than that
+      // (e.g. a single large multi-page upload).
+      fetchJson<PagedResult<RecordDto>>("/api/records?status=needs_review&pageSize=250"),
+      fetchJson<PagedResult<RecordDto>>("/api/records?status=pending&pageSize=1").catch(() => null)
+    ])
+      .then(([res, pendingRes]) => {
         const needsReview = res.items.filter((r) => {
           if (typeof r.processingStatus === "number") return r.processingStatus === NEEDS_REVIEW;
           return String(r.processingStatus).toLowerCase() === "needsreview";
         });
         setRecords(needsReview);
+        setPendingCount(pendingRes?.total ?? 0);
         setSelectedId((prev) => {
           if (deepLinkPendingRef.current && prev) {
             deepLinkPendingRef.current = false;
@@ -220,6 +235,21 @@ function ReviewQueuePageInner() {
       {error && (
         <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           Failed to load queue: {error}
+        </div>
+      )}
+
+      {pendingCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+          </span>
+          <span>
+            <span className="font-semibold">
+              {pendingCount} document{pendingCount === 1 ? "" : "s"} still processing…
+            </span>{" "}
+            They&apos;ll appear here automatically once extraction finishes - no need to re-upload or refresh.
+          </span>
         </div>
       )}
 
