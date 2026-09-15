@@ -29,9 +29,8 @@ public static class NotificationsEndpoints
     private static bool CanSeeBell(ITenantContextAccessor accessor) =>
         RecordVisibility.IsAdmin(accessor) || RecordVisibility.IsManager(accessor);
 
-    private static async Task<IResult> FeedAsync(AppDbContext db, ITenantContextAccessor accessor, int? take, CancellationToken token)
+    private static async Task<IResult> FeedAsync(AppDbContext db, ITenantContextAccessor accessor, int? take, int? page, int? pageSize, CancellationToken token)
     {
-        var limit = Math.Clamp(take ?? 20, 5, 100);
         var tenantId = accessor.Current.TenantId;
         var query = db.Notifications.AsNoTracking().Where(n => n.TenantId == tenantId);
 
@@ -40,8 +39,27 @@ public static class NotificationsEndpoints
             query = await ScopeToOwnTicketsAsync(db, accessor, query, token);
         }
 
+        query = query.OrderByDescending(n => n.CreatedAt);
+
+        // `page` distinguishes the "view all" page (which needs a real total to paginate against)
+        // from the bell dropdown's plain "give me the last N" call - kept as a separate branch so
+        // the dropdown's existing ?take=20 request and response shape are untouched.
+        if (page.HasValue)
+        {
+            var size = Math.Clamp(pageSize ?? 25, 5, 100);
+            var currentPage = Math.Max(1, page.Value);
+            var total = await query.CountAsync(token);
+            var pagedItems = await query
+                .Skip((currentPage - 1) * size)
+                .Take(size)
+                .Select(n => new NotificationDto(n.Id, n.RecordId, n.TicketId, n.Type, n.Title, n.Body, n.IsRead, n.CreatedAt))
+                .ToListAsync(token);
+
+            return Results.Ok(new { items = pagedItems, total, page = currentPage, pageSize = size });
+        }
+
+        var limit = Math.Clamp(take ?? 20, 5, 100);
         var items = await query
-            .OrderByDescending(n => n.CreatedAt)
             .Take(limit)
             .Select(n => new NotificationDto(n.Id, n.RecordId, n.TicketId, n.Type, n.Title, n.Body, n.IsRead, n.CreatedAt))
             .ToListAsync(token);
