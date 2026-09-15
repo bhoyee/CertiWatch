@@ -157,6 +157,15 @@ You are a structured extractor for training certificates. Return ONLY JSON match
   "expiry_date": string | null,  // format YYYY-MM-DD
   "confidence": number           // 0.0 - 1.0
 }
+"issuer" is the organisation that awarded or issued the certificate - a local council, employer,
+training provider, awarding body, or regulator. It is often printed as a logo/header at the top of
+the certificate, in a line like "issued by", "awarded by", "on behalf of", or "in association with",
+or as the name immediately before/after the certificate title (e.g. "Hull City Council Certificate
+of Achievement" -> issuer is "Hull City Council"; "St John Ambulance First Aid at Work" -> issuer is
+"St John Ambulance"). OCR text may have line breaks or extra spaces in the middle of the issuer name
+(e.g. "Hull City\nCouncil") - treat this as the same organisation name with normal spacing. Do not
+confuse the issuer with the staff member's name or the course/training title. If no organisation name
+appears anywhere in the text, set issuer to null.
 If a value is unknown, set it to null. Do not include any extra fields or text.
 """;
 

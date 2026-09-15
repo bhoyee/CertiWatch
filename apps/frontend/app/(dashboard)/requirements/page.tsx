@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchJson, postJson } from "../../../lib/api";
 
 type RequirementTypeDto = {
@@ -19,6 +20,16 @@ type CreateRequirementType = {
 };
 
 export default function RequirementsPage() {
+  return (
+    <Suspense fallback={<LoadingCard />}>
+      <RequirementsPageInner />
+    </Suspense>
+  );
+}
+
+function RequirementsPageInner() {
+  const searchParams = useSearchParams();
+  const addFormRef = useRef<HTMLDivElement>(null);
   const [types, setTypes] = useState<RequirementTypeDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -45,6 +56,17 @@ export default function RequirementsPage() {
       .then(setTypes)
       .catch((err) => setError(err.message ?? "Failed to load requirements"));
   }, []);
+
+  // Landing here from the Review page's "add as new requirement" link (?name=...) pre-fills the
+  // name so the reviewer doesn't have to retype what the document already told us, and scrolls the
+  // always-visible "Add a requirement" form into view since it sits below the table.
+  useEffect(() => {
+    const name = searchParams?.get("name");
+    if (!name) return;
+    setForm((f) => ({ ...f, name }));
+    addFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     if (!types) return [];
@@ -248,7 +270,7 @@ export default function RequirementsPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div ref={addFormRef} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-md font-semibold text-slate-900">Add a requirement</h2>
         <p className="text-sm text-slate-600">Add a local credential the seeded catalog doesn't cover.</p>
         <form
