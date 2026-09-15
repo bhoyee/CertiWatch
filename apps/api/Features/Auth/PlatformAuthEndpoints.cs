@@ -14,8 +14,8 @@ public static class PlatformAuthEndpoints
     public static IEndpointRouteBuilder MapPlatformAuthEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/platform/auth");
-        group.MapPost("/magic-link", SendPlatformMagicLinkAsync).AllowAnonymous();
-        group.MapGet("/magic-link/verify", VerifyPlatformMagicLinkAsync).AllowAnonymous();
+        group.MapPost("/magic-link", SendPlatformMagicLinkAsync).AllowAnonymous().RequireRateLimiting("auth");
+        group.MapGet("/magic-link/verify", VerifyPlatformMagicLinkAsync).AllowAnonymous().RequireRateLimiting("auth");
         return routes;
     }
 

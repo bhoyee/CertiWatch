@@ -23,7 +23,7 @@ public static class BillingEndpoints
     public static IEndpointRouteBuilder MapBillingEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/billing");
-        group.MapPost("/checkout", CreateCheckoutSessionAsync).AllowAnonymous();
+        group.MapPost("/checkout", CreateCheckoutSessionAsync).AllowAnonymous().RequireRateLimiting("auth");
         group.MapPost("/webhook", HandleWebhookAsync).AllowAnonymous();
         group.MapPost("/portal", CreatePortalSessionAsync).RequireAuthorization();
         group.MapGet("/invoices", ListInvoicesAsync).RequireAuthorization();

@@ -33,6 +33,8 @@ using Serilog;
 using CertiWatch.Contracts.Requests;
 using Stripe;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -127,6 +129,57 @@ builder.Services.AddCors(options =>
               .AllowCredentials());
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        return new ValueTask(context.HttpContext.Response.WriteAsync(
+            """{"error":"rate_limited","message":"Too many requests - please wait a moment and try again."}""",
+            token));
+    };
+
+    // Blanket floor under every request, partitioned by caller IP - not meant to be precise, just
+    // to blunt a scripted flood hitting the API directly. The named policies below are the real
+    // protection for anything security-sensitive (login, signup, invites).
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 300,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    // Login/signup/magic-link-verify - the classic brute-force, credential-stuffing, and spam
+    // targets, all of which are anonymous (no session yet) so IP is the only signal available.
+    // Loose enough that a real user mistyping their email or asking for a second link doesn't get
+    // blocked; tight enough that scripted abuse (and burning real SMTP send quota) isn't viable.
+    options.AddPolicy<string>("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0
+            }));
+
+    // Slightly more headroom than "auth" - a real admin onboarding a team can legitimately send
+    // several invites in one sitting.
+    options.AddPolicy<string>("invite", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
+});
+
 builder.Services.Configure<JsonOptions>(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
@@ -154,6 +207,7 @@ app.UseSerilogRequestLogging();
 // Leave HTTPS redirection off for local/docker to avoid mixed-content/fetch failures.
 app.UseSecurityHeaders();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 if (app.Environment.IsDevelopment())
 {
