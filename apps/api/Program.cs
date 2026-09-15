@@ -22,6 +22,7 @@ using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
 using CertiWatch.Api.Features.Billing;
+using CertiWatch.Storage;
 using CertiWatch.Parsing;
 using CertiWatch.Parsing.Text;
 using FluentValidation;
@@ -76,7 +77,7 @@ builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("M
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ReminderOptions>(builder.Configuration.GetSection("Reminders"));
 builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.AddFileStorage(builder.Configuration);
 builder.Services.PostConfigure<StorageOptions>(options =>
 {
     if (string.IsNullOrWhiteSpace(options.UploadsRoot))
@@ -84,7 +85,12 @@ builder.Services.PostConfigure<StorageOptions>(options =>
         options.UploadsRoot = "/uploads";
     }
 
-    Directory.CreateDirectory(options.UploadsRoot);
+    // Only matters for the Disk provider - an R2-backed deployment has no reason to touch the
+    // local filesystem at all, and may not even have a writable one.
+    if (options.Provider.Equals("Disk", StringComparison.OrdinalIgnoreCase))
+    {
+        Directory.CreateDirectory(options.UploadsRoot);
+    }
 });
 var stripeConfig = builder.Configuration.GetSection("Stripe").Get<StripeOptions>();
 if (!string.IsNullOrWhiteSpace(stripeConfig?.SecretKey))

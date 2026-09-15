@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using CertiWatch.Api.Configuration;
+using CertiWatch.Storage;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
@@ -297,6 +297,8 @@ public static class DeviceEndpoints
         Guid.TryParse(form["sourceId"], out var requestedSourceId);
         var source = await ResolveSourceAsync(db, tenantId, requestedSourceId, clock, token);
 
+        // Same staging rationale as UploadEndpoints: this has to be a real file on the disk the
+        // OCR watcher scans - DocumentIngestionWorker archives it into IFileStorage afterward.
         var root = GetUploadsRoot(storageOptions.Value);
         var deviceDir = Path.Combine(root, tenantId.ToString(), "agent", deviceId.ToString("N"));
         Directory.CreateDirectory(deviceDir);

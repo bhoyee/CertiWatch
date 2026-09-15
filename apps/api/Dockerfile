@@ -10,10 +10,12 @@ WORKDIR /src
 COPY apps/api/CertiWatch.Api.csproj apps/api/
 COPY packages/contracts/CertiWatch.Contracts.csproj packages/contracts/
 COPY packages/parsing/CertiWatch.Parsing.csproj packages/parsing/
+COPY packages/storage/CertiWatch.Storage.csproj packages/storage/
 RUN dotnet restore apps/api/CertiWatch.Api.csproj
 COPY apps/api/ apps/api/
 COPY packages/contracts/ packages/contracts/
 COPY packages/parsing/ packages/parsing/
+COPY packages/storage/ packages/storage/
 # CertiWatch.Api.csproj pulls the repo-root emails/*.html templates in as Content via a
 # ..\..\emails\*.html glob (see the <Content Include> item) - without this, dotnet publish
 # silently matches nothing and ships an image with zero email templates.
