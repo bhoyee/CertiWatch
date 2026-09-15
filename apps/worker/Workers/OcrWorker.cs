@@ -121,11 +121,15 @@ public sealed class OcrWorker : BackgroundService
                 {
                     var text = pages[pageIndex];
                     var pageLabel = isMultiPage ? $"{file} (page {pageIndex + 1}/{pages.Count})" : file;
-                    // A single-page file keeps the exact same hash as before this change (no
-                    // behavior change for the common case); only a genuine multi-page split needs
-                    // a hash that varies per page, since Document.FileHash is what the API's
-                    // ingestion worker uses to tell records apart.
-                    var pageHash = isMultiPage ? ComputeHash($"{fileHash}:{pageIndex}") : fileHash;
+                    // Page 0 keeps the whole-file hash (unchanged for a single-page file, and for
+                    // a multi-page file it's exactly the hash the API's immediate on-upload
+                    // placeholder record was created with) - this is what lets the first page's
+                    // real extracted fields land on and replace that placeholder instead of
+                    // leaving it stuck on "Unknown" forever while N new sibling records appear
+                    // alongside it. Only pages after the first need a hash of their own, since
+                    // Document.FileHash is what the API's ingestion worker uses to tell records
+                    // apart.
+                    var pageHash = pageIndex == 0 ? fileHash : ComputeHash($"{fileHash}:{pageIndex}");
 
                     var needsReviewReasons = new List<string>();
                     if (IsLowQuality(text))
