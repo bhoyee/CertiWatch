@@ -16,9 +16,9 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/auth");
-        group.MapPost("/magic-link", SendMagicLinkAsync).AllowAnonymous();
-        group.MapGet("/magic-link/verify", VerifyMagicLinkAsync).AllowAnonymous();
-        group.MapPost("/invite", InviteAdminAsync);
+        group.MapPost("/magic-link", SendMagicLinkAsync).AllowAnonymous().RequireRateLimiting("auth");
+        group.MapGet("/magic-link/verify", VerifyMagicLinkAsync).AllowAnonymous().RequireRateLimiting("auth");
+        group.MapPost("/invite", InviteAdminAsync).RequireRateLimiting("invite");
         return routes;
     }
 
