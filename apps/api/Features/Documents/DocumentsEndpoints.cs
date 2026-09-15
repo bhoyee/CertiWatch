@@ -2,9 +2,7 @@ using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
-using System.IO;
-using CertiWatch.Api.Configuration;
-using Microsoft.Extensions.Options;
+using CertiWatch.Storage;
 
 namespace CertiWatch.Api.Features.Documents;
 
@@ -64,6 +62,7 @@ public static class DocumentsEndpoints
         Guid id,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IFileStorage fileStorage,
         HttpContext httpContext,
         CancellationToken token)
     {
@@ -85,7 +84,7 @@ public static class DocumentsEndpoints
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, token);
 
-        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !File.Exists(document.PathOrUrl))
+        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !await fileStorage.ExistsAsync(document.PathOrUrl, token))
         {
             return Results.NotFound();
         }
@@ -102,7 +101,7 @@ public static class DocumentsEndpoints
             }
         }
 
-        var stream = File.OpenRead(document.PathOrUrl);
+        var stream = await fileStorage.OpenReadAsync(document.PathOrUrl, token);
 
         // Force inline preview instead of attachment
         httpContext.Response.Headers["Content-Disposition"] =

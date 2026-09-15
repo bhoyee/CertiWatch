@@ -7,6 +7,7 @@ using CertiWatch.Api.Infrastructure.Services;
 using CertiWatch.Parsing;
 using CertiWatch.Parsing.Rules;
 using CertiWatch.Contracts.Enums;
+using CertiWatch.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
@@ -20,16 +21,20 @@ public sealed class DocumentIngestionWorker : BackgroundService
     private readonly ILogger<DocumentIngestionWorker> _logger;
     private readonly ParsingPipeline _pipeline;
 
+    private readonly IFileStorage _fileStorage;
+
     public DocumentIngestionWorker(
         IIngestionQueue queue,
         IServiceScopeFactory scopeFactory,
         ILogger<DocumentIngestionWorker> logger,
-        ParsingPipeline pipeline)
+        ParsingPipeline pipeline,
+        IFileStorage fileStorage)
     {
         _queue = queue;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _pipeline = pipeline;
+        _fileStorage = fileStorage;
     }
 
     private static readonly string[] DefaultUnknownTokens = { "Unknown", "Unknown Course", "Unknown Requirement", "Unknown Staff", "Unknown Issuer", "N/A", "-" };
@@ -199,6 +204,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         CreatedAt = docEvent.DetectedAt
                     };
                     db.Documents.Add(document);
+                    await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
 
                     var record = new Record
                     {
@@ -238,8 +244,12 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     var document = existingRecord.Document!;
                     document.SourceId = sourceId;
                     document.FileName = docEvent.FileName;
-                    document.PathOrUrl = docEvent.PathOrUrl;
                     document.MimeType = docEvent.MimeType;
+                    // A re-ingest of the same file hash (e.g. the OCR watcher's later, fully-parsed
+                    // pass over a file the queue already saw once) carries identical bytes - if the
+                    // first pass already archived them, leave PathOrUrl pointing at that archived
+                    // key instead of clobbering it back to the raw local staging path.
+                    await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
                     document.ProcessingStatus = processingStatus; // Use updated status
@@ -400,6 +410,43 @@ public sealed class DocumentIngestionWorker : BackgroundService
             {
                 _logger.LogError(ex, "Failed to ingest document from queue");
             }
+        }
+    }
+
+    // The canonical archived-key prefix, distinguishing "already moved into IFileStorage" from
+    // "still just the raw local staging path the OCR watcher found it at".
+    private static bool IsArchived(Document document) =>
+        document.PathOrUrl.StartsWith($"{document.TenantId}/documents/", StringComparison.Ordinal);
+
+    // Best-effort: archiving is a durability upgrade on top of ingestion that already succeeded
+    // (the Document/Record rows are saved either way), not a precondition for it - if IFileStorage
+    // is unreachable, log and fall back to the local staging path so Disk-mode deployments (and
+    // anyone mid-migration to R2) keep working exactly as before.
+    private async Task ArchiveDocumentIfNeededAsync(Document document, string localPath, CancellationToken token)
+    {
+        if (IsArchived(document))
+        {
+            return;
+        }
+
+        if (!File.Exists(localPath))
+        {
+            _logger.LogWarning("Cannot archive document {DocumentId} - staging file missing at {Path}", document.Id, localPath);
+            document.PathOrUrl = localPath;
+            return;
+        }
+
+        var key = $"{document.TenantId}/documents/{document.Id:N}{Path.GetExtension(localPath)}";
+        try
+        {
+            await using var stream = File.OpenRead(localPath);
+            await _fileStorage.SaveAsync(key, stream, document.MimeType, token);
+            document.PathOrUrl = key;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to archive document {DocumentId} into file storage; leaving it on local disk for now", document.Id);
+            document.PathOrUrl = localPath;
         }
     }
 

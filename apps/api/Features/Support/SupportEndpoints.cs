@@ -4,6 +4,7 @@ using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
+using CertiWatch.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
@@ -378,6 +379,7 @@ public static class SupportEndpoints
         Guid id,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IFileStorage fileStorage,
         CancellationToken token)
     {
         var ticket = await db.SupportTickets
@@ -394,7 +396,7 @@ public static class SupportEndpoints
             .ToListAsync(token);
         foreach (var attachment in attachments)
         {
-            TryDeleteFile(attachment.PathOrUrl);
+            await TryDeleteFileAsync(fileStorage, attachment.PathOrUrl, token);
         }
         db.SupportAttachments.RemoveRange(attachments);
         db.SupportMessages.RemoveRange(ticket.Messages);
@@ -403,15 +405,15 @@ public static class SupportEndpoints
         return Results.NoContent();
     }
 
-    private static void TryDeleteFile(string path)
+    private static async Task TryDeleteFileAsync(IFileStorage fileStorage, string key, CancellationToken token)
     {
         try
         {
-            if (File.Exists(path)) File.Delete(path);
+            await fileStorage.DeleteAsync(key, token);
         }
         catch
         {
-            // best-effort cleanup; an orphaned file on disk is harmless
+            // best-effort cleanup; an orphaned file is harmless
         }
     }
 
@@ -512,7 +514,7 @@ public static class SupportEndpoints
         IFormFile file,
         AppDbContext db,
         ITenantContextAccessor accessor,
-        IOptions<StorageOptions> storageOptions,
+        IFileStorage fileStorage,
         CancellationToken token)
     {
         if (file is null || file.Length == 0)
@@ -521,16 +523,12 @@ public static class SupportEndpoints
         }
 
         var tenantId = accessor.Current.TenantId;
-        var root = string.IsNullOrWhiteSpace(storageOptions.Value.UploadsRoot) ? "/uploads" : storageOptions.Value.UploadsRoot;
-        var dir = Path.Combine(root.TrimEnd(Path.DirectorySeparatorChar), tenantId.ToString(), "support");
-        Directory.CreateDirectory(dir);
-
         var safeName = Path.GetFileName(file.FileName);
-        var storedName = $"{Guid.NewGuid():N}-{safeName}";
-        var destPath = Path.Combine(dir, storedName);
-        await using (var stream = File.Create(destPath))
+        var key = $"{tenantId}/support/{Guid.NewGuid():N}-{safeName}";
+
+        await using (var stream = file.OpenReadStream())
         {
-            await file.CopyToAsync(stream, token);
+            await fileStorage.SaveAsync(key, stream, file.ContentType, token);
         }
 
         var attachment = new SupportAttachment
@@ -539,7 +537,7 @@ public static class SupportEndpoints
             FileName = safeName,
             MimeType = string.IsNullOrWhiteSpace(file.ContentType) ? null : file.ContentType,
             SizeBytes = file.Length,
-            PathOrUrl = destPath,
+            PathOrUrl = key,
             UploadedByUserId = accessor.Current.UserId
         };
         db.SupportAttachments.Add(attachment);
@@ -559,12 +557,13 @@ public static class SupportEndpoints
         Guid id,
         AppDbContext db,
         ITenantContextAccessor accessor,
+        IFileStorage fileStorage,
         HttpContext httpContext,
         CancellationToken token)
     {
         var attachment = await db.SupportAttachments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == id && a.TenantId == accessor.Current.TenantId, token);
-        if (attachment is null || !File.Exists(attachment.PathOrUrl))
+        if (attachment is null || !await fileStorage.ExistsAsync(attachment.PathOrUrl, token))
         {
             return Results.NotFound();
         }
@@ -589,7 +588,7 @@ public static class SupportEndpoints
             contentType = "application/octet-stream";
         }
 
-        var stream = File.OpenRead(attachment.PathOrUrl);
+        var stream = await fileStorage.OpenReadAsync(attachment.PathOrUrl, token);
         httpContext.Response.Headers["Content-Disposition"] = $"inline; filename=\"{attachment.FileName}\"";
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Results.File(stream, contentType, enableRangeProcessing: true);

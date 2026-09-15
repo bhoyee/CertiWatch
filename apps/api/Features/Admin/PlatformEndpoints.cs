@@ -9,6 +9,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Stripe;
 using CertiWatch.Api.Features.Auth;
+using CertiWatch.Storage;
 
 namespace CertiWatch.Api.Features.Admin;
 
@@ -49,6 +50,7 @@ public static class PlatformEndpoints
         group.MapGet("/usage/overview", UsageOverviewAsync);
         group.MapGet("/audit/logs", ListAuditLogsAsync);
         group.MapGet("/audit/logins", ListLoginActivityAsync);
+        group.MapPost("/storage/migrate-to-r2", MigrateStorageToR2Async);
         return group;
     }
 
@@ -1212,6 +1214,161 @@ public static class PlatformEndpoints
             .Where(n => !n.IsRead)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, now), token);
         return Results.NoContent();
+    }
+
+    #endregion
+
+    #region Storage migration
+
+    // One-time (but safely rerunnable) operational tool: uploads every file still sitting on local
+    // disk into the configured R2 bucket and rewrites the owning row to the same relative-key
+    // format fresh uploads already use, so Disk-era and R2 rows end up indistinguishable. Safe to
+    // run again later (e.g. after redeploying to a fresh environment) - already-migrated rows
+    // (relative keys, not absolute local paths) are skipped, not re-uploaded.
+    private sealed record StorageMigrationSummary(
+        int DocumentsMigrated, int DocumentsSkipped, int DocumentsFailed,
+        int AttachmentsMigrated, int AttachmentsSkipped, int AttachmentsFailed,
+        int InvoicesMigrated, int InvoicesSkipped, int InvoicesFailed);
+
+    private static async Task<IResult> MigrateStorageToR2Async(
+        AppDbContext db,
+        IOptions<StorageOptions> storageOptions,
+        ILoggerFactory loggerFactory,
+        CancellationToken token)
+    {
+        var options = storageOptions.Value;
+        if (string.IsNullOrWhiteSpace(options.R2.AccountId) || string.IsNullOrWhiteSpace(options.R2.BucketName) ||
+            string.IsNullOrWhiteSpace(options.R2.AccessKeyId) || string.IsNullOrWhiteSpace(options.R2.SecretAccessKey))
+        {
+            return Results.BadRequest(new { error = "r2_not_configured", message = "Set Storage__R2__* before running this migration." });
+        }
+
+        var uploadsRoot = string.IsNullOrWhiteSpace(options.UploadsRoot) ? "/uploads" : options.UploadsRoot;
+        var r2 = new R2FileStorage(storageOptions);
+        var logger = loggerFactory.CreateLogger("StorageMigration");
+
+        var (docMigrated, docSkipped, docFailed) = await MigrateDocumentsAsync(db, r2, logger, token);
+        var (attMigrated, attSkipped, attFailed) = await MigrateSupportAttachmentsAsync(db, r2, uploadsRoot, logger, token);
+        var (invMigrated, invSkipped, invFailed) = await MigrateBillingInvoicesAsync(db, r2, uploadsRoot, logger, token);
+
+        await db.SaveChangesAsync(token);
+
+        return Results.Ok(new StorageMigrationSummary(
+            docMigrated, docSkipped, docFailed,
+            attMigrated, attSkipped, attFailed,
+            invMigrated, invSkipped, invFailed));
+    }
+
+    // A canonical relative key (e.g. "{tenantId}/documents/{id}.pdf") is never path-rooted, so
+    // this both identifies rows that still need migrating and makes a second run of this endpoint
+    // a safe no-op for rows the first run already handled.
+    private static bool NeedsMigration(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value) && System.IO.File.Exists(value);
+
+    private static string StripUploadsRoot(string absolutePath, string uploadsRoot)
+    {
+        var normalized = absolutePath.Replace('\\', '/');
+        var root = uploadsRoot.Replace('\\', '/').TrimEnd('/');
+        return normalized.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+            ? normalized[(root.Length + 1)..]
+            // Falls back for paths outside the configured uploads root (e.g. a CloudImportWorker
+            // download folder) - keeps things unique without leaking the local filesystem layout.
+            : $"migrated/{Guid.NewGuid():N}-{Path.GetFileName(normalized)}";
+    }
+
+    private static async Task<(int migrated, int skipped, int failed)> MigrateDocumentsAsync(
+        AppDbContext db, IFileStorage r2, ILogger logger, CancellationToken token)
+    {
+        var documents = await db.Documents.Where(d => d.PathOrUrl != null && d.PathOrUrl != "").ToListAsync(token);
+        int migrated = 0, skipped = 0, failed = 0;
+        foreach (var document in documents)
+        {
+            if (!NeedsMigration(document.PathOrUrl))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Matches the key scheme DocumentIngestionWorker already uses for freshly-archived
+            // documents, so migrated and newly-ingested rows look identical going forward.
+            var key = $"{document.TenantId}/documents/{document.Id:N}{Path.GetExtension(document.PathOrUrl)}";
+            try
+            {
+                await using var stream = System.IO.File.OpenRead(document.PathOrUrl);
+                await r2.SaveAsync(key, stream, document.MimeType, token);
+                document.PathOrUrl = key;
+                migrated++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to migrate document {DocumentId}", document.Id);
+                failed++;
+            }
+        }
+
+        return (migrated, skipped, failed);
+    }
+
+    private static async Task<(int migrated, int skipped, int failed)> MigrateSupportAttachmentsAsync(
+        AppDbContext db, IFileStorage r2, string uploadsRoot, ILogger logger, CancellationToken token)
+    {
+        var attachments = await db.SupportAttachments.ToListAsync(token);
+        int migrated = 0, skipped = 0, failed = 0;
+        foreach (var attachment in attachments)
+        {
+            if (!NeedsMigration(attachment.PathOrUrl))
+            {
+                skipped++;
+                continue;
+            }
+
+            var key = StripUploadsRoot(attachment.PathOrUrl, uploadsRoot);
+            try
+            {
+                await using var stream = System.IO.File.OpenRead(attachment.PathOrUrl);
+                await r2.SaveAsync(key, stream, attachment.MimeType, token);
+                attachment.PathOrUrl = key;
+                migrated++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to migrate support attachment {AttachmentId}", attachment.Id);
+                failed++;
+            }
+        }
+
+        return (migrated, skipped, failed);
+    }
+
+    private static async Task<(int migrated, int skipped, int failed)> MigrateBillingInvoicesAsync(
+        AppDbContext db, IFileStorage r2, string uploadsRoot, ILogger logger, CancellationToken token)
+    {
+        var invoices = await db.BillingInvoices.Where(i => i.ArchivedPdfPath != null && i.ArchivedPdfPath != "").ToListAsync(token);
+        int migrated = 0, skipped = 0, failed = 0;
+        foreach (var invoice in invoices)
+        {
+            if (!NeedsMigration(invoice.ArchivedPdfPath))
+            {
+                skipped++;
+                continue;
+            }
+
+            var key = StripUploadsRoot(invoice.ArchivedPdfPath!, uploadsRoot);
+            try
+            {
+                await using var stream = System.IO.File.OpenRead(invoice.ArchivedPdfPath!);
+                await r2.SaveAsync(key, stream, "application/pdf", token);
+                invoice.ArchivedPdfPath = key;
+                migrated++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to migrate invoice archive {InvoiceId}", invoice.Id);
+                failed++;
+            }
+        }
+
+        return (migrated, skipped, failed);
     }
 
     #endregion

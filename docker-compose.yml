@@ -71,6 +71,17 @@ services:
       Email__SmtpPassword: ${Email__SmtpPassword:-}
       Email__SmtpEncryption: ${Email__SmtpEncryption:-starttls}
       Storage__UploadsRoot: /uploads
+      # "Disk" (default) keeps every uploaded file, support attachment, and invoice archive on
+      # this local volume - fine for local dev, but a single-box disk with no offsite backup for
+      # customer compliance documents. Set to "R2" once Storage__R2__* below are filled in with
+      # real Cloudflare R2 credentials (see the migration endpoint,
+      # POST /api/platform/storage/migrate-to-r2, to move files already on disk into the bucket
+      # before flipping this).
+      Storage__Provider: ${Storage__Provider:-Disk}
+      Storage__R2__AccountId: ${Storage__R2__AccountId:-}
+      Storage__R2__AccessKeyId: ${Storage__R2__AccessKeyId:-}
+      Storage__R2__SecretAccessKey: ${Storage__R2__SecretAccessKey:-}
+      Storage__R2__BucketName: ${Storage__R2__BucketName:-}
     ports:
       - "5002:8080"
     volumes:

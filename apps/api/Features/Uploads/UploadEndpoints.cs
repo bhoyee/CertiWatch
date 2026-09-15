@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using CertiWatch.Api.Configuration;
+using CertiWatch.Storage;
 using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Features.Auth;
 using CertiWatch.Api.Infrastructure.Emails;
@@ -198,6 +199,12 @@ public static class UploadEndpoints
             return Results.BadRequest(new { error = "no_files" });
         }
 
+        // Deliberately still a raw local-disk write, even when Storage:Provider is R2 - the OCR
+        // watcher (apps/worker's OcrWorker) scans this exact folder tree on disk to discover new
+        // files, so a freshly uploaded cert has to land here first regardless of where it ends up
+        // long-term. DocumentIngestionWorker archives it into IFileStorage (R2 or Disk) right
+        // after ingestion and rewrites Document.PathOrUrl to the archived key - this local copy is
+        // just the OCR pipeline's staging area, not where the app serves the file back from.
         var root = GetUploadsRoot(storageOptions.Value);
         var uploadDir = Path.Combine(root, tenantId.ToString(), req.Id.ToString("N"));
         Directory.CreateDirectory(uploadDir);

@@ -34,6 +34,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\packages\contracts\CertiWatch.Contracts.csproj" />
     <ProjectReference Include="..\..\packages\parsing\CertiWatch.Parsing.csproj" />
+    <ProjectReference Include="..\..\packages\storage\CertiWatch.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>
