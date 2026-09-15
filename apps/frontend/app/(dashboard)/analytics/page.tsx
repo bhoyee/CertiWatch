@@ -538,17 +538,20 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   let offsetAcc = 0;
+  // Biggest share first, so the legend/bars read as a ranked breakdown rather than whatever
+  // order the status dictionary happened to enumerate in.
+  const ranked = [...entries].sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row">
+    <div className="flex flex-col items-center gap-8 sm:flex-row sm:items-center">
       {/* The center label is a plain HTML overlay, not SVG <text>: the donut itself needs
           -rotate-90 so segments start at 12 o'clock, and rotating text along with it (then
           counter-rotating just the text) is exactly the kind of thing that silently renders
           sideways in some browsers - easier to keep it out of the rotated coordinate space. */}
-      <div className="relative h-36 w-36 flex-shrink-0">
-        <svg viewBox="0 0 100 100" className="h-36 w-36 -rotate-90">
+      <div className="relative h-44 w-44 flex-shrink-0">
+        <svg viewBox="0 0 100 100" className="h-44 w-44 -rotate-90">
           <circle cx="50" cy="50" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="14" />
-          {entries.map(([status, count]) => {
+          {ranked.map(([status, count]) => {
             const pct = count / total;
             const dash = pct * circumference;
             const segment = (
@@ -560,6 +563,7 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
                 fill="none"
                 stroke={colorForStatus(status)}
                 strokeWidth="14"
+                strokeLinecap={ranked.length > 1 ? "butt" : "round"}
                 strokeDasharray={`${dash} ${circumference - dash}`}
                 strokeDashoffset={-offsetAcc}
               />
@@ -569,19 +573,33 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
           })}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-bold text-slate-900">{total}</span>
-          <span className="text-[10px] text-slate-400">records</span>
+          <span className="text-2xl font-bold text-slate-900">{total}</span>
+          <span className="text-[11px] text-slate-400">total records</span>
         </div>
       </div>
-      <div className="grid w-full grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-        {entries.map(([status, count]) => (
-          <div key={status} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: colorForStatus(status) }} />
-            <span className="truncate capitalize text-slate-700">{status.toLowerCase()}</span>
-            <span className="ml-auto font-semibold text-slate-900">{count}</span>
-            <span className="w-10 text-right text-xs text-slate-400">{Math.round((count / total) * 100)}%</span>
-          </div>
-        ))}
+      {/* Rows instead of a 2-col grid: a bar naturally stretches to fill whatever width the card
+          has, so this looks intentional whether there are 1 status or 5 - the old fixed-cell grid
+          left most of its cells (and the space next to a short donut) visibly empty when there
+          were only one or two distinct statuses. */}
+      <div className="w-full min-w-0 space-y-3.5">
+        {ranked.map(([status, count]) => {
+          const pct = count / total;
+          return (
+            <div key={status} className="flex items-center gap-3">
+              <span className="w-24 flex-shrink-0 truncate text-sm font-medium capitalize text-slate-700 sm:w-28">
+                {status.toLowerCase()}
+              </span>
+              <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(pct * 100, 2)}%`, backgroundColor: colorForStatus(status) }}
+                />
+              </div>
+              <span className="w-10 flex-shrink-0 text-right text-sm font-semibold text-slate-900">{count}</span>
+              <span className="w-11 flex-shrink-0 text-right text-xs text-slate-400">{Math.round(pct * 100)}%</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
