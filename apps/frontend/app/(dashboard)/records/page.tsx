@@ -536,7 +536,17 @@ function RecordsPageInner() {
                 <Cell>{r.issuer ?? "--"}</Cell>
                 <Cell>{r.issueDate ?? "--"}</Cell>
                 <Cell>
-                  {r.expiryDate ?? "--"}
+                  {r.expiryDate ? (
+                    isExpired(r.expiryDate) ? (
+                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                        {r.expiryDate}
+                      </span>
+                    ) : (
+                      r.expiryDate
+                    )
+                  ) : (
+                    "--"
+                  )}
                   {r.expiryDerived ? " (derived)" : ""}
                 </Cell>
                 <Cell>{formatConfidence(r.extractionConfidence)}</Cell>
@@ -753,6 +763,17 @@ function statusLabel(status: string | number): string {
 
 function isPending(status: string | number): boolean {
   return statusLabel(status) === "pending";
+}
+
+// Purely a date comparison, independent of processingStatus - a record can be "Needs review" or
+// even still "Pending" for unrelated reasons while its extracted expiry date is already in the
+// past, and that fact is worth surfacing regardless of what the review workflow's own status says.
+function isExpired(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d < today;
 }
 
 function formatConfidence(value?: number | null): string {
