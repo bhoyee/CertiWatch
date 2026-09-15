@@ -117,6 +117,15 @@ public sealed class OcrWorker : BackgroundService
                 var pages = await ExtractPagesAsync(file, token);
                 var isMultiPage = pages.Count > 1;
 
+                var pageResults = new List<(
+                    string PageLabel,
+                    string PageHash,
+                    string DisplayFileName,
+                    Dictionary<string, string> SanitizedFields,
+                    List<string> VendorHints,
+                    List<string> NeedsReviewReasons,
+                    decimal? ExtractionConfidence)>();
+
                 for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++)
                 {
                     var text = pages[pageIndex];
@@ -208,47 +217,86 @@ public sealed class OcrWorker : BackgroundService
                         sanitizedFields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
                     }
 
-                    // Required fields gate: if any core field is missing or contains a placeholder value, send to review
-                    var requiredKeys = new[] { "staff_name", "course_name", "issuer", "issue_date" };
-                    var missingRequired = requiredKeys.Any(k => HasMissingRequiredValue(sanitizedFields, k));
-                    if (missingRequired)
+                    if (needsReviewReasons.Contains("low_quality") && extractionConfidence.HasValue)
                     {
-                        needsReviewReasons.Add("missing_required");
-                        vendorHints.Add("needs_review:missing_required");
-                    }
-
-                    if (needsReviewReasons.Contains("low_quality"))
-                    {
-                        vendorHints.Add("needs_review:low_quality");
                         // If the OCR was low quality, clamp confidence pessimistically to 0.50 max
-                        if (extractionConfidence.HasValue)
-                        {
-                            extractionConfidence = Math.Min(extractionConfidence.Value, 0.50m);
-                        }
+                        extractionConfidence = Math.Min(extractionConfidence.Value, 0.50m);
                     }
 
-                    var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Ok;
                     var displayFileName = isMultiPage
                         ? $"{Path.GetFileNameWithoutExtension(file)} (page {pageIndex + 1}){Path.GetExtension(file)}"
                         : Path.GetFileName(file);
 
-                    _logger.LogInformation("Publishing document {File} with fields: {Fields}", pageLabel, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
+                    pageResults.Add((pageLabel, pageHash, displayFileName, sanitizedFields, vendorHints, needsReviewReasons, extractionConfidence));
+                }
+
+                // A single upload containing several certificates (e.g. a council exporting one
+                // staff member's whole training history into one PDF) almost always comes from a
+                // single issuing organisation. If DeepSeek confidently read an issuer off at least
+                // one page - typically wherever the letterhead/logo happened to OCR cleanly - but
+                // found no organisation text at all on other pages (a repeated table row, a
+                // stamp-only page, a logo image with no OCR-able text), reuse whichever issuer name
+                // the rest of the batch agreed on instead of leaving those pages blank. This reads
+                // the batch's own data rather than matching against any specific organisation name,
+                // so it generalises to any tenant/issuer without hardcoding one.
+                if (pageResults.Count > 1)
+                {
+                    var batchIssuer = pageResults
+                        .Select(p => p.SanitizedFields.TryGetValue("issuer", out var iss) ? iss : null)
+                        .Where(iss => !string.IsNullOrWhiteSpace(iss))
+                        .GroupBy(iss => iss!, StringComparer.OrdinalIgnoreCase)
+                        .OrderByDescending(g => g.Count())
+                        .Select(g => g.First())
+                        .FirstOrDefault();
+
+                    if (batchIssuer is not null)
+                    {
+                        foreach (var page in pageResults)
+                        {
+                            if (!page.SanitizedFields.TryGetValue("issuer", out var existingIssuer) || string.IsNullOrWhiteSpace(existingIssuer))
+                            {
+                                page.SanitizedFields["issuer"] = batchIssuer;
+                                page.VendorHints.Add("issuer_inferred_from_batch");
+                            }
+                        }
+                    }
+                }
+
+                foreach (var page in pageResults)
+                {
+                    // Required fields gate: if any core field is missing or contains a placeholder value, send to review
+                    var requiredKeys = new[] { "staff_name", "course_name", "issuer", "issue_date" };
+                    var missingRequired = requiredKeys.Any(k => HasMissingRequiredValue(page.SanitizedFields, k));
+                    if (missingRequired)
+                    {
+                        page.NeedsReviewReasons.Add("missing_required");
+                        page.VendorHints.Add("needs_review:missing_required");
+                    }
+
+                    if (page.NeedsReviewReasons.Contains("low_quality"))
+                    {
+                        page.VendorHints.Add("needs_review:low_quality");
+                    }
+
+                    var initialStatus = page.NeedsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Ok;
+
+                    _logger.LogInformation("Publishing document {File} with fields: {Fields}", page.PageLabel, string.Join(", ", page.SanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                     var payload = new DocumentDetectedEvent(
                         ExtractTenantIdFromPath(file) ?? _options.TenantId,
                         _options.SourceId,
                         _options.DeviceToken,
                         null, // createdByUserId unknown for filesystem watcher
-                        displayFileName,
+                        page.DisplayFileName,
                         file,
-                        pageHash,
+                        page.PageHash,
                         MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
                         new FileInfo(file).Length,
-                        vendorHints,
-                        sanitizedFields,
+                        page.VendorHints,
+                        page.SanitizedFields,
                         initialStatus,
                         DateTime.UtcNow,
                         _options.DocumentType,
-                        extractionConfidence);
+                        page.ExtractionConfidence);
 
                     await PublishWithRetryAsync(payload, token);
                 }
@@ -399,29 +447,7 @@ public sealed class OcrWorker : BackgroundService
       }
     }
 
-    // Issuer heuristics
-    if (!fields.ContainsKey("issuer"))
-    {
-      if (lower.Contains("hull city council"))
-      {
-        fields["issuer"] = "Hull City Council";
-      }
-      else if (lower.Contains("rescueone"))
-      {
-        fields["issuer"] = "RescueOne";
-      }
-      else if (lower.Contains("florence academy"))
-      {
-        fields["issuer"] = "Florence Academy";
-      }
-      else if (fields.TryGetValue("course_name", out var courseValue) &&
-          courseValue.StartsWith("Autism Awareness", StringComparison.OrdinalIgnoreCase))
-      {
-        fields["issuer"] = "Hull City Council";
-      }
-    }
-
-    // Florence Academy-style certificates: "course delivered by Florence Academy on <date>"
+    // Generic "course delivered by <issuer> on <date>" phrasing - a pattern, not a specific org name.
     for (var i = 0; i < normalizedLines.Count; i++)
     {
       var line = normalizedLines[i];
@@ -453,11 +479,6 @@ public sealed class OcrWorker : BackgroundService
             fields["course_name"] = prev;
           }
         }
-      }
-
-      if (!fields.ContainsKey("issuer") && line.Contains("florence academy", StringComparison.OrdinalIgnoreCase))
-      {
-        fields["issuer"] = "Florence Academy";
       }
     }
 
