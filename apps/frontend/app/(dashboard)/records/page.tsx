@@ -162,8 +162,8 @@ function RecordsPageInner() {
     }
   };
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     const params = buildParams();
 
     fetchJson<PagedResult<RecordDto>>(`/api/records?${params.toString()}`)
@@ -172,8 +172,13 @@ function RecordsPageInner() {
         setError(null);
         setLastUpdated(new Date());
       })
-      .catch((err) => setError(err.message ?? "Failed to load records"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!silent) setError(err.message ?? "Failed to load records");
+      })
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, search, status, sortField, sortDir]);
 
   const buildParams = () => {
@@ -215,6 +220,17 @@ function RecordsPageInner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Silently re-fetch while any visible record is still mid-processing, so a row's "Processing…"
+  // badge actually resolves into real data on its own - without this, a just-uploaded document
+  // that's still being OCR'd just sits there looking stuck until the user manually refreshes.
+  useEffect(() => {
+    if (!data?.items.some((r) => isPending(r.processingStatus))) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") load(true);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [data, load]);
 
   const requestDelete = (rec: RecordDto) => {
     setConfirmDeleteId(rec.id);
@@ -351,7 +367,7 @@ function RecordsPageInner() {
             ))}
           </select>
           <button
-            onClick={load}
+            onClick={() => load()}
             disabled={loading}
             className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
           >
@@ -498,7 +514,12 @@ function RecordsPageInner() {
           </thead>
           <tbody className="divide-y divide-slate-200">
             {data.items.map((r) => (
-              <tr key={r.id} className={`hover:bg-slate-50 ${selectedIds.has(r.id) ? "bg-indigo-50/60" : ""}`}>
+              <tr
+                key={r.id}
+                className={`hover:bg-slate-50 ${
+                  selectedIds.has(r.id) ? "bg-indigo-50/60" : isPending(r.processingStatus) ? "bg-amber-50/40" : ""
+                }`}
+              >
                 {canManage && (
                   <td className="border-r-2 border-slate-200 px-2 py-2">
                     <input
@@ -510,8 +531,8 @@ function RecordsPageInner() {
                     />
                   </td>
                 )}
-                <Cell>{r.staffName}</Cell>
-                <Cell>{r.courseName}</Cell>
+                <Cell>{isPending(r.processingStatus) ? <span className="italic text-slate-400">Processing…</span> : r.staffName}</Cell>
+                <Cell>{isPending(r.processingStatus) ? <span className="italic text-slate-400">Processing…</span> : r.courseName}</Cell>
                 <Cell>{r.issuer ?? "--"}</Cell>
                 <Cell>{r.issueDate ?? "--"}</Cell>
                 <Cell>
@@ -730,6 +751,10 @@ function statusLabel(status: string | number): string {
   return map[lower] ?? lower;
 }
 
+function isPending(status: string | number): boolean {
+  return statusLabel(status) === "pending";
+}
+
 function formatConfidence(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "--";
   return `${Math.round(value * 100)}%`;
@@ -756,6 +781,20 @@ function statusBadge(status: string | number, id: string, isViewer: boolean) {
   }
   if (label === "ok") {
     return <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span>;
+  }
+  if (label === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+        </span>
+        Processing…
+      </span>
+    );
+  }
+  if (label === "failed") {
+    return <span className="inline-flex items-center rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">Failed</span>;
   }
   return <span className="capitalize text-slate-700">{label}</span>;
 }
