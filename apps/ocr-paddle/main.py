@@ -17,16 +17,16 @@ async def health():
 
 
 def run_ocr_on_path(path: str):
-    """Call PaddleOCR on a file path and flatten text lines."""
+    """Call PaddleOCR on a file path, keeping each page's lines separate - PaddleOCR already
+    returns one result entry per page for a multi-page PDF, so this only has to avoid flattening
+    that away (which the old version of this function did)."""
     result = ocr.ocr(path, cls=True)
-    lines = []
+    pages = []
     if result:
         for page in result:
-            for line in page:
-                text = line[1][0].strip()
-                if text:
-                    lines.append(text)
-    return lines
+            lines = [line[1][0].strip() for line in page if line[1][0].strip()]
+            pages.append(lines)
+    return pages
 
 
 @app.post("/ocr")
@@ -48,31 +48,33 @@ async def ocr_endpoint(file: UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
-        lines = []
+        pages = []
 
-        # If it's an image, try in-memory first (faster)
+        # If it's an image, try in-memory first (faster) - always exactly one "page".
         if suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"]:
             np_img = np.frombuffer(content, np.uint8)
             img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
             if img is not None:
                 result = ocr.ocr(img, cls=True)
                 if result:
-                    for page in result:
-                        for line in page:
-                            text = line[1][0].strip()
-                            if text:
-                                lines.append(text)
+                    lines = [line[1][0].strip() for page in result for line in page if line[1][0].strip()]
+                    if lines:
+                        pages = [lines]
 
-        # If no lines yet, fall back to letting PaddleOCR handle the file path (works for PDF/images)
-        if not lines:
-            lines = run_ocr_on_path(tmp_path)
+        # If no pages yet, fall back to letting PaddleOCR handle the file path (works for PDF/images) -
+        # this is the path that actually distinguishes pages for a multi-page PDF.
+        if not pages:
+            pages = run_ocr_on_path(tmp_path)
 
         os.unlink(tmp_path)
 
-        if not lines:
+        pages = [p for p in pages if p]
+        if not pages:
             raise HTTPException(status_code=422, detail="no text detected")
 
-        return JSONResponse({"lines": lines})
+        # "lines" (flattened) kept alongside "pages" (grouped) so nothing else calling this
+        # sidecar directly - manual testing, a future caller - breaks on the response shape.
+        return JSONResponse({"pages": pages, "lines": [line for page in pages for line in page]})
     except HTTPException:
         raise
     except Exception as e:

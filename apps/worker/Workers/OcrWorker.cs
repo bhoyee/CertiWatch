@@ -110,202 +110,237 @@ public sealed class OcrWorker : BackgroundService
                     _logger.LogInformation("Duplicate file detected; reprocessing incomplete record: {File}", file);
                 }
 
-                var text = await ExtractTextAsync(file, token);
-                var needsReviewReasons = new List<string>();
-                if (IsLowQuality(text))
+                // One page = one certificate: a multi-page PDF (e.g. an admin scanning several
+                // staff members' certs into a single file) is processed page-by-page from here on,
+                // so each page becomes its own record instead of every page's text being treated
+                // as one document.
+                var pages = await ExtractPagesAsync(file, token);
+                var isMultiPage = pages.Count > 1;
+
+                for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++)
                 {
-                    _logger.LogWarning("Flagging {File} for review due to low-quality OCR/text (length={Length})", file, text?.Length ?? 0);
-                    needsReviewReasons.Add("low_quality");
-                }
-                var parsed = _pipeline.Parse(text);
-                var vendorHints = parsed.VendorHints?.ToList() ?? new List<string>();
-                var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var text = pages[pageIndex];
+                    var pageLabel = isMultiPage ? $"{file} (page {pageIndex + 1}/{pages.Count})" : file;
+                    // A single-page file keeps the exact same hash as before this change (no
+                    // behavior change for the common case); only a genuine multi-page split needs
+                    // a hash that varies per page, since Document.FileHash is what the API's
+                    // ingestion worker uses to tell records apart.
+                    var pageHash = isMultiPage ? ComputeHash($"{fileHash}:{pageIndex}") : fileHash;
 
-                // Structured DeepSeek extraction first
-                StructuredExtractionResult? structured = null;
-                try
-        {
-          structured = await _deepSeek.ExtractStructuredAsync(text, _options.DocumentType, token);
-        }
-        catch (Exception ex)
-        {
-          _logger.LogWarning(ex, "DeepSeek structured extract failed for {File}", file);
-        }
-
-            if (structured is not null)
-            {
-                if (!string.IsNullOrWhiteSpace(structured.StaffName)) fields["staff_name"] = structured.StaffName!;
-                if (!string.IsNullOrWhiteSpace(structured.CourseName)) fields["course_name"] = structured.CourseName!;
-                if (!string.IsNullOrWhiteSpace(structured.Issuer)) fields["issuer"] = structured.Issuer!;
-
-                if (!string.IsNullOrWhiteSpace(structured.IssueDate) &&
-                    IsPlausibleDate(structured.IssueDate!, out var normIssue))
-                {
-                    fields["issue_date"] = normIssue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(structured.ExpiryDate) &&
-                    IsPlausibleDate(structured.ExpiryDate!, out var normExpiry))
-                {
-                    fields["expiry_date"] = normExpiry;
-                }
-            }
-
-        // Heuristic/keyword backup
-        var heuristicFields = BuildFields(parsed);
-        foreach (var kv in heuristicFields)
-        {
-          if (!fields.ContainsKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
-          {
-            fields[kv.Key] = kv.Value;
-          }
-        }
-
-        // Legacy AI key:value backup
-        var aiFields = ExtractAiFields(text);
-        foreach (var kv in aiFields)
-        {
-          if (!fields.ContainsKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
-          {
-            fields[kv.Key] = kv.Value;
-          }
-        }
-
-        var fallbackIssueDate = ExtractFirstDate(text);
-        _logger.LogInformation("Fallback date probe for {File}: first date in text = {Date}", file, fallbackIssueDate);
-        if ((!fields.TryGetValue("issue_date", out var existingIssue) || string.IsNullOrWhiteSpace(existingIssue)) && fallbackIssueDate is not null)
-        {
-          fields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
-          _logger.LogInformation("Fallback issue_date extracted as {Date} for {File}", fallbackIssueDate.Value, file);
-        }
-
-                var sanitizedFields = SanitizeFields(fields);
-                var extractionConfidence = BlendConfidence(structured, sanitizedFields);
-
-                // Final guard: if dates were dropped during sanitization but we have a fallback, put them back in
-                if (!sanitizedFields.ContainsKey("issue_date") && fallbackIssueDate is not null)
-                {
-                    sanitizedFields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
-                }
-
-                // Required fields gate: if any core field is missing or contains a placeholder value, send to review
-                var requiredKeys = new[] { "staff_name", "course_name", "issuer", "issue_date" };
-                var missingRequired = requiredKeys.Any(k => HasMissingRequiredValue(sanitizedFields, k));
-                if (missingRequired)
-                {
-                    needsReviewReasons.Add("missing_required");
-                    vendorHints.Add("needs_review:missing_required");
-                }
-
-                if (needsReviewReasons.Contains("low_quality"))
-                {
-                    vendorHints.Add("needs_review:low_quality");
-                    // If the OCR was low quality, clamp confidence pessimistically to 0.50 max
-                    if (extractionConfidence.HasValue)
+                    var needsReviewReasons = new List<string>();
+                    if (IsLowQuality(text))
                     {
-                        extractionConfidence = Math.Min(extractionConfidence.Value, 0.50m);
+                        _logger.LogWarning("Flagging {File} for review due to low-quality OCR/text (length={Length})", pageLabel, text?.Length ?? 0);
+                        needsReviewReasons.Add("low_quality");
                     }
+                    var parsed = _pipeline.Parse(text);
+                    var vendorHints = parsed.VendorHints?.ToList() ?? new List<string>();
+                    var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    // Structured DeepSeek extraction first
+                    StructuredExtractionResult? structured = null;
+                    try
+                    {
+                        structured = await _deepSeek.ExtractStructuredAsync(text, _options.DocumentType, token);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "DeepSeek structured extract failed for {File}", pageLabel);
+                    }
+
+                    if (structured is not null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(structured.StaffName)) fields["staff_name"] = structured.StaffName!;
+                        if (!string.IsNullOrWhiteSpace(structured.CourseName)) fields["course_name"] = structured.CourseName!;
+                        if (!string.IsNullOrWhiteSpace(structured.Issuer)) fields["issuer"] = structured.Issuer!;
+
+                        if (!string.IsNullOrWhiteSpace(structured.IssueDate) &&
+                            IsPlausibleDate(structured.IssueDate!, out var normIssue))
+                        {
+                            fields["issue_date"] = normIssue;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(structured.ExpiryDate) &&
+                            IsPlausibleDate(structured.ExpiryDate!, out var normExpiry))
+                        {
+                            fields["expiry_date"] = normExpiry;
+                        }
+                    }
+
+                    // Heuristic/keyword backup
+                    var heuristicFields = BuildFields(parsed);
+                    foreach (var kv in heuristicFields)
+                    {
+                        if (!fields.ContainsKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                        {
+                            fields[kv.Key] = kv.Value;
+                        }
+                    }
+
+                    // Legacy AI key:value backup
+                    var aiFields = ExtractAiFields(text);
+                    foreach (var kv in aiFields)
+                    {
+                        if (!fields.ContainsKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                        {
+                            fields[kv.Key] = kv.Value;
+                        }
+                    }
+
+                    var fallbackIssueDate = ExtractFirstDate(text);
+                    _logger.LogInformation("Fallback date probe for {File}: first date in text = {Date}", pageLabel, fallbackIssueDate);
+                    if ((!fields.TryGetValue("issue_date", out var existingIssue) || string.IsNullOrWhiteSpace(existingIssue)) && fallbackIssueDate is not null)
+                    {
+                        fields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
+                        _logger.LogInformation("Fallback issue_date extracted as {Date} for {File}", fallbackIssueDate.Value, pageLabel);
+                    }
+
+                    var sanitizedFields = SanitizeFields(fields);
+                    var extractionConfidence = BlendConfidence(structured, sanitizedFields);
+
+                    // Final guard: if dates were dropped during sanitization but we have a fallback, put them back in
+                    if (!sanitizedFields.ContainsKey("issue_date") && fallbackIssueDate is not null)
+                    {
+                        sanitizedFields["issue_date"] = fallbackIssueDate.Value.ToString("yyyy-MM-dd");
+                    }
+
+                    // Required fields gate: if any core field is missing or contains a placeholder value, send to review
+                    var requiredKeys = new[] { "staff_name", "course_name", "issuer", "issue_date" };
+                    var missingRequired = requiredKeys.Any(k => HasMissingRequiredValue(sanitizedFields, k));
+                    if (missingRequired)
+                    {
+                        needsReviewReasons.Add("missing_required");
+                        vendorHints.Add("needs_review:missing_required");
+                    }
+
+                    if (needsReviewReasons.Contains("low_quality"))
+                    {
+                        vendorHints.Add("needs_review:low_quality");
+                        // If the OCR was low quality, clamp confidence pessimistically to 0.50 max
+                        if (extractionConfidence.HasValue)
+                        {
+                            extractionConfidence = Math.Min(extractionConfidence.Value, 0.50m);
+                        }
+                    }
+
+                    var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Ok;
+                    var displayFileName = isMultiPage
+                        ? $"{Path.GetFileNameWithoutExtension(file)} (page {pageIndex + 1}){Path.GetExtension(file)}"
+                        : Path.GetFileName(file);
+
+                    _logger.LogInformation("Publishing document {File} with fields: {Fields}", pageLabel, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
+                    var payload = new DocumentDetectedEvent(
+                        ExtractTenantIdFromPath(file) ?? _options.TenantId,
+                        _options.SourceId,
+                        _options.DeviceToken,
+                        null, // createdByUserId unknown for filesystem watcher
+                        displayFileName,
+                        file,
+                        pageHash,
+                        MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
+                        new FileInfo(file).Length,
+                        vendorHints,
+                        sanitizedFields,
+                        initialStatus,
+                        DateTime.UtcNow,
+                        _options.DocumentType,
+                        extractionConfidence);
+
+                    await PublishWithRetryAsync(payload, token);
                 }
-
-                var initialStatus = needsReviewReasons.Any() ? ProcessingStatus.NeedsReview : ProcessingStatus.Ok;
-
-                _logger.LogInformation("Publishing document {File} with fields: {Fields}", file, string.Join(", ", sanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
-                var payload = new DocumentDetectedEvent(
-                    ExtractTenantIdFromPath(file) ?? _options.TenantId,
-                    _options.SourceId,
-                    _options.DeviceToken,
-                    null, // createdByUserId unknown for filesystem watcher
-                    Path.GetFileName(file),
-                    file,
-                    fileHash,
-                    MimeTypes.GetValueOrDefault(Path.GetExtension(file).ToLowerInvariant(), "application/pdf"),
-                    new FileInfo(file).Length,
-                    vendorHints,
-                    sanitizedFields,
-                    initialStatus,
-                    DateTime.UtcNow,
-                    _options.DocumentType,
-                    extractionConfidence);
-
-                await PublishWithRetryAsync(payload, token);
       }
     }
   }
 
-  private async Task<string> ExtractTextAsync(string file, CancellationToken token)
+  // Returns one processed text blob per page of the source file - a single-page image or
+  // single-page PDF yields a one-element list, but a multi-page PDF (e.g. several independent
+  // certificates scanned into one file) yields one entry per page, so the rest of the pipeline can
+  // treat each page as its own certificate instead of mashing every page's text together.
+  private async Task<IReadOnlyList<string>> ExtractPagesAsync(string file, CancellationToken token)
   {
-    // Step 1: OCR (PaddleOCR/Doctr > OCR.space > Tesseract)
     var useOcrSpace = !string.IsNullOrWhiteSpace(_options.OcrSpaceApiKey);
     var useDoctr = !string.IsNullOrWhiteSpace(_options.DoctrBaseUrl);
     var useDeepSeek = !string.IsNullOrWhiteSpace(_options.DeepSeekApiKey);
 
     try
     {
-      string rawText;
+      IReadOnlyList<string> ocrPages;
 
+      // Step 1: OCR (PaddleOCR/Doctr > OCR.space > Tesseract)
       if (useDoctr)
       {
         try
         {
-          rawText = await _doctr.ExtractTextAsync(file, token);
-          _logger.LogInformation("OCR (Doctr) raw preview: {Preview}", Truncate(rawText, 500));
+          ocrPages = await _doctr.ExtractPagesAsync(file, token);
+          _logger.LogInformation("OCR (Doctr) page count: {Count}, first-page preview: {Preview}", ocrPages.Count, Truncate(ocrPages.FirstOrDefault() ?? string.Empty, 500));
         }
         catch (Exception ex)
         {
           _logger.LogWarning(ex, "Doctr OCR failed for {File}, falling back", file);
-          rawText = string.Empty;
+          ocrPages = Array.Empty<string>();
         }
       }
       else if (useOcrSpace)
       {
-        rawText = await _ocrSpace.ExtractTextAsync(file, token);
-        _logger.LogInformation("OCR (OCR.space) raw preview: {Preview}", Truncate(rawText, 500));
+        ocrPages = await _ocrSpace.ExtractPagesAsync(file, token);
+        _logger.LogInformation("OCR (OCR.space) page count: {Count}, first-page preview: {Preview}", ocrPages.Count, Truncate(ocrPages.FirstOrDefault() ?? string.Empty, 500));
       }
       else
       {
-        rawText = await _tesseract.ExtractTextAsync(file, token);
-        _logger.LogInformation("OCR (Tesseract) raw preview: {Preview}", Truncate(rawText, 500));
+        ocrPages = await _tesseract.ExtractPagesAsync(file, token);
+        _logger.LogInformation("OCR (Tesseract) page count: {Count}, first-page preview: {Preview}", ocrPages.Count, Truncate(ocrPages.FirstOrDefault() ?? string.Empty, 500));
       }
 
-      // Step 1b: PDF text extraction fallback (captures embedded text like "October 8th 2025")
-      var pdfText = await TryReadPdfTextAsync(file, token);
-      if (!string.IsNullOrWhiteSpace(pdfText))
+      // Step 1b: PDF text extraction fallback (captures embedded text like "October 8th 2025"),
+      // aligned to the same OCR engine's page count.
+      var pdfTextPages = await TryReadPdfTextPagesAsync(file, token);
+
+      var pageCount = Math.Max(ocrPages.Count, pdfTextPages.Count);
+      if (pageCount == 0)
       {
-        if (string.IsNullOrWhiteSpace(rawText))
-        {
-          rawText = pdfText;
-        }
-        else
-        {
-          rawText = rawText + Environment.NewLine + pdfText;
-        }
-        _logger.LogInformation("PDF text fallback preview: {Preview}", Truncate(pdfText, 500));
+        // Neither source produced anything - fall through with a single empty page so the
+        // existing low-quality/needs-review safety net still applies instead of silently
+        // dropping the file.
+        pageCount = 1;
       }
 
-      // Step 2: DeepSeek extraction on raw OCR text
-      if (useDeepSeek && !string.IsNullOrWhiteSpace(rawText))
+      var results = new List<string>(pageCount);
+      for (var i = 0; i < pageCount; i++)
       {
-        try
+        var ocrText = i < ocrPages.Count ? ocrPages[i] : string.Empty;
+        var pdfText = i < pdfTextPages.Count ? pdfTextPages[i] : string.Empty;
+        var rawText = string.IsNullOrWhiteSpace(ocrText)
+          ? pdfText
+          : string.IsNullOrWhiteSpace(pdfText) ? ocrText : ocrText + Environment.NewLine + pdfText;
+
+        // Step 2: DeepSeek extraction on this page's raw OCR text
+        if (useDeepSeek && !string.IsNullOrWhiteSpace(rawText))
         {
-          var refined = await _deepSeek.ExtractTextAsync(rawText, token);
-          _logger.LogInformation("AI (DeepSeek) response preview: {Preview}", Truncate(refined, 500));
-          if (!string.IsNullOrWhiteSpace(refined))
+          try
           {
-            return refined + Environment.NewLine + rawText;
+            var refined = await _deepSeek.ExtractTextAsync(rawText, token);
+            _logger.LogInformation("AI (DeepSeek) page {Page} response preview: {Preview}", i + 1, Truncate(refined, 500));
+            if (!string.IsNullOrWhiteSpace(refined))
+            {
+              results.Add(refined + Environment.NewLine + rawText);
+              continue;
+            }
+          }
+          catch (Exception ex)
+          {
+            _logger.LogWarning(ex, "DeepSeek extract failed for {File} page {Page}, falling back to raw OCR", file, i + 1);
           }
         }
-        catch (Exception ex)
-        {
-          _logger.LogWarning(ex, "DeepSeek extract failed for {File}, falling back to raw OCR", file);
-        }
+
+        results.Add(rawText);
       }
 
-      return rawText;
+      return results;
     }
     catch (Exception ex)
     {
       _logger.LogError(ex, "Failed to extract text for {File}", file);
-      return string.Empty;
+      return new[] { string.Empty };
     }
   }
 
@@ -733,11 +768,14 @@ public sealed class OcrWorker : BackgroundService
     return value.Length <= max ? value : value[..max] + "...";
   }
 
-  private static async Task<string?> TryReadPdfTextAsync(string file, CancellationToken token)
+  // pdftotext (poppler) inserts a form-feed character (\f) between pages by default - splitting on
+  // it recovers each page's embedded text layer separately, instead of one string for the whole
+  // file, which is what let a multi-certificate PDF's text all run together previously.
+  private static async Task<IReadOnlyList<string>> TryReadPdfTextPagesAsync(string file, CancellationToken token)
   {
     if (!file.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
     {
-      return null;
+      return Array.Empty<string>();
     }
 
     try
@@ -753,16 +791,21 @@ public sealed class OcrWorker : BackgroundService
       using var proc = Process.Start(psi);
       if (proc is null)
       {
-        return null;
+        return Array.Empty<string>();
       }
 
       var output = await proc.StandardOutput.ReadToEndAsync();
       await proc.WaitForExitAsync(token);
-      return string.IsNullOrWhiteSpace(output) ? null : output;
+      if (string.IsNullOrWhiteSpace(output))
+      {
+        return Array.Empty<string>();
+      }
+
+      return output.Split('\f').Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
     }
     catch
     {
-      return null;
+      return Array.Empty<string>();
     }
   }
 
@@ -825,6 +868,15 @@ public sealed class OcrWorker : BackgroundService
   {
     using var stream = File.OpenRead(path);
     var hash = SHA256.HashData(stream);
+    return Convert.ToHexString(hash).ToLowerInvariant();
+  }
+
+  // Used to derive a stable, page-specific hash (fileHash + page index) so each page of a
+  // multi-page source file gets a distinct Document.FileHash instead of colliding on the one hash
+  // for the whole file.
+  private static string ComputeHash(string value)
+  {
+    var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
     return Convert.ToHexString(hash).ToLowerInvariant();
   }
 
