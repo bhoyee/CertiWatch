@@ -5,44 +5,53 @@ namespace CertiWatch.Worker.Services;
 
 public interface ITesseractClient
 {
-    Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken);
 }
 
 public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesseractClient
 {
-    public async Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken)
     {
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         if (ext == ".pdf")
         {
-            var text = await TryPdfToTextAsync(filePath, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(text))
+            var pages = await TryPdfToTextAsync(filePath, cancellationToken);
+            if (pages.Count > 0)
             {
-                return text;
+                return pages;
             }
             // Fall back to OCR on rasterized pages
             return await ExtractPdfAsync(filePath, cancellationToken);
         }
 
-        return await RunTesseractAsync(filePath, cancellationToken);
+        return new[] { await RunTesseractAsync(filePath, cancellationToken) };
     }
 
-    private async Task<string> TryPdfToTextAsync(string filePath, CancellationToken cancellationToken)
+    // pdftotext (poppler) inserts a form-feed character (\f) between pages by default - splitting
+    // on it recovers page boundaries without needing to change how the process itself is invoked.
+    private async Task<IReadOnlyList<string>> TryPdfToTextAsync(string filePath, CancellationToken cancellationToken)
     {
         try
         {
-            return await RunProcessAsync("pdftotext", $"-layout \"{filePath}\" -", cancellationToken);
+            var output = await RunProcessAsync("pdftotext", $"-layout \"{filePath}\" -", cancellationToken);
+            return output
+                .Split('\f')
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 0)
+                .ToList();
         }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "pdftotext failed for {File}, will fall back to OCR", filePath);
-            return string.Empty;
+            return Array.Empty<string>();
         }
     }
 
-    private async Task<string> ExtractPdfAsync(string filePath, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> ExtractPdfAsync(string filePath, CancellationToken cancellationToken)
     {
-        // Convert PDF pages to PNGs with poppler (pdftoppm), then OCR each page with tesseract.
+        // Convert PDF pages to PNGs with poppler (pdftoppm), then OCR each page with tesseract -
+        // already naturally one file per page, so returning them separately instead of
+        // concatenating is the whole fix here.
         var tempDir = Path.Combine(Path.GetTempPath(), "ocr-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
 
@@ -51,27 +60,24 @@ public sealed class TesseractClient(ILogger<TesseractClient> logger) : ITesserac
             var prefix = Path.Combine(tempDir, "page");
             await RunProcessAsync("pdftoppm", $"-r 300 -gray -png \"{filePath}\" \"{prefix}\"", cancellationToken);
 
-            var pages = Directory.EnumerateFiles(tempDir, "page-*.png")
+            var pageFiles = Directory.EnumerateFiles(tempDir, "page-*.png")
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            if (pages.Count == 0)
+            if (pageFiles.Count == 0)
             {
                 logger.LogWarning("PDF {File} produced no pages for OCR", filePath);
-                return string.Empty;
+                return Array.Empty<string>();
             }
 
-            var sb = new StringBuilder();
-            foreach (var page in pages)
+            var pages = new List<string>();
+            foreach (var pageFile in pageFiles)
             {
-                var text = await RunTesseractAsync(page, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    sb.AppendLine(text);
-                }
+                var text = await RunTesseractAsync(pageFile, cancellationToken);
+                pages.Add(text);
             }
 
-            return sb.ToString();
+            return pages;
         }
         finally
         {

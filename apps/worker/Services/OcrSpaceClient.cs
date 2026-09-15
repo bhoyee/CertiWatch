@@ -7,7 +7,7 @@ namespace CertiWatch.Worker.Services;
 
 public interface IOcrSpaceClient
 {
-    Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken);
 }
 
 // https://ocr.space/ocrapi - a hosted OCR fallback for when Doctr isn't configured. Free tier
@@ -30,7 +30,7 @@ public sealed class OcrSpaceClient : IOcrSpaceClient
         _logger = logger;
     }
 
-    public async Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.OcrSpaceApiKey))
         {
@@ -78,12 +78,15 @@ public sealed class OcrSpaceClient : IOcrSpaceClient
         if (!root.TryGetProperty("ParsedResults", out var results) || results.ValueKind != JsonValueKind.Array)
         {
             _logger.LogWarning("OCR.space response missing ParsedResults");
-            return string.Empty;
+            return Array.Empty<string>();
         }
 
-        var texts = results.EnumerateArray()
-            .Select(r => r.TryGetProperty("ParsedText", out var t) ? t.GetString() ?? string.Empty : string.Empty);
-        return string.Join(Environment.NewLine, texts);
+        // OCR.space already returns one ParsedResults entry per page for a multi-page PDF -
+        // returning them separately (instead of joining into one string) is what lets a PDF full
+        // of independent certificates become one record per page instead of one merged blob.
+        return results.EnumerateArray()
+            .Select(r => r.TryGetProperty("ParsedText", out var t) ? t.GetString() ?? string.Empty : string.Empty)
+            .ToList();
     }
 
     // ErrorMessage comes back as either a single string or an array of strings depending on

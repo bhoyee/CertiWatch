@@ -7,7 +7,7 @@ namespace CertiWatch.Worker.Services;
 
 public interface IDoctrClient
 {
-    Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken);
 }
 
 public sealed class DoctrClient : IDoctrClient
@@ -23,7 +23,7 @@ public sealed class DoctrClient : IDoctrClient
         _logger = logger;
     }
 
-    public async Task<string> ExtractTextAsync(string filePath, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ExtractPagesAsync(string filePath, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.DoctrBaseUrl))
         {
@@ -47,13 +47,23 @@ public sealed class DoctrClient : IDoctrClient
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var doc = JsonDocument.Parse(json);
+        // The sidecar groups lines by page (one PaddleOCR result entry per PDF page) - each
+        // becomes one joined string here, so a multi-page PDF yields one page-string per
+        // certificate instead of every page's text merged into one undifferentiated blob.
+        if (doc.RootElement.TryGetProperty("pages", out var pagesElem) && pagesElem.ValueKind == JsonValueKind.Array)
+        {
+            return pagesElem.EnumerateArray()
+                .Select(page => string.Join(Environment.NewLine, page.EnumerateArray().Select(e => e.GetString() ?? string.Empty)))
+                .ToList();
+        }
+
         if (doc.RootElement.TryGetProperty("lines", out var linesElem) && linesElem.ValueKind == JsonValueKind.Array)
         {
             var lines = linesElem.EnumerateArray().Select(e => e.GetString() ?? string.Empty);
-            return string.Join(Environment.NewLine, lines);
+            return new[] { string.Join(Environment.NewLine, lines) };
         }
 
-        _logger.LogWarning("Doctr OCR response missing 'lines' array");
-        return string.Empty;
+        _logger.LogWarning("Doctr OCR response missing 'pages'/'lines' array");
+        return Array.Empty<string>();
     }
 }
