@@ -157,15 +157,23 @@ You are a structured extractor for training certificates. Return ONLY JSON match
   "expiry_date": string | null,  // format YYYY-MM-DD
   "confidence": number           // 0.0 - 1.0
 }
-"issuer" is the organisation that awarded or issued the certificate - a local council, employer,
-training provider, awarding body, or regulator. It is often printed as a logo/header at the top of
-the certificate, in a line like "issued by", "awarded by", "on behalf of", or "in association with",
-or as the name immediately before/after the certificate title (e.g. "Hull City Council Certificate
-of Achievement" -> issuer is "Hull City Council"; "St John Ambulance First Aid at Work" -> issuer is
-"St John Ambulance"). OCR text may have line breaks or extra spaces in the middle of the issuer name
-(e.g. "Hull City\nCouncil") - treat this as the same organisation name with normal spacing. Do not
-confuse the issuer with the staff member's name or the course/training title. If no organisation name
-appears anywhere in the text, set issuer to null.
+"issuer" is whatever organisation actually awarded or issued THIS certificate - it could be any
+local council, employer, training provider, awarding body, or regulator; there is no fixed list, so
+read it fresh from each document rather than expecting a name you've seen before. It is often
+printed as a logo/header at the top of the certificate, in a line like "issued by", "awarded by",
+"on behalf of", or "in association with", or as the name immediately before/after the certificate
+title (e.g. "<Some Council> Certificate of Achievement" -> issuer is "<Some Council>"; "<Some
+Provider> First Aid at Work" -> issuer is "<Some Provider>" - these are illustrative patterns only,
+not real organisations to match against). OCR text may have line breaks or extra spaces in the
+middle of the issuer name (e.g. a council name split across two lines) - treat this as the same
+organisation name with normal spacing. A scanned logo/header often OCRs as several short, disjointed
+line fragments near the very top of the text, before the certificate title or "certificate of
+attendance" line, and sometimes out of their original left-to-right/top-to-bottom order or with a
+trailing word clipped short - if you see two or more short fragments up there that plausibly form one
+organisation name together, combine them into your best full reading instead of only using whichever
+single fragment reads most cleanly on its own. Do not confuse the issuer with the staff member's name
+or the course/training title. If no organisation name appears anywhere in the text, set issuer to
+null.
 If a value is unknown, set it to null. Do not include any extra fields or text.
 """;
 
