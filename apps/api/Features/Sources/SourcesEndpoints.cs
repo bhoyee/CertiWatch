@@ -159,6 +159,11 @@ public static class SourcesEndpoints
                     if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for S3/MinIO", cfg, secrets);
                     if (!cfg.ContainsKey("accessKey") || !cfg.ContainsKey("secretKey")) return (false, "accessKey and secretKey are required for S3/MinIO", cfg, secrets);
                     break;
+                case "r2":
+                    if (!cfg.ContainsKey("accountId")) return (false, "accountId is required for Cloudflare R2", cfg, secrets);
+                    if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for Cloudflare R2", cfg, secrets);
+                    if (!cfg.ContainsKey("accessKey") || !cfg.ContainsKey("secretKey")) return (false, "accessKey and secretKey are required for Cloudflare R2", cfg, secrets);
+                    break;
                 case "gcs":
                     if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for GCS", cfg, secrets);
                     if (!cfg.ContainsKey("serviceAccount")) return (false, "serviceAccount is required for GCS", cfg, secrets);
