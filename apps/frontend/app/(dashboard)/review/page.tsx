@@ -53,6 +53,8 @@ type PagedResult<T> = {
 const NEEDS_REVIEW = 2; // ProcessingStatus.NeedsReview
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5002";
 
+type QueueSortField = "staffName" | "courseName" | "issueDate" | "expiryDate" | "confidence";
+
 export default function ReviewQueuePage() {
   return (
     <Suspense fallback={<div className="cw-card p-6 text-sm text-slate-600">Loading review queue...</div>}>
@@ -66,6 +68,9 @@ function ReviewQueuePageInner() {
   const searchParams = useSearchParams();
   const isViewer = role?.toLowerCase() === "viewer";
   const [records, setRecords] = useState<RecordDto[]>([]);
+  const [queueSearch, setQueueSearch] = useState("");
+  const [queueSortField, setQueueSortField] = useState<QueueSortField>("staffName");
+  const [queueSortDir, setQueueSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams?.get("recordId") ?? null);
@@ -204,6 +209,45 @@ function ReviewQueuePageInner() {
   const selectedRecord =
     detail?.record ?? (records.find((record) => record.id === selectedId) ?? null);
 
+  const toggleQueueSort = (field: QueueSortField) => {
+    setQueueSortDir((prevDir) => (queueSortField === field ? (prevDir === "asc" ? "desc" : "asc") : "asc"));
+    setQueueSortField(field);
+  };
+
+  const queueSortArrow = (field: QueueSortField) =>
+    queueSortField === field ? (queueSortDir === "asc" ? " ▲" : " ▼") : "";
+
+  const visibleRecords = useMemo(() => {
+    const term = queueSearch.trim().toLowerCase();
+    const filtered = term
+      ? records.filter(
+          (r) =>
+            (r.staffName ?? "").toLowerCase().includes(term) || (r.courseName ?? "").toLowerCase().includes(term)
+        )
+      : records;
+
+    const dir = queueSortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      switch (queueSortField) {
+        case "staffName":
+          return dir * (a.staffName ?? "").localeCompare(b.staffName ?? "");
+        case "courseName":
+          return dir * (a.courseName ?? "").localeCompare(b.courseName ?? "");
+        case "issueDate":
+          return dir * String(a.issueDate ?? "").localeCompare(String(b.issueDate ?? ""));
+        case "expiryDate":
+          return dir * String(a.expiryDate ?? "").localeCompare(String(b.expiryDate ?? ""));
+        case "confidence": {
+          const av = a.extractionConfidence ?? a.confidence ?? -1;
+          const bv = b.extractionConfidence ?? b.confidence ?? -1;
+          return dir * (av - bv);
+        }
+        default:
+          return 0;
+      }
+    });
+  }, [records, queueSearch, queueSortField, queueSortDir]);
+
   if (isViewer) {
     return (
       <div className="cw-card space-y-2 p-6">
@@ -255,13 +299,25 @@ function ReviewQueuePageInner() {
 
       <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="min-h-[320px] rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs review</p>
               <h2 className="text-base font-semibold text-slate-900">Review queue</h2>
             </div>
-            <p className="text-xs text-slate-500">{records.length} items</p>
+            <p className="text-xs text-slate-500">
+              {queueSearch.trim() ? `${visibleRecords.length} of ${records.length}` : records.length} items
+            </p>
           </div>
+
+          {records.length > 0 && (
+            <input
+              type="search"
+              value={queueSearch}
+              onChange={(e) => setQueueSearch(e.target.value)}
+              placeholder="Search by staff name or requirement type..."
+              className="mb-3 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          )}
 
           {loading && records.length === 0 ? (
             <div className="rounded-md border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600">
@@ -271,20 +327,44 @@ function ReviewQueuePageInner() {
             <div className="rounded-md border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
               No items need review right now.
             </div>
+          ) : visibleRecords.length === 0 ? (
+            <div className="rounded-md border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+              No review items match &ldquo;{queueSearch.trim()}&rdquo;.
+            </div>
           ) : (
             <div className="overflow-hidden rounded-md border border-slate-100">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
                   <tr>
-                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">Staff name / Requirement type</th>
-                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">Issue</th>
-                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">Expiry</th>
-                    <th className="border-b-2 border-slate-300 px-3 py-2">Confidence</th>
+                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">
+                      <button type="button" onClick={() => toggleQueueSort("staffName")} className="hover:text-slate-900">
+                        Staff name{queueSortArrow("staffName")}
+                      </button>
+                      {" / "}
+                      <button type="button" onClick={() => toggleQueueSort("courseName")} className="hover:text-slate-900">
+                        Requirement type{queueSortArrow("courseName")}
+                      </button>
+                    </th>
+                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">
+                      <button type="button" onClick={() => toggleQueueSort("issueDate")} className="hover:text-slate-900">
+                        Issue{queueSortArrow("issueDate")}
+                      </button>
+                    </th>
+                    <th className="border-b-2 border-slate-300 px-3 py-2 text-left">
+                      <button type="button" onClick={() => toggleQueueSort("expiryDate")} className="hover:text-slate-900">
+                        Expiry{queueSortArrow("expiryDate")}
+                      </button>
+                    </th>
+                    <th className="border-b-2 border-slate-300 px-3 py-2">
+                      <button type="button" onClick={() => toggleQueueSort("confidence")} className="hover:text-slate-900">
+                        Confidence{queueSortArrow("confidence")}
+                      </button>
+                    </th>
                     <th className="border-b-2 border-slate-300 px-3 py-2 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((record) => {
+                  {visibleRecords.map((record) => {
                     const isActive = record.id === selectedId;
                     return (
                       <tr
@@ -409,6 +489,16 @@ function ReviewCard({
     () => findClosestRequirement(courseName, requirementTypeNames),
     [courseName, requirementTypeNames]
   );
+  const trimmedCourseName = courseName.trim();
+  // Only enforce "must be a real catalog entry" once the catalog has actually loaded - for a
+  // manager (the requirement-types endpoint is admin-only, see the fetch above) this list is
+  // always empty, and we don't want to block their approvals over a check we can't actually run.
+  const isKnownRequirement = useMemo(
+    () =>
+      requirementTypeNames.length === 0 ||
+      requirementTypeNames.some((name) => name.trim().toLowerCase() === trimmedCourseName.toLowerCase()),
+    [requirementTypeNames, trimmedCourseName]
+  );
   // Keep form in sync when a fresh extraction/refresh brings new data
   useEffect(() => {
     setStaffName(record.staffName ?? "");
@@ -435,6 +525,16 @@ function ReviewCard({
           : "text-rose-600";
 
   const patch = async (processingStatus?: number) => {
+    if (!trimmedCourseName) {
+      setError("Requirement type is required.");
+      return;
+    }
+    if (!isKnownRequirement) {
+      setError(
+        `"${trimmedCourseName}" isn't in your requirement list yet. Add it to Requirements, or pick an existing one, before saving.`
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -504,24 +604,32 @@ function ReviewCard({
           suggestions={requirementTypeNames}
           listId="requirement-type-suggestions"
         />
-        {closestRequirementMatch && (
-          <p className="-mt-1 text-xs text-slate-500">
-            Close to existing requirement{" "}
-            <button
-              type="button"
-              onClick={() => setCourseName(closestRequirementMatch.name)}
-              className="font-semibold text-blue-600 underline hover:text-blue-700"
-            >
-              {closestRequirementMatch.name}
-            </button>
-            ? Or{" "}
+        {trimmedCourseName && !isKnownRequirement && (
+          <div className="-mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+            <p>
+              &ldquo;{trimmedCourseName}&rdquo; isn&apos;t in your requirement list yet.
+              {closestRequirementMatch && (
+                <>
+                  {" "}
+                  Did you mean{" "}
+                  <button
+                    type="button"
+                    onClick={() => setCourseName(closestRequirementMatch.name)}
+                    className="font-semibold underline hover:text-amber-900"
+                  >
+                    {closestRequirementMatch.name}
+                  </button>
+                  ?
+                </>
+              )}
+            </p>
             <a
-              href={`/requirements?name=${encodeURIComponent(courseName.trim())}`}
-              className="font-semibold text-blue-600 underline hover:text-blue-700"
+              href={`/requirements?name=${encodeURIComponent(trimmedCourseName)}`}
+              className="mt-1 inline-block font-semibold text-blue-700 underline hover:text-blue-800"
             >
-              add &ldquo;{courseName.trim()}&rdquo; as a new requirement &rarr;
+              + Add &ldquo;{trimmedCourseName}&rdquo; to Requirements
             </a>
-          </p>
+          </div>
         )}
         <Field label="Issuer" value={issuer} onChange={setIssuer} />
         <Field label="Issue date" value={issueDate} onChange={setIssueDate} placeholder="YYYY-MM-DD" />
@@ -537,20 +645,6 @@ function ReviewCard({
         </div>
       </div>
 
-      {record.fields && Object.keys(record.fields).length > 0 && (
-        <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-2">
-          <p className="mb-1 text-xs font-semibold text-slate-600">Extracted fields</p>
-          <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-700">
-            {Object.entries(record.fields).map(([k, v]) => (
-              <div key={k} className="flex">
-                <dt className="w-20 font-semibold capitalize">{k}</dt>
-                <dd className="flex-1">{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -564,6 +658,7 @@ function ReviewCard({
         <button
           onClick={() => patch(NEEDS_REVIEW)}
           disabled={saving}
+          title="Saves your edits without approving - it stays right here in this Needs Review queue for later."
           className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
         >
           Save & keep in queue
@@ -577,6 +672,10 @@ function ReviewCard({
         </button>
         <p className="text-xs text-slate-500">Created at {formatDate(record.createdAt)}</p>
       </div>
+      <p className="mt-1 text-xs text-slate-400">
+        &ldquo;Save & keep in queue&rdquo; saves your edits without approving - the record stays in this same Needs
+        Review queue above so you can come back to it later.
+      </p>
 
       {confirmingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
