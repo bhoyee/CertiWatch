@@ -1,7 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson, postJson } from "../../../lib/api";
+
+const COLUMN_KEYS = ["name", "jobTitle", "startDate", "status", "actions"] as const;
+type ColumnKey = (typeof COLUMN_KEYS)[number];
+// Widths are percentages of the table (not px) that always sum to 100 - resizing a column
+// borrows/gives space to its neighbor rather than growing the table itself, so the table never
+// exceeds its container and never needs a horizontal scrollbar just from resizing.
+const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
+  name: 30,
+  jobTitle: 25,
+  startDate: 17,
+  status: 13,
+  actions: 15
+};
+const MIN_COL_PCT = 8;
+const COL_WIDTHS_STORAGE_KEY = "cw_staff_col_widths_v1";
 
 type StaffMemberDto = {
   id: string;
@@ -121,6 +136,64 @@ export default function StaffPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
+    if (typeof window === "undefined") return DEFAULT_COL_WIDTHS;
+    try {
+      const saved = window.localStorage.getItem(COL_WIDTHS_STORAGE_KEY);
+      return saved ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(saved) } : DEFAULT_COL_WIDTHS;
+    } catch {
+      return DEFAULT_COL_WIDTHS;
+    }
+  });
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Column resizing redistributes width between the dragged column and its neighbor (dragging the
+  // last column's handle borrows from the one before it instead, since it has no "next"), so the
+  // pair's combined width - and therefore the table's total width - never changes. That's what
+  // keeps the table exactly at the container's width with no horizontal scrollbar, matching the
+  // same resizing behavior as the Records table.
+  const startResize = (key: ColumnKey) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const idx = COLUMN_KEYS.indexOf(key);
+    const isLast = idx === COLUMN_KEYS.length - 1;
+    const neighborKey = isLast ? COLUMN_KEYS[idx - 1] : COLUMN_KEYS[idx + 1];
+    if (!neighborKey) return;
+
+    const containerWidth = tableWrapperRef.current?.clientWidth || 1000;
+    const startX = e.clientX;
+    const startOwn = colWidths[key];
+    const startNeighbor = colWidths[neighborKey];
+    const pairTotal = startOwn + startNeighbor;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const deltaPct = ((moveEvent.clientX - startX) / containerWidth) * 100;
+      const signedDelta = isLast ? -deltaPct : deltaPct;
+      let nextOwn = startOwn + signedDelta;
+      let nextNeighbor = pairTotal - nextOwn;
+      if (nextOwn < MIN_COL_PCT) {
+        nextOwn = MIN_COL_PCT;
+        nextNeighbor = pairTotal - nextOwn;
+      } else if (nextNeighbor < MIN_COL_PCT) {
+        nextNeighbor = MIN_COL_PCT;
+        nextOwn = pairTotal - nextNeighbor;
+      }
+      setColWidths((prev) => ({ ...prev, [key]: nextOwn, [neighborKey]: nextNeighbor }));
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      setColWidths((prev) => {
+        try {
+          window.localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(prev));
+        } catch {
+          // Best-effort - resizing still works for the rest of the session either way.
+        }
+        return prev;
+      });
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
 
   const load = () => {
     fetchJson<StaffMemberDto[]>("/api/staff")
@@ -499,11 +572,22 @@ export default function StaffPage() {
         )}
 
         {/* Table: md and up */}
-        <div className="hidden overflow-x-auto md:block">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <div ref={tableWrapperRef} className="hidden md:block">
+          {/* Column widths are percentages that always sum to 100 (see startResize) and the table
+              is w-full, so it always exactly fills this wrapper - no horizontal scrolling, just
+              like the Records table. */}
+          <table className="w-full divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "34px" }} />
+              <col style={{ width: `${colWidths.name}%` }} />
+              <col style={{ width: `${colWidths.jobTitle}%` }} />
+              <col style={{ width: `${colWidths.startDate}%` }} />
+              <col style={{ width: `${colWidths.status}%` }} />
+              <col style={{ width: `${colWidths.actions}%` }} />
+            </colgroup>
             <thead className="bg-slate-100">
               <tr>
-                <th className="w-8 border-b-2 border-slate-300 px-3 py-2">
+                <th className="border-b-2 border-r-2 border-slate-300 px-3 py-2">
                   <input
                     type="checkbox"
                     checked={visible.length > 0 && visible.every((s) => selectedIds.has(s.id))}
@@ -511,25 +595,45 @@ export default function StaffPage() {
                     className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                 </th>
-                <Header onClick={() => setSortKey("name")} sorted={sort.key === "name"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("name")}
+                  sorted={sort.key === "name"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("name")}
+                >
                   Name
                 </Header>
-                <Header onClick={() => setSortKey("jobTitle")} sorted={sort.key === "jobTitle"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("jobTitle")}
+                  sorted={sort.key === "jobTitle"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("jobTitle")}
+                >
                   Job title
                 </Header>
-                <Header onClick={() => setSortKey("startDate")} sorted={sort.key === "startDate"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("startDate")}
+                  sorted={sort.key === "startDate"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("startDate")}
+                >
                   Start date
                 </Header>
-                <Header onClick={() => setSortKey("status")} sorted={sort.key === "status"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("status")}
+                  sorted={sort.key === "status"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("status")}
+                >
                   Status
                 </Header>
-                <Header>Actions</Header>
+                <Header onResizeStart={startResize("actions")}>Actions</Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {visible.map((s) => (
                 <tr key={s.id} className={s.isActive ? "hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-50"}>
-                  <td className="px-3 py-2">
+                  <td className="border-r-2 border-slate-200 px-3 py-2">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(s.id)}
@@ -814,32 +918,42 @@ function Header({
   children,
   onClick,
   sorted,
-  dir
+  dir,
+  onResizeStart
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   sorted?: boolean;
   dir?: "asc" | "desc";
+  onResizeStart?: (e: React.PointerEvent) => void;
 }) {
   return (
-    <th
-      className={`border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
-        onClick ? "cursor-pointer select-none" : ""
-      }`}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-    >
-      <div className="flex items-center gap-1">
-        <span>{children}</span>
+    <th className="relative border-b-2 border-r-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
+      <span
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
+      >
+        {children}
         {sorted && <span className="text-slate-400">{dir === "asc" ? "▲" : "▼"}</span>}
-      </div>
+      </span>
+      {onResizeStart && (
+        // The border-r above marks where columns divide; this handle just widens the grabbable
+        // area around that same line and highlights it on hover/drag so it reads as draggable.
+        <div
+          onPointerDown={onResizeStart}
+          aria-hidden="true"
+          className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-indigo-300/60 active:bg-indigo-400/70"
+        />
+      )}
     </th>
   );
 }
 
 function Cell({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
-    <td className={`px-3 py-2 ${muted ? "text-slate-400 line-through decoration-slate-400" : "text-slate-800"}`}>
+    <td
+      className={`break-words border-r-2 border-slate-200 px-3 py-2 last:border-r-0 ${muted ? "text-slate-400 line-through decoration-slate-400" : "text-slate-800"}`}
+    >
       {children}
     </td>
   );
