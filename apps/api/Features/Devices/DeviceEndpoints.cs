@@ -28,6 +28,7 @@ public static class DeviceEndpoints
         group.MapPost("/upload", UploadAsync).AllowAnonymous().DisableAntiforgery();
         group.MapGet("/{deviceId:guid}/sources", ListSourcesForDeviceAsync).AllowAnonymous();
         group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/sync-status", UpdateSourceSyncStatusAsync).AllowAnonymous();
+        group.MapPost("/{deviceId:guid}/sources/{sourceId:guid}/secret", UpdateSourceSecretAsync).AllowAnonymous();
         group.MapGet("/install.sh", InstallScriptAsync).AllowAnonymous();
         group.MapGet("/install.ps1", InstallScriptAsync).AllowAnonymous();
         return group;
@@ -483,6 +484,52 @@ public static class DeviceEndpoints
         }
 
         source.ConfigJson = System.Text.Json.JsonSerializer.Serialize(cfg);
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
+    }
+
+    private sealed record UpdateSourceSecretRequest(string DeviceToken, string Key, string Value);
+
+    // Microsoft rotates OAuth refresh tokens on every use - the old one stops working the moment a
+    // new one is issued, so the worker calls this after every Graph token refresh to keep whatever
+    // it just received durable for the next sync, not just the current one.
+    private static async Task<IResult> UpdateSourceSecretAsync(Guid deviceId, Guid sourceId, UpdateSourceSecretRequest request, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, token);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!DeviceSecrets.ConstantTimeEquals(device.DeviceToken, request.DeviceToken))
+        {
+            return Results.Unauthorized();
+        }
+
+        var source = await db.Sources.FirstOrDefaultAsync(s => s.Id == sourceId && s.TenantId == device.TenantId, token);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var secret = await db.SourceSecrets.FirstOrDefaultAsync(s => s.SourceId == sourceId && s.TenantId == device.TenantId && s.Key == request.Key, token);
+        if (secret is null)
+        {
+            db.SourceSecrets.Add(new SourceSecret
+            {
+                Id = Guid.NewGuid(),
+                TenantId = device.TenantId,
+                SourceId = sourceId,
+                Key = request.Key,
+                Value = request.Value,
+                CreatedAt = clock.UtcNow
+            });
+        }
+        else
+        {
+            secret.Value = request.Value;
+        }
+
         await db.SaveChangesAsync(token);
         return Results.NoContent();
     }

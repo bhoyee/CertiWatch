@@ -82,6 +82,16 @@ services:
       Storage__R2__AccessKeyId: ${Storage__R2__AccessKeyId:-}
       Storage__R2__SecretAccessKey: ${Storage__R2__SecretAccessKey:-}
       Storage__R2__BucketName: ${Storage__R2__BucketName:-}
+      # CertiWatch's own OAuth app registrations (not per-tenant) for the Sources page's "Connect
+      # Google Drive"/"Connect Microsoft OneDrive" buttons - see apps/api/Features/Sources/
+      # SourceOAuthEndpoints.cs. Leave unset and those buttons will 503 with a clear message
+      # instead of silently failing partway through the flow.
+      GoogleOAuth__ClientId: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GoogleOAuth__ClientSecret: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GoogleOAuth__RedirectUri: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:5002/api/sources/oauth/google/callback}
+      MicrosoftOAuth__ClientId: ${MICROSOFT_OAUTH_CLIENT_ID:-}
+      MicrosoftOAuth__ClientSecret: ${MICROSOFT_OAUTH_CLIENT_SECRET:-}
+      MicrosoftOAuth__RedirectUri: ${MICROSOFT_OAUTH_REDIRECT_URI:-http://localhost:5002/api/sources/oauth/microsoft/callback}
     ports:
       - "5002:8080"
     volumes:
@@ -110,6 +120,13 @@ services:
       WORKER__DeviceToken: ${WORKER__DeviceToken:-}
       WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
       WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
+      # Same OAuth app credentials as the api service above - the worker needs them too, since
+      # refreshing a tenant's Google/Microsoft access token requires the app's client_id/secret
+      # alongside their stored refresh token, not just the refresh token on its own.
+      WORKER__GoogleOAuthClientId: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      WORKER__GoogleOAuthClientSecret: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      WORKER__MicrosoftOAuthClientId: ${MICROSOFT_OAUTH_CLIENT_ID:-}
+      WORKER__MicrosoftOAuthClientSecret: ${MICROSOFT_OAUTH_CLIENT_SECRET:-}
       DOTNET_ENVIRONMENT: Development
       WORKER__EnableWatcher: "true"
       WORKER__EnableSampleDocuments: "false"
