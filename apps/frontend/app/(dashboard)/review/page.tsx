@@ -606,13 +606,7 @@ function ReviewCard({
 
       <div className="space-y-2">
         <Field label="Staff name" value={staffName} onChange={setStaffName} />
-        <Field
-          label="Requirement type"
-          value={courseName}
-          onChange={setCourseName}
-          suggestions={requirementTypeNames}
-          listId="requirement-type-suggestions"
-        />
+        <RequirementTypeCombobox value={courseName} onChange={setCourseName} suggestions={requirementTypeNames} />
         {trimmedCourseName && !isKnownRequirement && (
           <div className="-mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
             <p>
@@ -655,18 +649,44 @@ function ReviewCard({
       </div>
 
       {error && (
-        <div className="mt-2 flex items-start justify-between gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-          <span className="flex-1">{error}</span>
-          <button
-            type="button"
-            onClick={() => setError(null)}
-            aria-label="Dismiss error"
-            className="flex-shrink-0 rounded p-0.5 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setError(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
           >
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
-            </svg>
-          </button>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-600">
+                  <path d="M12 9v4M12 17h.01" strokeLinecap="round" />
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" strokeLinejoin="round" />
+                </svg>
+                <h3 className="text-sm font-semibold text-slate-900">Can&apos;t save yet</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                aria-label="Close"
+                className="flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-slate-700">{error}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -965,20 +985,12 @@ function Field({
   label,
   value,
   onChange,
-  placeholder,
-  suggestions,
-  listId
+  placeholder
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
-  // A datalist keeps this a free-text field (so it still works for anything not in the catalog)
-  // while surfacing the tenant's actual Requirement Type names as suggestions - lets a reviewer
-  // match a document's own wording (e.g. a council titling its certificate differently) to the
-  // canonical name instead of having to know/retype it exactly.
-  suggestions?: string[];
-  listId?: string;
 }) {
   return (
     <div>
@@ -988,14 +1000,111 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        list={suggestions && suggestions.length > 0 ? listId : undefined}
       />
-      {suggestions && suggestions.length > 0 && listId && (
-        <datalist id={listId}>
-          {suggestions.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
+    </div>
+  );
+}
+
+// A native <input list> + <datalist> combo used to power this field, but browsers only show
+// matching suggestions - once the value is something like an OCR'd course name that doesn't match
+// anything in the catalog, the dropdown shows nothing at all until the reviewer clears the field
+// by hand. This custom combobox always lets the dropdown arrow open the full current list
+// regardless of what's already typed, with the same field doubling as a live search box once open.
+function RequirementTypeCombobox({
+  value,
+  onChange,
+  suggestions
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return term ? suggestions.filter((name) => name.toLowerCase().includes(term)) : suggestions;
+  }, [query, suggestions]);
+
+  const openWithFullList = () => {
+    setQuery("");
+    setOpen(true);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="block text-xs font-semibold text-slate-600">Requirement type</label>
+      <div className="mt-1 flex items-stretch">
+        <input
+          className="w-full rounded-l-md border border-r-0 border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={openWithFullList}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
+          placeholder="Type, or use the list on the right"
+        />
+        <button
+          type="button"
+          onClick={() => (open ? setOpen(false) : openWithFullList())}
+          aria-label="Show requirement type list"
+          className="flex items-center justify-center rounded-r-md border border-slate-300 bg-slate-50 px-2 hover:bg-slate-100"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className={`h-4 w-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            <path d="M5.25 7.5l4.75 5 4.75-5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+          {suggestions.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-slate-500">No requirement types set up yet.</p>
+          ) : filtered.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-slate-500">No matches - this will be a new requirement type.</p>
+          ) : (
+            filtered.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => {
+                  onChange(name);
+                  setQuery(name);
+                  setOpen(false);
+                }}
+                className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-100 ${
+                  name.toLowerCase() === value.trim().toLowerCase()
+                    ? "bg-slate-50 font-semibold text-slate-900"
+                    : "text-slate-700"
+                }`}
+              >
+                {name}
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
