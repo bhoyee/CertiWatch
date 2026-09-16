@@ -633,7 +633,7 @@ export default function StaffPage() {
             <tbody className="divide-y divide-slate-200">
               {visible.map((s) => (
                 <tr key={s.id} className={s.isActive ? "hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-50"}>
-                  <td className="border-r-2 border-slate-200 px-3 py-2">
+                  <td className="px-3 py-2">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(s.id)}
@@ -952,7 +952,7 @@ function Header({
 function Cell({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
     <td
-      className={`break-words border-r-2 border-slate-200 px-3 py-2 last:border-r-0 ${muted ? "text-slate-400 line-through decoration-slate-400" : "text-slate-800"}`}
+      className={`break-words px-3 py-2 ${muted ? "text-slate-400 line-through decoration-slate-400" : "text-slate-800"}`}
     >
       {children}
     </td>
