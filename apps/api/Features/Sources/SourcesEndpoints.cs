@@ -1,23 +1,24 @@
-using System.Collections.ObjectModel;
 using System.Text.Json;
-using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Api.Infrastructure.Services;
 using CertiWatch.Contracts.Dtos;
-using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Requests;
 using Microsoft.EntityFrameworkCore;
 
 namespace CertiWatch.Api.Features.Sources;
 
+// A Source here only ever comes from finishing the Google Drive/OneDrive OAuth flow (see
+// SourceOAuthEndpoints) - there's no manual "create" endpoint, since that flow is what puts a
+// tenant-scoped refresh token in SourceSecrets in the first place. What's left here is reading the
+// list, deleting a connection, choosing which folder to watch, and asking for an out-of-band sync.
 public static class SourcesEndpoints
 {
     public static IEndpointRouteBuilder MapSourceEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/sources").RequireAuthorization();
         group.MapGet(string.Empty, ListAsync);
-        group.MapPost(string.Empty, CreateAsync);
+        group.MapPatch("/{id:guid}", UpdateConfigAsync);
         group.MapDelete("/{id:guid}", DeleteAsync);
         group.MapPost("/{id:guid}/sync-now", RequestSyncAsync);
         return group;
@@ -32,52 +33,49 @@ public static class SourcesEndpoints
 
         var tenantId = tenantAccessor.Current.TenantId;
         var sources = await db.Sources.AsNoTracking().Where(s => s.TenantId == tenantId).ToListAsync(token);
-        return Results.Ok(sources.Select(ToDtoMasked));
+        return Results.Ok(sources.Select(ToDto));
     }
 
-    private static async Task<IResult> CreateAsync(SourceRequest request, AppDbContext db, ITenantContextAccessor tenantAccessor, IDateTimeProvider clock, CancellationToken token)
+    // The OAuth callback creates the Source before the tenant has picked a folder (Google/
+    // Microsoft's consent screen doesn't have a "pick a folder" step in this flow) - this is what
+    // fills that in afterward, and also lets the tenant rename the connection or change folders
+    // later without disconnecting and reconnecting.
+    private static async Task<IResult> UpdateConfigAsync(
+        Guid id,
+        UpdateSourceConfigRequest request,
+        AppDbContext db,
+        ITenantContextAccessor tenantAccessor,
+        CancellationToken token)
     {
         if (!RecordVisibility.IsAdmin(tenantAccessor))
         {
             return Results.Forbid();
         }
 
-        var validateResult = Validate(request);
-        if (!validateResult.IsValid)
+        var entity = await db.Sources.FirstOrDefaultAsync(s => s.Id == id && s.TenantId == tenantAccessor.Current.TenantId, token);
+        if (entity is null)
         {
-            return Results.BadRequest(new { error = validateResult.Error });
+            return Results.NotFound();
         }
 
-        var tenantId = tenantAccessor.Current.TenantId;
-        var entity = new Source
+        if (!string.IsNullOrWhiteSpace(request.DisplayName))
         {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            Type = request.Type,
-            DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? $"Source {clock.UtcNow:yyyyMMddHHmmss}" : request.DisplayName,
-            ConfigJson = JsonSerializer.Serialize(MaskSecrets(validateResult.StoredConfig)),
-            CreatedAt = clock.UtcNow
-        };
+            entity.DisplayName = request.DisplayName;
+        }
 
-        db.Sources.Add(entity);
-        if (validateResult.Secrets.Count > 0)
+        if (request.FolderId is not null)
         {
-            foreach (var kvp in validateResult.Secrets)
+            var cfg = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.ConfigJson) ?? new Dictionary<string, string>();
+            cfg["folderId"] = request.FolderId;
+            if (!string.IsNullOrWhiteSpace(request.FolderLabel))
             {
-                db.SourceSecrets.Add(new SourceSecret
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantId,
-                    SourceId = entity.Id,
-                    Key = kvp.Key,
-                    Value = kvp.Value,
-                    CreatedAt = clock.UtcNow
-                });
+                cfg["folderLabel"] = request.FolderLabel;
             }
+            entity.ConfigJson = JsonSerializer.Serialize(cfg);
         }
 
         await db.SaveChangesAsync(token);
-        return Results.Created($"/api/sources/{entity.Id}", ToDtoMasked(entity));
+        return Results.Ok(ToDto(entity));
     }
 
     private static async Task<IResult> DeleteAsync(Guid id, AppDbContext db, ITenantContextAccessor tenantAccessor, CancellationToken token)
@@ -122,128 +120,20 @@ public static class SourcesEndpoints
         return Results.Accepted();
     }
 
-    private static SourceDto ToDtoMasked(Source source)
+    private static SourceDto ToDto(CertiWatch.Api.Domain.Entities.Source source)
     {
-        var rawConfig = JsonSerializer.Deserialize<Dictionary<string, string>>(source.ConfigJson) ?? new Dictionary<string, string>();
-        rawConfig.TryGetValue("last_sync", out var lastSync);
-        rawConfig.TryGetValue("sync_status", out var syncStatus);
-        rawConfig.TryGetValue("sync_error", out var syncError);
+        var config = JsonSerializer.Deserialize<Dictionary<string, string>>(source.ConfigJson) ?? new Dictionary<string, string>();
+        config.TryGetValue("last_sync", out var lastSync);
+        config.TryGetValue("sync_status", out var syncStatus);
+        config.TryGetValue("sync_error", out var syncError);
         return new SourceDto(
             source.Id,
             source.Type,
             source.DisplayName,
-            MaskSensitive(rawConfig),
+            config,
             source.CreatedAt,
             lastSync,
             syncStatus,
             syncError);
-    }
-
-    private static (bool IsValid, string? Error, IDictionary<string, string> StoredConfig, IDictionary<string, string> Secrets) Validate(SourceRequest request)
-    {
-        var cfg = request.Config ?? new Dictionary<string, string>();
-        var secrets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (request.Type == SourceType.CloudImport)
-        {
-            if (!cfg.TryGetValue("provider", out var providerRaw) || string.IsNullOrWhiteSpace(providerRaw))
-            {
-                return (false, "provider is required for CloudImport", cfg, secrets);
-            }
-
-            var provider = providerRaw.Trim().ToLowerInvariant();
-            switch (provider)
-            {
-                case "s3":
-                case "minio":
-                    if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for S3/MinIO", cfg, secrets);
-                    if (!cfg.ContainsKey("accessKey") || !cfg.ContainsKey("secretKey")) return (false, "accessKey and secretKey are required for S3/MinIO", cfg, secrets);
-                    break;
-                case "r2":
-                    if (!cfg.ContainsKey("accountId")) return (false, "accountId is required for Cloudflare R2", cfg, secrets);
-                    if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for Cloudflare R2", cfg, secrets);
-                    if (!cfg.ContainsKey("accessKey") || !cfg.ContainsKey("secretKey")) return (false, "accessKey and secretKey are required for Cloudflare R2", cfg, secrets);
-                    break;
-                case "gcs":
-                    if (!cfg.ContainsKey("bucket")) return (false, "bucket is required for GCS", cfg, secrets);
-                    if (!cfg.ContainsKey("serviceAccount")) return (false, "serviceAccount is required for GCS", cfg, secrets);
-                    break;
-                case "azure":
-                    if (!cfg.ContainsKey("container")) return (false, "container is required for Azure Blob", cfg, secrets);
-                    if (!cfg.ContainsKey("connectionString") && !(cfg.ContainsKey("accountName") && cfg.ContainsKey("accountKey")))
-                    {
-                        return (false, "connectionString or accountName/accountKey is required for Azure Blob", cfg, secrets);
-                    }
-                    break;
-                case "dropbox":
-                    if (!cfg.ContainsKey("accessToken")) return (false, "accessToken is required for Dropbox", cfg, secrets);
-                    break;
-                case "gdrive":
-                case "google-drive":
-                    return (false, "Google Drive import is not supported in this build", cfg, secrets);
-                case "onedrive":
-                case "sharepoint":
-                    return (false, "OneDrive/SharePoint import is not supported in this build", cfg, secrets);
-                case "webdav":
-                case "httpdir":
-                case "http":
-                    if (!cfg.ContainsKey("baseUrl")) return (false, "baseUrl is required for WebDAV/HTTP directory", cfg, secrets);
-                    break;
-                default:
-                    return (false, $"Unsupported provider '{providerRaw}'", cfg, secrets);
-            }
-        }
-
-        foreach (var key in cfg.Keys.ToList())
-        {
-            if (IsSecretKey(key))
-            {
-                secrets[key] = cfg[key];
-                cfg[key] = string.Empty;
-            }
-        }
-
-        return (true, null, cfg, secrets);
-    }
-
-    private static IReadOnlyDictionary<string, string> MaskSensitive(IDictionary<string, string> config)
-    {
-        var masked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in config)
-        {
-            if (IsSecretKey(kvp.Key))
-            {
-                masked[kvp.Key] = string.IsNullOrEmpty(kvp.Value) ? kvp.Value : "********";
-            }
-            else
-            {
-                masked[kvp.Key] = kvp.Value;
-            }
-        }
-
-        return new ReadOnlyDictionary<string, string>(masked);
-    }
-
-    private static IDictionary<string, string> MaskSecrets(IDictionary<string, string> config)
-    {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in config)
-        {
-            result[kvp.Key] = IsSecretKey(kvp.Key) ? string.Empty : kvp.Value;
-        }
-
-        return result;
-    }
-
-    private static bool IsSecretKey(string key)
-    {
-        var lowered = key.ToLowerInvariant();
-        return lowered.Contains("secret")
-               || lowered.Contains("token")
-               || lowered.Contains("password")
-               || lowered.Contains("connectionstring")
-               || lowered.Contains("accesskey")
-               || lowered.Contains("accountkey")
-               || lowered.Contains("serviceaccount");
     }
 }

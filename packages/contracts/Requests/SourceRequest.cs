@@ -1,10 +1,11 @@
-using CertiWatch.Contracts.Enums;
-
 namespace CertiWatch.Contracts.Requests;
 
-public sealed class SourceRequest
+// Sent to PATCH /api/sources/{id} to rename a connection or pick/change which folder it watches -
+// there's no "create" request type here since a Source only ever comes from finishing the Google
+// Drive/OneDrive OAuth flow (see SourceOAuthEndpoints), never a form post.
+public sealed class UpdateSourceConfigRequest
 {
-    public required SourceType Type { get; init; }
-    public required string DisplayName { get; init; }
-    public IDictionary<string, string> Config { get; init; } = new Dictionary<string, string>();
+    public string? DisplayName { get; init; }
+    public string? FolderId { get; init; }
+    public string? FolderLabel { get; init; }
 }

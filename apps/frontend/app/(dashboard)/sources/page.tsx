@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchJson, postJson } from "../../../lib/api";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { fetchJson, patchJson, deleteJson, postJson, apiUrl } from "../../../lib/api";
 
 type SourceDto = {
   id: string;
@@ -14,74 +15,56 @@ type SourceDto = {
   syncError?: string | null;
 };
 
-type Provider = "s3" | "r2" | "gcs" | "azure" | "dropbox" | "webdav" | "httpdir";
-
-type FormState = {
-  displayName: string;
-  provider: Provider;
-  bucket: string;
-  prefix: string;
-  region: string;
-  endpoint: string;
-  accountId: string;
-  accessKey: string;
-  secretKey: string;
-  serviceAccount: string;
-  container: string;
-  connectionString: string;
-  accountName: string;
-  accountKey: string;
-  path: string;
-  accessToken: string;
-  baseUrl: string;
-  username: string;
-  password: string;
-};
-
-const providerOptions: { value: Provider; label: string }[] = [
-  { value: "s3", label: "S3 / MinIO" },
-  { value: "r2", label: "Cloudflare R2" },
-  { value: "gcs", label: "Google Cloud Storage" },
-  { value: "azure", label: "Azure Blob" },
-  { value: "dropbox", label: "Dropbox" },
-  { value: "webdav", label: "WebDAV" },
-  { value: "httpdir", label: "HTTP directory" }
-];
-
-const emptyForm: FormState = {
-  displayName: "",
-  provider: "s3",
-  bucket: "",
-  prefix: "",
-  region: "",
-  endpoint: "",
-  accountId: "",
-  accessKey: "",
-  secretKey: "",
-  serviceAccount: "",
-  container: "",
-  connectionString: "",
-  accountName: "",
-  accountKey: "",
-  path: "",
-  accessToken: "",
-  baseUrl: "",
-  username: "",
-  password: ""
+const ERROR_MESSAGES: Record<string, string> = {
+  state_mismatch: "That connection attempt looks like it expired or was tampered with - please try connecting again.",
+  token_exchange_failed: "Google/Microsoft didn't accept the connection - please try again.",
+  no_refresh_token: "We didn't receive lasting access from that connection - please try again and make sure to approve access when prompted.",
+  access_denied: "The connection was cancelled before it finished."
 };
 
 export default function SourcesPage() {
+  return (
+    <Suspense fallback={<LoadingCard />}>
+      <SourcesPageInner />
+    </Suspense>
+  );
+}
+
+function SourcesPageInner() {
+  const searchParams = useSearchParams();
   const [sources, setSources] = useState<SourceDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [banner, setBanner] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
+  const [folderDrafts, setFolderDrafts] = useState<Record<string, string>>({});
+  const [savingFolder, setSavingFolder] = useState<Record<string, boolean>>({});
 
   const load = () => {
     fetchJson<SourceDto[]>("/api/sources")
       .then(setSources)
       .catch((err) => setError(err.message ?? "Failed to load sources"));
   };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  // Google/Microsoft redirect back here with ?connected=... or ?error=... once the OAuth flow
+  // finishes server-side - there's no client-side callback to handle, just this banner.
+  useEffect(() => {
+    const connected = searchParams?.get("connected");
+    const oauthError = searchParams?.get("error");
+    if (connected) {
+      const label = connected === "google" ? "Google Drive" : connected === "microsoft" ? "Microsoft OneDrive" : connected;
+      setBanner({ tone: "success", text: `Connected to ${label}. Choose a folder below to start syncing.` });
+      window.history.replaceState(null, "", "/sources");
+    } else if (oauthError) {
+      setBanner({ tone: "error", text: ERROR_MESSAGES[oauthError] ?? `Couldn't connect: ${oauthError}` });
+      window.history.replaceState(null, "", "/sources");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const syncNow = async (id: string) => {
     setSyncing((s) => ({ ...s, [id]: true }));
@@ -95,9 +78,34 @@ export default function SourcesPage() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const disconnect = async (id: string) => {
+    if (!window.confirm("Disconnect this source? Files already imported stay put, but nothing new will be pulled in.")) {
+      return;
+    }
+    setDeleting((s) => ({ ...s, [id]: true }));
+    try {
+      await deleteJson(`/api/sources/${id}`);
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to disconnect source");
+    } finally {
+      setDeleting((s) => ({ ...s, [id]: false }));
+    }
+  };
+
+  const saveFolder = async (id: string) => {
+    const folderId = (folderDrafts[id] ?? "").trim();
+    if (!folderId) return;
+    setSavingFolder((s) => ({ ...s, [id]: true }));
+    try {
+      await patchJson(`/api/sources/${id}`, { folderId });
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to save folder");
+    } finally {
+      setSavingFolder((s) => ({ ...s, [id]: false }));
+    }
+  };
 
   if (error) return <ErrorCard message={error} />;
   if (!sources) return <LoadingCard />;
@@ -107,149 +115,163 @@ export default function SourcesPage() {
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4">
           <h1 className="text-lg font-semibold text-slate-900">Sources</h1>
-          <p className="text-sm text-slate-600">Configured ingestion sources.</p>
-        </div>
-
-        <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h2 className="text-md font-semibold text-slate-900">Add cloud source</h2>
           <p className="text-sm text-slate-600">
-            Connect cloud storage (S3/Cloudflare R2/GCS/Azure/Dropbox/WebDAV/HTTP). Credentials are tenant-scoped and
-            masked in the list.
+            Connect a cloud folder and CertiWatch will pull in new certificates the same way it does from an uploaded
+            device - no secret keys, just a normal sign-in.
           </p>
-          <form
-            className="mt-3 grid gap-3 md:grid-cols-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setCreating(true);
-              setError(null);
-              try {
-                const config = buildConfig(form);
-                await postJson("/api/sources", {
-                  type: "CloudImport",
-                  displayName:
-                    form.displayName ||
-                    {
-                      s3: `S3 ${form.bucket}`,
-                      r2: `R2 ${form.bucket}`,
-                      gcs: `GCS ${form.bucket}`,
-                      azure: `Azure ${form.container}`,
-                      dropbox: "Dropbox import",
-                      webdav: `WebDAV ${form.baseUrl}`,
-                      httpdir: `HTTP ${form.baseUrl}`
-                    }[form.provider],
-                  config
-                });
-                load();
-                setForm({ ...emptyForm, provider: form.provider });
-              } catch (err: any) {
-                setError(err.message ?? "Failed to add source");
-              } finally {
-                setCreating(false);
-              }
-            }}
-          >
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Display name</label>
-              <input
-                value={form.displayName}
-                onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="My cloud source"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Provider</label>
-              <select
-                value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value as Provider })}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              >
-                {providerOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {renderProviderFields(form, setForm)}
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                disabled={creating}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-              >
-                {creating ? "Saving..." : "Add source"}
-              </button>
-              {error && <span className="ml-3 text-sm text-rose-700">{error}</span>}
-            </div>
-          </form>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-100">
-              <tr>
-                <Header>Name</Header>
-                <Header>Type</Header>
-                <Header>Status</Header>
-                <Header>Last sync</Header>
-                <Header>Error</Header>
-                <Header>Created</Header>
-                <Header>Config</Header>
-                <Header>Actions</Header>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {sources.map((s) => {
-                const syncStatus = getSyncStatus(s);
-                const lastSync = getSyncDate(s);
-                const syncError = getSyncError(s);
-                const isCloudImport = isCloudImportSource(s);
-                return (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                    <Cell>{s.displayName}</Cell>
-                    <Cell className="capitalize">{formatSourceType(s.type)}</Cell>
-                    <Cell>
-                      <StatusPill value={syncStatus} />
-                    </Cell>
-                    <Cell>{formatDate(lastSync)}</Cell>
-                    <Cell className="text-xs text-rose-600">{syncError || "--"}</Cell>
-                    <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
-                    <Cell>
-                      {s.config && Object.keys(s.config).length > 0 ? (
-                        <div className="text-xs text-slate-700">
-                          {Object.entries(s.config).map(([k, v]) => (
-                            <div key={k}>
-                              <span className="font-medium">{k}:</span> {v}
-                            </div>
-                          ))}
+        {banner && (
+          <div
+            className={`mb-4 flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm ${
+              banner.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}
+          >
+            <span>{banner.text}</span>
+            <button onClick={() => setBanner(null)} className="flex-shrink-0 text-xs font-semibold underline">
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <div className="mb-6 flex flex-wrap gap-3">
+          <a
+            href={apiUrl("/api/sources/oauth/google/start")}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+          >
+            <span aria-hidden="true">📁</span> Connect Google Drive
+          </a>
+          <a
+            href={apiUrl("/api/sources/oauth/microsoft/start")}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+          >
+            <span aria-hidden="true">☁️</span> Connect Microsoft OneDrive
+          </a>
+        </div>
+
+        {sources.length === 0 ? (
+          <div className="rounded-md border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600">
+            No cloud sources connected yet. Connect Google Drive or OneDrive above, or just keep uploading documents
+            directly - that always works too.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-100">
+                <tr>
+                  <Header>Name</Header>
+                  <Header>Folder</Header>
+                  <Header>Status</Header>
+                  <Header>Last sync</Header>
+                  <Header>Connected</Header>
+                  <Header>Actions</Header>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {sources.map((s) => {
+                  const provider = s.config?.provider ?? "";
+                  const folderId = s.config?.folderId ?? "";
+                  const folderLabel = s.config?.folderLabel;
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50">
+                      <Cell>
+                        <div className="font-medium text-slate-900">{s.displayName}</div>
+                        <div className="text-xs text-slate-500">{providerLabel(provider)}</div>
+                      </Cell>
+                      <Cell>
+                        {folderId ? (
+                          <span className="text-slate-700">{folderLabel || folderId}</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={folderDrafts[s.id] ?? ""}
+                              onChange={(e) => setFolderDrafts((d) => ({ ...d, [s.id]: e.target.value }))}
+                              placeholder={provider === "onedrive" ? "OneDrive folder ID" : "Google Drive folder ID"}
+                              className="w-40 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => saveFolder(s.id)}
+                              disabled={savingFolder[s.id] || !(folderDrafts[s.id] ?? "").trim()}
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {savingFolder[s.id] ? "Saving..." : "Save"}
+                            </button>
+                          </div>
+                        )}
+                      </Cell>
+                      <Cell>
+                        <StatusPill value={getSyncStatus(s)} />
+                      </Cell>
+                      <Cell>{formatDate(getSyncDate(s))}</Cell>
+                      <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
+                      <Cell>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => syncNow(s.id)}
+                            disabled={syncing[s.id] || !folderId}
+                            title={folderId ? undefined : "Choose a folder first"}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {syncing[s.id] ? "Syncing..." : "Sync now"}
+                          </button>
+                          <button
+                            onClick={() => disconnect(s.id)}
+                            disabled={deleting[s.id]}
+                            className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          >
+                            {deleting[s.id] ? "..." : "Disconnect"}
+                          </button>
                         </div>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </Cell>
-                    <Cell>
-                      {isCloudImport ? (
-                        <button
-                          onClick={() => syncNow(s.id)}
-                          disabled={syncing[s.id]}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          {syncing[s.id] ? "Syncing..." : "Sync now"}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-500">--</span>
-                      )}
-                    </Cell>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </Cell>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {getErrorRow(sources)}
+
+        <div className="mt-6 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+          <p className="font-semibold text-slate-600">Where do I find a folder ID?</p>
+          <p className="mt-1">
+            Google Drive: open the folder in your browser - the ID is the last part of the address, after{" "}
+            <code>folders/</code>.
+          </p>
+          <p className="mt-1">
+            OneDrive: open the folder, click Details, and copy the ID shown there (or use the &ldquo;Embed&rdquo;
+            link, which contains it).
+          </p>
         </div>
       </div>
     </div>
   );
+}
+
+function getErrorRow(sources: SourceDto[]) {
+  const withErrors = sources.filter((s) => getSyncError(s));
+  if (withErrors.length === 0) return null;
+  return (
+    <div className="mt-4 space-y-1">
+      {withErrors.map((s) => (
+        <p key={s.id} className="text-xs text-rose-600">
+          <span className="font-semibold">{s.displayName}:</span> {getSyncError(s)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function providerLabel(provider: string) {
+  switch (provider) {
+    case "gdrive":
+      return "Google Drive";
+    case "onedrive":
+      return "Microsoft OneDrive";
+    default:
+      return provider || "Cloud source";
+  }
 }
 
 function Header({ children }: { children: React.ReactNode }) {
@@ -287,185 +309,6 @@ function ErrorCard({ message }: { message: string }) {
       Failed to load sources: {message}
     </div>
   );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  required,
-  type = "text"
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-  type?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="text-sm font-medium text-slate-700">
-        {label}
-        {required ? <span className="text-rose-600"> *</span> : null}
-      </label>
-      <input
-        type={type}
-        value={value}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-      />
-    </div>
-  );
-}
-
-function buildConfig(form: FormState): Record<string, string> {
-  const cfg: Record<string, string> = { provider: form.provider };
-  switch (form.provider) {
-    case "s3":
-      assignIf(cfg, "bucket", form.bucket);
-      assignIf(cfg, "prefix", form.prefix);
-      assignIf(cfg, "region", form.region);
-      assignIf(cfg, "endpoint", form.endpoint);
-      assignIf(cfg, "accessKey", form.accessKey);
-      assignIf(cfg, "secretKey", form.secretKey);
-      break;
-    case "r2":
-      assignIf(cfg, "accountId", form.accountId);
-      assignIf(cfg, "bucket", form.bucket);
-      assignIf(cfg, "prefix", form.prefix);
-      assignIf(cfg, "accessKey", form.accessKey);
-      assignIf(cfg, "secretKey", form.secretKey);
-      break;
-    case "gcs":
-      assignIf(cfg, "bucket", form.bucket);
-      assignIf(cfg, "prefix", form.prefix);
-      assignIf(cfg, "serviceAccount", form.serviceAccount);
-      break;
-    case "azure":
-      assignIf(cfg, "container", form.container);
-      assignIf(cfg, "prefix", form.prefix);
-      assignIf(cfg, "connectionString", form.connectionString);
-      assignIf(cfg, "accountName", form.accountName);
-      assignIf(cfg, "accountKey", form.accountKey);
-      break;
-    case "dropbox":
-      assignIf(cfg, "path", form.path);
-      assignIf(cfg, "accessToken", form.accessToken);
-      break;
-    case "webdav":
-    case "httpdir":
-      assignIf(cfg, "baseUrl", form.baseUrl);
-      assignIf(cfg, "path", form.path);
-      assignIf(cfg, "username", form.username);
-      assignIf(cfg, "password", form.password);
-      break;
-    default:
-      break;
-  }
-  return cfg;
-}
-
-function renderProviderFields(form: FormState, setForm: (f: FormState) => void) {
-  switch (form.provider) {
-    case "s3":
-      return (
-        <>
-          <Field label="Bucket" value={form.bucket} onChange={(v) => setForm({ ...form, bucket: v })} required />
-          <Field label="Prefix (optional)" value={form.prefix} onChange={(v) => setForm({ ...form, prefix: v })} />
-          <Field label="Region" value={form.region} onChange={(v) => setForm({ ...form, region: v })} />
-          <Field label="Endpoint (optional, for MinIO)" value={form.endpoint} onChange={(v) => setForm({ ...form, endpoint: v })} />
-          <Field label="Access key" value={form.accessKey} onChange={(v) => setForm({ ...form, accessKey: v })} required />
-          <Field label="Secret key" value={form.secretKey} onChange={(v) => setForm({ ...form, secretKey: v })} required type="password" />
-        </>
-      );
-    case "r2":
-      return (
-        <>
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium text-slate-700">
-              Account ID<span className="text-rose-600"> *</span>
-            </label>
-            <input
-              value={form.accountId}
-              required
-              onChange={(e) => setForm({ ...form, accountId: e.target.value })}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="e.g. a1b2c3d4e5f6..."
-            />
-            <p className="text-xs text-slate-500">
-              From the Cloudflare dashboard: R2 → Overview - it&apos;s the account ID shown in the API endpoint URL.
-            </p>
-          </div>
-          <Field label="Bucket" value={form.bucket} onChange={(v) => setForm({ ...form, bucket: v })} required />
-          <Field label="Prefix (optional)" value={form.prefix} onChange={(v) => setForm({ ...form, prefix: v })} />
-          <Field label="Access key ID" value={form.accessKey} onChange={(v) => setForm({ ...form, accessKey: v })} required />
-          <Field
-            label="Secret access key"
-            value={form.secretKey}
-            onChange={(v) => setForm({ ...form, secretKey: v })}
-            required
-            type="password"
-          />
-        </>
-      );
-    case "gcs":
-      return (
-        <>
-          <Field label="Bucket" value={form.bucket} onChange={(v) => setForm({ ...form, bucket: v })} required />
-          <Field label="Prefix (optional)" value={form.prefix} onChange={(v) => setForm({ ...form, prefix: v })} />
-          <Field label="Service account JSON" value={form.serviceAccount} onChange={(v) => setForm({ ...form, serviceAccount: v })} required />
-        </>
-      );
-    case "azure":
-      return (
-        <>
-          <Field label="Container" value={form.container} onChange={(v) => setForm({ ...form, container: v })} required />
-          <Field label="Prefix (optional)" value={form.prefix} onChange={(v) => setForm({ ...form, prefix: v })} />
-          <Field
-            label="Connection string"
-            value={form.connectionString}
-            onChange={(v) => setForm({ ...form, connectionString: v })}
-            required={!form.accountName || !form.accountKey}
-          />
-          <Field label="Account name" value={form.accountName} onChange={(v) => setForm({ ...form, accountName: v })} />
-          <Field label="Account key" value={form.accountKey} onChange={(v) => setForm({ ...form, accountKey: v })} type="password" />
-        </>
-      );
-    case "dropbox":
-      return (
-        <>
-          <Field label="Folder path" value={form.path} onChange={(v) => setForm({ ...form, path: v })} />
-          <Field label="Access token" value={form.accessToken} onChange={(v) => setForm({ ...form, accessToken: v })} required type="password" />
-        </>
-      );
-    case "webdav":
-    case "httpdir":
-      return (
-        <>
-          <Field label="Base URL" value={form.baseUrl} onChange={(v) => setForm({ ...form, baseUrl: v })} required />
-          <Field label="Path/Prefix" value={form.path} onChange={(v) => setForm({ ...form, path: v })} />
-          <Field label="Username" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
-          <Field label="Password / token" value={form.password} onChange={(v) => setForm({ ...form, password: v })} type="password" />
-        </>
-      );
-    default:
-      return null;
-  }
-}
-
-function assignIf(target: Record<string, string>, key: string, value: string) {
-  if (value) target[key] = value;
-}
-
-function isCloudImportSource(source: SourceDto) {
-  const typeValue = String(source.type ?? "").toLowerCase();
-  return typeValue === "cloudimport" || typeValue === "4";
-}
-
-function formatSourceType(value: string | number) {
-  const raw = String(value ?? "");
-  return raw ? raw.toLowerCase() : "--";
 }
 
 function getSyncStatus(source: SourceDto) {

@@ -79,6 +79,8 @@ builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("M
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ReminderOptions>(builder.Configuration.GetSection("Reminders"));
 builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<GoogleOAuthOptions>(builder.Configuration.GetSection("GoogleOAuth"));
+builder.Services.Configure<MicrosoftOAuthOptions>(builder.Configuration.GetSection("MicrosoftOAuth"));
 builder.Services.AddFileStorage(builder.Configuration);
 builder.Services.PostConfigure<StorageOptions>(options =>
 {
@@ -238,6 +240,7 @@ app.MapAdminEndpoints();
 app.MapPlatformEndpoints();
 app.MapDeviceEndpoints();
 app.MapSourceEndpoints();
+app.MapSourceOAuthEndpoints();
 app.MapRecordEndpoints();
 app.MapCourseRuleEndpoints();
 app.MapRequirementTypeEndpoints();

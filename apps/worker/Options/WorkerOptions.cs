@@ -19,6 +19,12 @@ public sealed class WorkerOptions
     public string DocumentType { get; set; } = "generic_certificate";
     public int CloudImportPollMinutes { get; set; } = 5;
     public string CloudImportDownloadPath { get; set; } = DefaultCloudImportPath;
+    // CertiWatch's own OAuth app credentials (not per-tenant) - needed to refresh a tenant's
+    // Google Drive/OneDrive access token using the refresh token stored on their Source.
+    public string GoogleOAuthClientId { get; set; } = string.Empty;
+    public string GoogleOAuthClientSecret { get; set; } = string.Empty;
+    public string MicrosoftOAuthClientId { get; set; } = string.Empty;
+    public string MicrosoftOAuthClientSecret { get; set; } = string.Empty;
 
     private static string DefaultSamplesPath =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "documents"));

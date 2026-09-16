@@ -14,6 +14,7 @@ public interface IApiClient
     Task<FileHashCheckResponse?> GetFileHashStatusAsync(Guid deviceId, string fileHash, CancellationToken cancellationToken);
     Task<IReadOnlyList<SourceDto>> GetSourcesAsync(Guid deviceId, string deviceToken, CancellationToken cancellationToken);
     Task ReportSourceSyncAsync(Guid deviceId, string deviceToken, Guid sourceId, string status, string? message, CancellationToken cancellationToken);
+    Task UpdateSourceSecretAsync(Guid deviceId, string deviceToken, Guid sourceId, string key, string value, CancellationToken cancellationToken);
 }
 
 public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> options, ILogger<ApiClient> logger) : IApiClient
@@ -109,6 +110,26 @@ public sealed class ApiClient(HttpClient httpClient, IOptions<WorkerOptions> opt
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to report sync status for source {Source}", sourceId);
+        }
+    }
+
+    public async Task UpdateSourceSecretAsync(Guid deviceId, string deviceToken, Guid sourceId, string key, string value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await httpClient.PostAsJsonAsync(
+                $"{_options.ApiBaseUrl}/api/devices/{deviceId}/sources/{sourceId}/secret",
+                new { DeviceToken = deviceToken, Key = key, Value = value },
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Failed to update secret {Key} for source {Source} with status {Code}", key, sourceId, response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update secret {Key} for source {Source}", key, sourceId);
         }
     }
 }
