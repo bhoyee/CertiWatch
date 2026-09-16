@@ -19,6 +19,21 @@ type CreateRequirementType = {
   isRenewable: boolean;
 };
 
+const COLUMN_KEYS = ["name", "validity", "renewable", "scope", "actions"] as const;
+type ColumnKey = (typeof COLUMN_KEYS)[number];
+// Widths are percentages of the table (not px) that always sum to 100 - resizing a column
+// borrows/gives space to its neighbor rather than growing the table itself, so the table never
+// exceeds its container and never needs a horizontal scrollbar just from resizing.
+const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
+  name: 34,
+  validity: 20,
+  renewable: 15,
+  scope: 15,
+  actions: 16
+};
+const MIN_COL_PCT = 8;
+const COL_WIDTHS_STORAGE_KEY = "cw_requirements_col_widths_v1";
+
 export default function RequirementsPage() {
   return (
     <Suspense fallback={<LoadingCard />}>
@@ -50,6 +65,64 @@ function RequirementsPageInner() {
     defaultValidityMonths: "",
     isRenewable: true
   });
+  const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
+    if (typeof window === "undefined") return DEFAULT_COL_WIDTHS;
+    try {
+      const saved = window.localStorage.getItem(COL_WIDTHS_STORAGE_KEY);
+      return saved ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(saved) } : DEFAULT_COL_WIDTHS;
+    } catch {
+      return DEFAULT_COL_WIDTHS;
+    }
+  });
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Column resizing redistributes width between the dragged column and its neighbor (dragging the
+  // last column's handle borrows from the one before it instead, since it has no "next"), so the
+  // pair's combined width - and therefore the table's total width - never changes. That's what
+  // keeps the table exactly at the container's width with no horizontal scrollbar, matching the
+  // same resizing behavior as the Records and Staff tables.
+  const startResize = (key: ColumnKey) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const idx = COLUMN_KEYS.indexOf(key);
+    const isLast = idx === COLUMN_KEYS.length - 1;
+    const neighborKey = isLast ? COLUMN_KEYS[idx - 1] : COLUMN_KEYS[idx + 1];
+    if (!neighborKey) return;
+
+    const containerWidth = tableWrapperRef.current?.clientWidth || 1000;
+    const startX = e.clientX;
+    const startOwn = colWidths[key];
+    const startNeighbor = colWidths[neighborKey];
+    const pairTotal = startOwn + startNeighbor;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const deltaPct = ((moveEvent.clientX - startX) / containerWidth) * 100;
+      const signedDelta = isLast ? -deltaPct : deltaPct;
+      let nextOwn = startOwn + signedDelta;
+      let nextNeighbor = pairTotal - nextOwn;
+      if (nextOwn < MIN_COL_PCT) {
+        nextOwn = MIN_COL_PCT;
+        nextNeighbor = pairTotal - nextOwn;
+      } else if (nextNeighbor < MIN_COL_PCT) {
+        nextNeighbor = MIN_COL_PCT;
+        nextOwn = pairTotal - nextNeighbor;
+      }
+      setColWidths((prev) => ({ ...prev, [key]: nextOwn, [neighborKey]: nextNeighbor }));
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      setColWidths((prev) => {
+        try {
+          window.localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(prev));
+        } catch {
+          // Best-effort - resizing still works for the rest of the session either way.
+        }
+        return prev;
+      });
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     fetchJson<RequirementTypeDto[]>("/api/requirement-types")
@@ -157,21 +230,46 @@ function RequirementsPageInner() {
             </select>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <div ref={tableWrapperRef}>
+          {/* Column widths are percentages that always sum to 100 (see startResize) and the table
+              is w-full, so it always exactly fills this wrapper - no horizontal scrolling, just
+              like the Records and Staff tables. */}
+          <table className="w-full divide-y divide-slate-200 text-sm" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: `${colWidths.name}%` }} />
+              <col style={{ width: `${colWidths.validity}%` }} />
+              <col style={{ width: `${colWidths.renewable}%` }} />
+              <col style={{ width: `${colWidths.scope}%` }} />
+              <col style={{ width: `${colWidths.actions}%` }} />
+            </colgroup>
             <thead className="bg-slate-100">
               <tr>
-                <Header onClick={() => setSortKey("name")} sorted={sort.key === "name"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("name")}
+                  sorted={sort.key === "name"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("name")}
+                >
                   Requirement
                 </Header>
-                <Header onClick={() => setSortKey("validity")} sorted={sort.key === "validity"} dir={sort.dir}>
+                <Header
+                  onClick={() => setSortKey("validity")}
+                  sorted={sort.key === "validity"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("validity")}
+                >
                   Validity (months)
                 </Header>
-                <Header>Renewable</Header>
-                <Header onClick={() => setSortKey("scope")} sorted={sort.key === "scope"} dir={sort.dir}>
+                <Header onResizeStart={startResize("renewable")}>Renewable</Header>
+                <Header
+                  onClick={() => setSortKey("scope")}
+                  sorted={sort.key === "scope"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("scope")}
+                >
                   Scope
                 </Header>
-                <Header>Actions</Header>
+                <Header onResizeStart={startResize("actions")}>Actions</Header>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -448,31 +546,39 @@ function Header({
   children,
   onClick,
   sorted,
-  dir
+  dir,
+  onResizeStart
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   sorted?: boolean;
   dir?: "asc" | "desc";
+  onResizeStart?: (e: React.PointerEvent) => void;
 }) {
   return (
-    <th
-      className={`border-b-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 ${
-        onClick ? "cursor-pointer select-none" : ""
-      }`}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-    >
-      <div className="flex items-center gap-1">
-        <span>{children}</span>
+    <th className="relative border-b-2 border-r-2 border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 last:border-r-0">
+      <span
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 ${onClick ? "cursor-pointer select-none hover:text-slate-900" : ""}`}
+      >
+        {children}
         {sorted && <span className="text-slate-400">{dir === "asc" ? "▲" : "▼"}</span>}
-      </div>
+      </span>
+      {onResizeStart && (
+        // The border-r above marks where columns divide; this handle just widens the grabbable
+        // area around that same line and highlights it on hover/drag so it reads as draggable.
+        <div
+          onPointerDown={onResizeStart}
+          aria-hidden="true"
+          className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-indigo-300/60 active:bg-indigo-400/70"
+        />
+      )}
     </th>
   );
 }
 
 function Cell({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 text-slate-800">{children}</td>;
+  return <td className="break-words px-3 py-2 text-slate-800">{children}</td>;
 }
 
 function Field({
