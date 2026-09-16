@@ -499,6 +499,15 @@ function ReviewCard({
       requirementTypeNames.some((name) => name.trim().toLowerCase() === trimmedCourseName.toLowerCase()),
     [requirementTypeNames, trimmedCourseName]
   );
+  // Once the reviewer fixes the requirement type, the stale validation error shouldn't just sit
+  // there until they notice and dismiss it by hand - clear it the moment it's no longer accurate.
+  // Guarded to only clear errors this component itself raised, so an unrelated save/delete failure
+  // never gets silently wiped out by an edit to an unrelated field.
+  useEffect(() => {
+    if (error && trimmedCourseName && isKnownRequirement && error.includes("requirement list yet")) {
+      setError(null);
+    }
+  }, [trimmedCourseName, isKnownRequirement, error]);
   // Keep form in sync when a fresh extraction/refresh brings new data
   useEffect(() => {
     setStaffName(record.staffName ?? "");
@@ -645,7 +654,21 @@ function ReviewCard({
         </div>
       </div>
 
-      {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+      {error && (
+        <div className="mt-2 flex items-start justify-between gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            className="flex-shrink-0 rounded p-0.5 text-rose-500 hover:bg-rose-100 hover:text-rose-700"
+          >
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
