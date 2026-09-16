@@ -14,7 +14,7 @@ type SourceDto = {
   syncError?: string | null;
 };
 
-type Provider = "s3" | "gcs" | "azure" | "dropbox" | "webdav" | "httpdir";
+type Provider = "s3" | "r2" | "gcs" | "azure" | "dropbox" | "webdav" | "httpdir";
 
 type FormState = {
   displayName: string;
@@ -23,6 +23,7 @@ type FormState = {
   prefix: string;
   region: string;
   endpoint: string;
+  accountId: string;
   accessKey: string;
   secretKey: string;
   serviceAccount: string;
@@ -39,6 +40,7 @@ type FormState = {
 
 const providerOptions: { value: Provider; label: string }[] = [
   { value: "s3", label: "S3 / MinIO" },
+  { value: "r2", label: "Cloudflare R2" },
   { value: "gcs", label: "Google Cloud Storage" },
   { value: "azure", label: "Azure Blob" },
   { value: "dropbox", label: "Dropbox" },
@@ -53,6 +55,7 @@ const emptyForm: FormState = {
   prefix: "",
   region: "",
   endpoint: "",
+  accountId: "",
   accessKey: "",
   secretKey: "",
   serviceAccount: "",
@@ -110,7 +113,8 @@ export default function SourcesPage() {
         <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <h2 className="text-md font-semibold text-slate-900">Add cloud source</h2>
           <p className="text-sm text-slate-600">
-            Connect cloud storage (S3/GCS/Azure/Dropbox/WebDAV/HTTP). Credentials are tenant-scoped and masked in the list.
+            Connect cloud storage (S3/Cloudflare R2/GCS/Azure/Dropbox/WebDAV/HTTP). Credentials are tenant-scoped and
+            masked in the list.
           </p>
           <form
             className="mt-3 grid gap-3 md:grid-cols-2"
@@ -126,6 +130,7 @@ export default function SourcesPage() {
                     form.displayName ||
                     {
                       s3: `S3 ${form.bucket}`,
+                      r2: `R2 ${form.bucket}`,
                       gcs: `GCS ${form.bucket}`,
                       azure: `Azure ${form.container}`,
                       dropbox: "Dropbox import",
@@ -325,6 +330,13 @@ function buildConfig(form: FormState): Record<string, string> {
       assignIf(cfg, "accessKey", form.accessKey);
       assignIf(cfg, "secretKey", form.secretKey);
       break;
+    case "r2":
+      assignIf(cfg, "accountId", form.accountId);
+      assignIf(cfg, "bucket", form.bucket);
+      assignIf(cfg, "prefix", form.prefix);
+      assignIf(cfg, "accessKey", form.accessKey);
+      assignIf(cfg, "secretKey", form.secretKey);
+      break;
     case "gcs":
       assignIf(cfg, "bucket", form.bucket);
       assignIf(cfg, "prefix", form.prefix);
@@ -365,6 +377,36 @@ function renderProviderFields(form: FormState, setForm: (f: FormState) => void) 
           <Field label="Endpoint (optional, for MinIO)" value={form.endpoint} onChange={(v) => setForm({ ...form, endpoint: v })} />
           <Field label="Access key" value={form.accessKey} onChange={(v) => setForm({ ...form, accessKey: v })} required />
           <Field label="Secret key" value={form.secretKey} onChange={(v) => setForm({ ...form, secretKey: v })} required type="password" />
+        </>
+      );
+    case "r2":
+      return (
+        <>
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700">
+              Account ID<span className="text-rose-600"> *</span>
+            </label>
+            <input
+              value={form.accountId}
+              required
+              onChange={(e) => setForm({ ...form, accountId: e.target.value })}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="e.g. a1b2c3d4e5f6..."
+            />
+            <p className="text-xs text-slate-500">
+              From the Cloudflare dashboard: R2 → Overview - it&apos;s the account ID shown in the API endpoint URL.
+            </p>
+          </div>
+          <Field label="Bucket" value={form.bucket} onChange={(v) => setForm({ ...form, bucket: v })} required />
+          <Field label="Prefix (optional)" value={form.prefix} onChange={(v) => setForm({ ...form, prefix: v })} />
+          <Field label="Access key ID" value={form.accessKey} onChange={(v) => setForm({ ...form, accessKey: v })} required />
+          <Field
+            label="Secret access key"
+            value={form.secretKey}
+            onChange={(v) => setForm({ ...form, secretKey: v })}
+            required
+            type="password"
+          />
         </>
       );
     case "gcs":

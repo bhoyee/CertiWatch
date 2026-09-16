@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -87,10 +89,19 @@ public sealed class CloudImportWorker : BackgroundService
                         await SyncS3Async(source, token);
                         await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
                         break;
+                    case "r2":
+                        await SyncR2Async(source, token);
+                        await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
+                        break;
                     case "webdav":
+                        // Real WebDAV servers (Nextcloud, ownCloud, IIS) need PROPFIND + XML
+                        // parsing - a plain HTML directory index (below) isn't the same protocol.
+                        await SyncWebDavAsync(source, token);
+                        await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
+                        break;
                     case "httpdir":
                     case "http":
-                        await SyncWebDavAsync(source, token);
+                        await SyncHttpDirectoryAsync(source, token);
                         await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
                         break;
                     case "dropbox":
@@ -132,7 +143,7 @@ public sealed class CloudImportWorker : BackgroundService
         }
 
         source.Config.TryGetValue("prefix", out var prefix);
-        var region = source.Config.TryGetValue("region", out var r) ? r : "us-east-1";
+        var region = source.Config.TryGetValue("region", out var r) && !string.IsNullOrWhiteSpace(r) ? r : "us-east-1";
         source.Config.TryGetValue("endpoint", out var endpoint);
 
         var accessKey = source.Config.TryGetValue("accessKey", out var ak) ? ak : null;
@@ -145,17 +156,71 @@ public sealed class CloudImportWorker : BackgroundService
 
         var config = new AmazonS3Config
         {
-            RegionEndpoint = RegionEndpoint.GetBySystemName(region),
             Timeout = TimeSpan.FromMinutes(2),
             MaxErrorRetry = 1
         };
         if (!string.IsNullOrWhiteSpace(endpoint))
         {
+            // A custom endpoint means a non-AWS S3-compatible service (MinIO, etc.) - its "region"
+            // is just a signing label, not a real AWS partition, so set it directly as the
+            // authentication region rather than through RegionEndpoint (which expects a genuine
+            // AWS region code and is meant to also derive the default service URL from it).
             config.ServiceURL = endpoint;
             config.ForcePathStyle = true;
+            config.AuthenticationRegion = region;
+        }
+        else
+        {
+            config.RegionEndpoint = RegionEndpoint.GetBySystemName(region);
         }
 
         using var s3 = new AmazonS3Client(accessKey, secretKey, config);
+        await SyncS3BucketAsync(s3, source.Id, bucket, prefix, token);
+    }
+
+    // Cloudflare R2 is S3-compatible but has no AWS-style regions - "auto" is what Cloudflare's
+    // own docs use, set directly as the signing region (same pattern R2FileStorage uses for our
+    // own archival storage) rather than through RegionEndpoint. Kept as its own provider (instead
+    // of making users configure "s3" with a hand-built endpoint URL) so the only input needed is
+    // the account ID Cloudflare already shows on the R2 dashboard.
+    private async Task SyncR2Async(SourceDto source, CancellationToken token)
+    {
+        if (!source.Config.TryGetValue("accountId", out var accountId) || string.IsNullOrWhiteSpace(accountId))
+        {
+            _logger.LogWarning("R2 source {Source} missing accountId", source.DisplayName);
+            return;
+        }
+        if (!source.Config.TryGetValue("bucket", out var bucket) || string.IsNullOrWhiteSpace(bucket))
+        {
+            _logger.LogWarning("R2 source {Source} missing bucket", source.DisplayName);
+            return;
+        }
+
+        var accessKey = source.Config.TryGetValue("accessKey", out var ak) ? ak : null;
+        var secretKey = source.Config.TryGetValue("secretKey", out var sk) ? sk : null;
+        if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+        {
+            _logger.LogWarning("R2 source {Source} missing credentials", source.DisplayName);
+            return;
+        }
+
+        source.Config.TryGetValue("prefix", out var prefix);
+
+        var config = new AmazonS3Config
+        {
+            ServiceURL = $"https://{accountId}.r2.cloudflarestorage.com",
+            ForcePathStyle = true,
+            AuthenticationRegion = "auto",
+            Timeout = TimeSpan.FromMinutes(2),
+            MaxErrorRetry = 1
+        };
+
+        using var s3 = new AmazonS3Client(accessKey, secretKey, config);
+        await SyncS3BucketAsync(s3, source.Id, bucket, prefix, token);
+    }
+
+    private async Task SyncS3BucketAsync(IAmazonS3 s3, Guid sourceId, string bucket, string? prefix, CancellationToken token)
+    {
         var listReq = new ListObjectsV2Request
         {
             BucketName = bucket,
@@ -170,13 +235,13 @@ public sealed class CloudImportWorker : BackgroundService
             {
                 if (!IsSupportedExtension(obj.Key)) continue;
 
-                var keyId = $"{source.Id}:{obj.Key}";
+                var keyId = $"{sourceId}:{obj.Key}";
                 if (!_seenKeys.TryAdd(keyId, 0))
                 {
                     continue;
                 }
 
-                var destPath = GetDestinationPath(source.Id, Path.GetFileName(obj.Key));
+                var destPath = GetDestinationPath(sourceId, Path.GetFileName(obj.Key));
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
 
                 _logger.LogInformation("Downloading {Key} from {Bucket} to {Dest}", obj.Key, bucket, destPath);
@@ -190,11 +255,13 @@ public sealed class CloudImportWorker : BackgroundService
         } while (!string.IsNullOrEmpty(listReq.ContinuationToken) && !token.IsCancellationRequested);
     }
 
-    private async Task SyncWebDavAsync(SourceDto source, CancellationToken token)
+    // For a plain HTTP directory index (Apache/nginx autoindex, MinIO's static console, etc.) - a
+    // GET returns a browsable HTML page, and the files it links to are just plain <a href> tags.
+    private async Task SyncHttpDirectoryAsync(SourceDto source, CancellationToken token)
     {
         if (!source.Config.TryGetValue("baseUrl", out var baseUrl) || string.IsNullOrWhiteSpace(baseUrl))
         {
-            _logger.LogWarning("WebDAV source {Source} missing baseUrl", source.DisplayName);
+            _logger.LogWarning("HTTP directory source {Source} missing baseUrl", source.DisplayName);
             return;
         }
 
@@ -213,7 +280,7 @@ public sealed class CloudImportWorker : BackgroundService
         var listResp = await http.GetAsync(listUrl, token);
         if (!listResp.IsSuccessStatusCode)
         {
-            _logger.LogWarning("WebDAV listing failed for {Url} with {Status}", listUrl, listResp.StatusCode);
+            _logger.LogWarning("HTTP directory listing failed for {Url} with {Status}", listUrl, listResp.StatusCode);
             return;
         }
 
@@ -246,6 +313,106 @@ public sealed class CloudImportWorker : BackgroundService
         }
     }
 
+    // A real WebDAV server (Nextcloud, ownCloud, IIS WebDAV) doesn't serve a browsable HTML page
+    // on GET - directory listing is the PROPFIND method returning an XML multistatus response.
+    // Using the HTML-scraping approach above against one of these would silently list nothing (or
+    // 405) even with correct credentials.
+    private async Task SyncWebDavAsync(SourceDto source, CancellationToken token)
+    {
+        if (!source.Config.TryGetValue("baseUrl", out var baseUrl) || string.IsNullOrWhiteSpace(baseUrl))
+        {
+            _logger.LogWarning("WebDAV source {Source} missing baseUrl", source.DisplayName);
+            return;
+        }
+
+        var path = source.Config.TryGetValue("path", out var p) ? p : string.Empty;
+        var username = source.Config.TryGetValue("username", out var u) ? u : null;
+        var password = source.Config.TryGetValue("password", out var pw) ? pw : null;
+
+        var http = _httpFactory.CreateClient("cloud-sync");
+        if (!string.IsNullOrWhiteSpace(username) && password is not null)
+        {
+            var creds = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{username}:{password}"));
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", creds);
+        }
+
+        var listUrl = CombineUrl(baseUrl, path);
+        var propfindRequest = new HttpRequestMessage(new HttpMethod("PROPFIND"), listUrl)
+        {
+            Content = new StringContent(
+                "<?xml version=\"1.0\"?><D:propfind xmlns:D=\"DAV:\"><D:prop><D:resourcetype/><D:getcontentlength/></D:prop></D:propfind>",
+                System.Text.Encoding.UTF8,
+                "application/xml")
+        };
+        propfindRequest.Headers.Add("Depth", "1");
+
+        var listResp = await http.SendAsync(propfindRequest, token);
+        if (!listResp.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("WebDAV PROPFIND failed for {Url} with {Status}", listUrl, listResp.StatusCode);
+            return;
+        }
+
+        var body = await listResp.Content.ReadAsStringAsync(token);
+        foreach (var link in ExtractWebDavFileHrefs(listUrl, body))
+        {
+            if (!IsSupportedExtension(link)) continue;
+
+            var keyId = $"{source.Id}:{link}";
+            if (!_seenKeys.TryAdd(keyId, 0))
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(new Uri(link).LocalPath);
+            var destPath = GetDestinationPath(source.Id, fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+            _logger.LogInformation("Downloading {Url} to {Dest}", link, destPath);
+            using var fileResp = await http.GetAsync(link, token);
+            if (!fileResp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Download failed for {Url} with {Status}", link, fileResp.StatusCode);
+                continue;
+            }
+
+            await using var outStream = File.Create(destPath);
+            await fileResp.Content.CopyToAsync(outStream, token);
+        }
+    }
+
+    // Parses a WebDAV PROPFIND multistatus response, skipping collections (folders) and the
+    // folder's own <response> entry (Depth:1 includes it alongside its immediate children).
+    private static IEnumerable<string> ExtractWebDavFileHrefs(string baseUrl, string xml)
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (Exception)
+        {
+            yield break;
+        }
+
+        XNamespace davNs = "DAV:";
+        var baseUri = new Uri(baseUrl);
+        var normalizedBase = baseUrl.TrimEnd('/');
+
+        foreach (var response in doc.Descendants(davNs + "response"))
+        {
+            if (response.Descendants(davNs + "collection").Any()) continue;
+
+            var href = response.Element(davNs + "href")?.Value;
+            if (string.IsNullOrWhiteSpace(href)) continue;
+
+            var resolved = Uri.TryCreate(baseUri, href, out var abs) ? abs.ToString() : href;
+            if (resolved.TrimEnd('/') == normalizedBase) continue;
+
+            yield return resolved;
+        }
+    }
+
     private async Task SyncDropboxAsync(SourceDto source, CancellationToken token)
     {
         if (!source.Config.TryGetValue("accessToken", out var accessToken) || string.IsNullOrWhiteSpace(accessToken))
@@ -258,71 +425,99 @@ public sealed class CloudImportWorker : BackgroundService
         var http = _httpFactory.CreateClient("cloud-sync");
         http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-        // List folder
-        var listReqPayload = new
-        {
-            path = string.IsNullOrWhiteSpace(path) ? string.Empty : path,
-            recursive = false,
-            include_media_info = false,
-            include_deleted = false
-        };
-        var listReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/files/list_folder")
-        {
-            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(listReqPayload), System.Text.Encoding.UTF8, "application/json")
-        };
-        var listResp = await http.SendAsync(listReq, token);
+        string? cursor = null;
+        var isFirstPage = true;
 
-        if (!listResp.IsSuccessStatusCode)
+        // Dropbox paginates at 2000 entries/page via has_more+cursor - a tenant's whole compliance
+        // archive can easily exceed that, so this loops through list_folder/continue instead of
+        // only ever reading the first page.
+        while (true)
         {
-            var err = await listResp.Content.ReadAsStringAsync(token);
-            _logger.LogWarning("Dropbox list failed for {Source} with {Status}: {Err}", source.DisplayName, listResp.StatusCode, err);
-            await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", $"list failed {listResp.StatusCode}", token);
-            return;
-        }
-
-        var json = await listResp.Content.ReadAsStringAsync(token);
-        DropboxListResult? listDoc = null;
-        try
-        {
-            listDoc = System.Text.Json.JsonSerializer.Deserialize<DropboxListResult>(json);
-        }
-        catch (Exception)
-        {
-            _logger.LogWarning("Failed to parse Dropbox list response");
-        }
-
-        if (listDoc?.entries is null) return;
-
-        foreach (var entry in listDoc.entries.Where(e => e[".tag"] == "file"))
-        {
-            if (!entry.TryGetValue("path_lower", out var lower) || string.IsNullOrWhiteSpace(lower)) continue;
-            var filePath = lower!;
-            if (!IsSupportedExtension(filePath)) continue;
-
-            var keyId = $"{source.Id}:{filePath}";
-            if (!_seenKeys.TryAdd(keyId, 0))
+            HttpResponseMessage listResp;
+            if (isFirstPage)
             {
-                continue;
+                var listReqPayload = new
+                {
+                    path = string.IsNullOrWhiteSpace(path) ? string.Empty : path,
+                    recursive = false,
+                    include_media_info = false,
+                    include_deleted = false
+                };
+                var listReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/files/list_folder")
+                {
+                    Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(listReqPayload), System.Text.Encoding.UTF8, "application/json")
+                };
+                listResp = await http.SendAsync(listReq, token);
+            }
+            else
+            {
+                var continueReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/files/list_folder/continue")
+                {
+                    Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { cursor }), System.Text.Encoding.UTF8, "application/json")
+                };
+                listResp = await http.SendAsync(continueReq, token);
             }
 
-            var fileName = Path.GetFileName(filePath);
-            var destPath = GetDestinationPath(source.Id, fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-
-            _logger.LogInformation("Downloading Dropbox file {Path} to {Dest}", filePath, destPath);
-            var downloadReq = new HttpRequestMessage(HttpMethod.Post, "https://content.dropboxapi.com/2/files/download");
-            downloadReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-            downloadReq.Headers.Add("Dropbox-API-Arg", System.Text.Json.JsonSerializer.Serialize(new { path = filePath }));
-
-            using var dlResp = await http.SendAsync(downloadReq, token);
-            if (!dlResp.IsSuccessStatusCode)
+            if (!listResp.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Dropbox download failed for {File} with {Status}", filePath, dlResp.StatusCode);
-                continue;
+                var err = await listResp.Content.ReadAsStringAsync(token);
+                _logger.LogWarning("Dropbox list failed for {Source} with {Status}: {Err}", source.DisplayName, listResp.StatusCode, err);
+                await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", $"list failed {listResp.StatusCode}", token);
+                return;
             }
 
-            await using var outStream = File.Create(destPath);
-            await dlResp.Content.CopyToAsync(outStream, token);
+            var json = await listResp.Content.ReadAsStringAsync(token);
+            DropboxListResult? listDoc;
+            try
+            {
+                listDoc = System.Text.Json.JsonSerializer.Deserialize<DropboxListResult>(json);
+            }
+            catch (Exception ex)
+            {
+                // The response includes non-string fields (size, is_downloadable, etc.) alongside
+                // .tag/path_lower - deserializing straight into Dictionary<string,string> used to
+                // throw here on any folder with real files in it, since a JSON number/bool can't
+                // convert to string. DropboxEntry below only maps the two string fields we need.
+                _logger.LogWarning(ex, "Failed to parse Dropbox list response for {Source}", source.DisplayName);
+                return;
+            }
+
+            if (listDoc?.entries is null) return;
+
+            foreach (var entry in listDoc.entries.Where(e => e.Tag == "file" && !string.IsNullOrWhiteSpace(e.PathLower)))
+            {
+                var filePath = entry.PathLower!;
+                if (!IsSupportedExtension(filePath)) continue;
+
+                var keyId = $"{source.Id}:{filePath}";
+                if (!_seenKeys.TryAdd(keyId, 0))
+                {
+                    continue;
+                }
+
+                var fileName = Path.GetFileName(filePath);
+                var destPath = GetDestinationPath(source.Id, fileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+                _logger.LogInformation("Downloading Dropbox file {Path} to {Dest}", filePath, destPath);
+                var downloadReq = new HttpRequestMessage(HttpMethod.Post, "https://content.dropboxapi.com/2/files/download");
+                downloadReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                downloadReq.Headers.Add("Dropbox-API-Arg", System.Text.Json.JsonSerializer.Serialize(new { path = filePath }));
+
+                using var dlResp = await http.SendAsync(downloadReq, token);
+                if (!dlResp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Dropbox download failed for {File} with {Status}", filePath, dlResp.StatusCode);
+                    continue;
+                }
+
+                await using var outStream = File.Create(destPath);
+                await dlResp.Content.CopyToAsync(outStream, token);
+            }
+
+            if (listDoc.has_more != true || token.IsCancellationRequested) break;
+            cursor = listDoc.cursor;
+            isFirstPage = false;
         }
     }
 
@@ -415,11 +610,11 @@ public sealed class CloudImportWorker : BackgroundService
             return;
         }
 
-        var storage = StorageClient.Create(credential);
+        var storage = await StorageClient.CreateAsync(credential);
         var prefix = source.Config.TryGetValue("prefix", out var pref) ? pref : null;
 
-        var objects = storage.ListObjects(bucket, prefix);
-        foreach (var obj in objects)
+        var objects = storage.ListObjectsAsync(bucket, prefix);
+        await foreach (var obj in objects.WithCancellation(token))
         {
             if (obj.Size == null || obj.Size == 0) continue;
             if (!IsSupportedExtension(obj.Name)) continue;
@@ -473,8 +668,22 @@ public sealed class CloudImportWorker : BackgroundService
         }
     }
 
+    // Only maps the two string fields actually used - the real Dropbox response also carries
+    // numeric/boolean fields (size, is_downloadable, etc.) that a loose Dictionary<string,string>
+    // can't deserialize into without throwing.
+    private sealed class DropboxEntry
+    {
+        [JsonPropertyName(".tag")]
+        public string? Tag { get; set; }
+
+        [JsonPropertyName("path_lower")]
+        public string? PathLower { get; set; }
+    }
+
     private sealed class DropboxListResult
     {
-        public List<Dictionary<string, string>> entries { get; set; } = new();
+        public List<DropboxEntry> entries { get; set; } = new();
+        public bool has_more { get; set; }
+        public string? cursor { get; set; }
     }
 }

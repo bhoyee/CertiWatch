@@ -283,7 +283,7 @@ public sealed class OcrWorker : BackgroundService
                     _logger.LogInformation("Publishing document {File} with fields: {Fields}", page.PageLabel, string.Join(", ", page.SanitizedFields.Select(kv => $"{kv.Key}={kv.Value}")));
                     var payload = new DocumentDetectedEvent(
                         ExtractTenantIdFromPath(file) ?? _options.TenantId,
-                        _options.SourceId,
+                        ResolveSourceId(file),
                         _options.DeviceToken,
                         null, // createdByUserId unknown for filesystem watcher
                         page.DisplayFileName,
@@ -918,6 +918,26 @@ public sealed class OcrWorker : BackgroundService
       && Guid.TryParse(parts[1], out var tenantId)
       ? tenantId
       : null;
+  }
+
+  // CloudImportWorker downloads each source's files under {CloudImportDownloadPath}/{sourceId}/... -
+  // recovering that source ID here is what lets a document ingested from, say, a Dropbox or R2
+  // source correctly attribute back to that Source row instead of every cloud-imported file
+  // (and every local upload) all sharing the same generic default SourceId.
+  private Guid ResolveSourceId(string path)
+  {
+    var cloudRoot = _options.CloudImportDownloadPath.Replace('\\', '/').TrimEnd('/');
+    var normalizedPath = path.Replace('\\', '/');
+    if (normalizedPath.StartsWith(cloudRoot + "/", StringComparison.OrdinalIgnoreCase))
+    {
+      var relative = normalizedPath[(cloudRoot.Length + 1)..];
+      var firstSegment = relative.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+      if (firstSegment is not null && Guid.TryParse(firstSegment, out var sourceId))
+      {
+        return sourceId;
+      }
+    }
+    return _options.SourceId;
   }
 
   private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
