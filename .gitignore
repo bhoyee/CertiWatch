@@ -8,6 +8,7 @@ obj/
 # node
 node_modules/
 .next/
+*.tsbuildinfo
 !.github/
 
 # python
