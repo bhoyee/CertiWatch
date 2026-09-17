@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchJson, postJson } from "../../lib/api";
 import { NotificationBell } from "./NotificationBell";
@@ -54,30 +54,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     planError?.toLowerCase().includes("payment") ||
     planError?.toLowerCase().includes("plan");
 
+  // Silent (no spinner) plan refresh - used both by the mount-time load below and by
+  // refreshPlan() in RoleContext, which any page can call right after an action that changes a
+  // count the banner shows (deleting records, etc.) instead of leaving it stale until the next
+  // navigation or a manual reload.
+  const loadPlan = useCallback(async () => {
+    try {
+      const res = await fetchJson<TenantPlanDto>("/api/tenant/me");
+      setPlan(res);
+      setPlanError(null);
+    } catch (err) {
+      setPlanError((err as any).message ?? "Failed to load plan");
+    }
+  }, []);
+
   useEffect(() => {
     if (roleLoading) return;
-    let active = true;
     if (isSuper) {
       setPlanLoading(false);
       setPlan(null);
       setPlanError(null);
       return;
     }
-    const load = async () => {
-      try {
-        const res = await fetchJson<TenantPlanDto>("/api/tenant/me");
-        if (active) setPlan(res);
-      } catch (err) {
-        if (active) setPlanError((err as any).message ?? "Failed to load plan");
-      } finally {
-        if (active) setPlanLoading(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [isSuper, roleLoading]);
+    setPlanLoading(true);
+    loadPlan().finally(() => setPlanLoading(false));
+  }, [isSuper, roleLoading, loadPlan]);
 
   useEffect(() => {
     let active = true;
@@ -172,7 +173,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <RoleProvider role={role}>
+    <RoleProvider role={role} refreshPlan={loadPlan}>
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <div className="flex min-h-screen">
           <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">

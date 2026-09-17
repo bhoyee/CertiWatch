@@ -57,7 +57,7 @@ export default function RecordsPage() {
 }
 
 function RecordsPageInner() {
-  const { role } = useRole();
+  const { role, refreshPlan } = useRole();
   const searchParams = useSearchParams();
   const isViewer = role?.toLowerCase() === "viewer";
   const roleReady = role !== null;
@@ -252,6 +252,7 @@ function RecordsPageInner() {
         return next;
       });
       await load();
+      refreshPlan();
     } catch (err: any) {
       setError(err.message ?? "Failed to delete record");
     } finally {
@@ -303,6 +304,7 @@ function RecordsPageInner() {
         setError(`${failed.length} of ${ids.length} records could not be deleted.`);
       }
       await load();
+      refreshPlan();
     } catch (err: any) {
       setError(err.message ?? "Failed to delete selected records");
     } finally {
