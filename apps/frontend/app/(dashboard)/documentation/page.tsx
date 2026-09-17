@@ -50,6 +50,25 @@ const sections: Section[] = [
     )
   },
   {
+    id: "what-can-be-read",
+    title: "What CertiWatch can actually read",
+    content: (
+      <>
+        <p>CertiWatch accepts <strong>PDF, PNG, JPG, and TIFF</strong> files. Within those, results are only as good as the scan:</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>A clear, well-lit scan or photo reads reliably almost every time.</li>
+          <li>Blurry photos, heavy glare, or a page photographed at an angle can still often be read, but are more likely to come back incomplete.</li>
+          <li>Upside-down or sideways pages, handwriting instead of print, and very low-resolution scans are the most common causes of a poor read.</li>
+        </ul>
+        <p className="mt-3">
+          Importantly, a document CertiWatch isn't confident about is never silently guessed at or dropped - it's
+          sent to <strong>Review</strong> with whatever it did manage to read already filled in, so a person only
+          has to fix or confirm the parts it couldn't be sure of, not start from scratch.
+        </p>
+      </>
+    )
+  },
+  {
     id: "review",
     title: "Review queue",
     content: (

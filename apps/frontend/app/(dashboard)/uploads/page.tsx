@@ -247,6 +247,10 @@ export default function UploadsPage() {
               </span>
               <span className="text-slate-700">PDF or images, multiple at once</span>
               <span className="text-xs text-slate-500">Files are queued immediately; review will handle unknown/duplicates.</span>
+              <span className="text-xs text-slate-500">
+                Best results: clear, well-lit, right-side-up scans or photos. Blurry or angled pages often still
+                work, just may need a quick check in Review afterward.
+              </span>
             </label>
           </div>
 
