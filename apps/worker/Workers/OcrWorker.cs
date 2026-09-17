@@ -307,15 +307,16 @@ public sealed class OcrWorker : BackgroundService
                     await PublishWithRetryAsync(payload, token);
                 }
 
-                // The raw file was only ever a one-time drop into this watched folder - its
-                // content is already durably archived by the API (under its own storage key,
-                // unrelated to this path) as part of publishing each page above. Leaving it here
-                // meant every worker restart rescanned it and re-published every page all over
-                // again; for a page whose record had since been deleted, the hash-check then finds
-                // nothing on record and silently recreates it - a "deleted" record reappearing for
-                // no visible reason, purely because this leftover file was still sitting in the
-                // inbox. Removing it now is what makes deletion actually stick across restarts.
-                TryDeleteProcessedFile(file);
+                // Deliberately NOT deleting the file here, right after publishing - publishing
+                // only enqueues the event on the API side (202 Accepted), it doesn't wait for the
+                // API's background ingestion queue to actually dequeue it, read this file, and
+                // archive it into IFileStorage. Deleting immediately raced that queue: the file
+                // could vanish before archival ever read it, leaving a Document permanently
+                // pointing at a path that no longer exists anywhere (which for a cloud-imported
+                // file - not backed by a stable host path the API can retry against - surfaced as
+                // an unhandled Amazon.Runtime.Internal.HttpErrorResponseException on preview).
+                // Cleanup instead happens a scan cycle later, in the "already ingested" skip branch
+                // below, by which point archival has always long since finished.
       }
     }
   }
