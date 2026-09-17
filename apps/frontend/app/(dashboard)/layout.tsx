@@ -674,6 +674,13 @@ function renderIcon(name: string) {
           <path d="M6 20a6 6 0 0 1 12 0" />
         </svg>
       );
+    case "book":
+      return (
+        <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5Z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     default:
       return (
         <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">

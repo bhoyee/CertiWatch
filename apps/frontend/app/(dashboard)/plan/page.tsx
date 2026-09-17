@@ -57,6 +57,8 @@ export default function PlanPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [portalLoading, setPortalLoading] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
+  const [invoicePage, setInvoicePage] = useState(1);
+  const invoicePageSize = 10;
 
   useEffect(() => {
     fetchJson<TenantPlanDto>("/api/tenant/me")
@@ -89,6 +91,11 @@ export default function PlanPage() {
     if (!plan.recordLimit || plan.recordLimit <= 0) return { recordPct: 0 };
     return { recordPct: Math.min(100, Math.round((plan.recordCount / plan.recordLimit) * 100)) };
   }, [plan]);
+
+  const invoiceTotalPages = Math.max(1, Math.ceil(invoices.length / invoicePageSize));
+  const invoiceCurrentPage = Math.min(invoicePage, invoiceTotalPages);
+  const invoiceStart = (invoiceCurrentPage - 1) * invoicePageSize;
+  const visibleInvoices = invoices.slice(invoiceStart, invoiceStart + invoicePageSize);
 
   const tier = useMemo(() => {
     const name = plan?.planName.toLowerCase() ?? "";
@@ -264,7 +271,7 @@ export default function PlanPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {invoices.map((inv) => (
+                  {visibleInvoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-slate-50">
                       <Td>{inv.id}</Td>
                       <Td>{formatDate(inv.date)}</Td>
@@ -287,6 +294,33 @@ export default function PlanPage() {
               </table>
               {invoices.length === 0 && <div className="px-3 py-4 text-sm text-slate-500">No invoices yet.</div>}
             </div>
+            {invoices.length > 0 && (
+              <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+                <span>
+                  Showing {invoiceStart + 1}–{Math.min(invoices.length, invoiceStart + invoicePageSize)} of{" "}
+                  {invoices.length} invoices
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                    disabled={invoiceCurrentPage <= 1}
+                    onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-slate-700">
+                    Page {invoiceCurrentPage} / {invoiceTotalPages}
+                  </span>
+                  <button
+                    className="rounded-md border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 disabled:opacity-50"
+                    disabled={invoiceCurrentPage >= invoiceTotalPages}
+                    onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -17,6 +17,7 @@ export const navItems = [
   { href: "/compliance", label: "Compliance", icon: "table", viewerHidden: true },
   { href: "/staff", label: "Staff", icon: "users", viewerHidden: true },
   { href: "/support", label: "Support", icon: "life-buoy" },
+  { href: "/documentation", label: "Documentation", icon: "book" },
 
   { href: "/requirements", label: "Requirements", icon: "shield", viewerHidden: true, managerHidden: true },
   { href: "/devices", label: "Devices", icon: "cpu", viewerHidden: true, managerHidden: true },
