@@ -134,6 +134,9 @@ services:
       DOTNET_ENVIRONMENT: Development
       WORKER__EnableWatcher: "true"
       WORKER__EnableSampleDocuments: "false"
+      # Default is 5 - shortened for local dev so a Sources connect/reconnect doesn't leave the
+      # status looking "stuck" on queued for up to 5 silent minutes before the first real check.
+      WORKER__CloudImportPollMinutes: ${WORKER__CloudImportPollMinutes:-1}
     volumes:
       # Was :ro (read-only) - the worker only ever needed to read here to OCR a file, until
       # cleanup-after-processing was added so a deleted record can't silently reappear on the next
