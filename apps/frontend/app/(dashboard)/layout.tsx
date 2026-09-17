@@ -431,6 +431,8 @@ function NavLinks({
             href={item.href}
             onClick={onClick}
             className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              item.divider ? "mt-4 border-t border-slate-200 pt-4" : ""
+            } ${
               disabled
                 ? "cursor-not-allowed text-slate-400"
                 : active
