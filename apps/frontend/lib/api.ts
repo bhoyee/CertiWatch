@@ -26,7 +26,15 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
     throw new Error(await parseError(response));
   }
 
-  return (await response.json()) as TResponse;
+  // Some endpoints (e.g. sync-now) legitimately return 202/204 with no body - parsing that as
+  // JSON throws "Unexpected end of JSON input", which looked like an unrelated load failure
+  // wherever the caller reused a shared error-display state for both.
+  const text = await response.text();
+  if (!text) {
+    return undefined as TResponse;
+  }
+
+  return JSON.parse(text) as TResponse;
 }
 
 export async function patchJson<TResponse, TBody extends Record<string, unknown>>(
