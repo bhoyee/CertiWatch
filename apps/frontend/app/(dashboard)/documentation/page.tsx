@@ -61,6 +61,18 @@ const sections: Section[] = [
           <li>Blurry photos, heavy glare, or a page photographed at an angle can still often be read, but are more likely to come back incomplete.</li>
           <li>Upside-down or sideways pages, handwriting instead of print, and very low-resolution scans are the most common causes of a poor read.</li>
         </ul>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <figure className="rounded-lg border border-slate-200 p-3">
+            <img src="/docs/scan-quality-good.png" alt="A clear, well-lit, right-side-up certificate scan" className="w-full rounded-md border border-slate-100" />
+            <figcaption className="mt-2 text-center text-xs font-semibold text-emerald-700">Good - clear, well-lit, right-side up</figcaption>
+          </figure>
+          <figure className="rounded-lg border border-slate-200 p-3">
+            <img src="/docs/scan-quality-bad.png" alt="A blurry, angled, poorly-lit photo of the same certificate" className="w-full rounded-md border border-slate-100" />
+            <figcaption className="mt-2 text-center text-xs font-semibold text-amber-700">Still often works - blurry, angled, dim lighting</figcaption>
+          </figure>
+        </div>
+
         <p className="mt-3">
           Importantly, a document CertiWatch isn't confident about is never silently guessed at or dropped - it's
           sent to <strong>Review</strong> with whatever it did manage to read already filled in, so a person only
