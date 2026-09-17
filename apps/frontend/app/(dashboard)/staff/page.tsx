@@ -10,15 +10,15 @@ type ColumnKey = (typeof COLUMN_KEYS)[number];
 // exceeds its container and never needs a horizontal scrollbar just from resizing.
 const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
   name: 24,
-  jobTitle: 19,
+  jobTitle: 23,
   startDate: 13,
   status: 11,
   approved: 11,
   expired: 10,
-  actions: 12
+  actions: 8
 };
 const MIN_COL_PCT = 8;
-const COL_WIDTHS_STORAGE_KEY = "cw_staff_col_widths_v1";
+const COL_WIDTHS_STORAGE_KEY = "cw_staff_col_widths_v2";
 
 type StaffMemberDto = {
   id: string;
@@ -1020,6 +1020,9 @@ function CountPill({ count, tone }: { count: number; tone: "approved" | "expired
   return <span className={`inline-flex min-w-[1.75rem] justify-center rounded-full px-2 py-1 text-xs font-semibold ${toneClasses}`}>{count}</span>;
 }
 
+// A single kebab (vertical-dots) trigger that reveals Edit/Deactivate/Delete in a dropdown,
+// instead of three always-visible buttons - keeps the row compact and lets the Actions column
+// stay narrow no matter how many actions a row ends up needing.
 function RowActions({
   staff,
   onEdit,
@@ -1031,26 +1034,66 @@ function RowActions({
   onToggleActive: () => void;
   onDelete: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  const runAndClose = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div ref={containerRef} className="relative inline-block text-left">
       <button
-        onClick={onEdit}
-        className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Actions"
+        aria-haspopup="true"
+        aria-expanded={open}
+        className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
       >
-        Edit
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <circle cx="8" cy="2.5" r="1.4" />
+          <circle cx="8" cy="8" r="1.4" />
+          <circle cx="8" cy="13.5" r="1.4" />
+        </svg>
       </button>
-      <button
-        onClick={onToggleActive}
-        className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
-      >
-        {staff.isActive ? "Deactivate" : "Reactivate"}
-      </button>
-      <button
-        onClick={onDelete}
-        className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-      >
-        Delete
-      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={runAndClose(onEdit)}
+            className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={runAndClose(onToggleActive)}
+            className="block w-full px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
+          >
+            {staff.isActive ? "Deactivate" : "Reactivate"}
+          </button>
+          <button
+            type="button"
+            onClick={runAndClose(onDelete)}
+            className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }
