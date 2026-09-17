@@ -39,6 +39,7 @@ function SourcesPageInner() {
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [folderDrafts, setFolderDrafts] = useState<Record<string, string>>({});
   const [savingFolder, setSavingFolder] = useState<Record<string, boolean>>({});
+  const [confirmDisconnect, setConfirmDisconnect] = useState<SourceDto | null>(null);
 
   const load = () => {
     fetchJson<SourceDto[]>("/api/sources")
@@ -78,14 +79,14 @@ function SourcesPageInner() {
     }
   };
 
-  const disconnect = async (id: string) => {
-    if (!window.confirm("Disconnect this source? Files already imported stay put, but nothing new will be pulled in.")) {
-      return;
-    }
+  const confirmDisconnectNow = async () => {
+    if (!confirmDisconnect) return;
+    const id = confirmDisconnect.id;
     setDeleting((s) => ({ ...s, [id]: true }));
     try {
       await deleteJson(`/api/sources/${id}`);
       await load();
+      setConfirmDisconnect(null);
     } catch (err: any) {
       setError(err?.message ?? "Failed to disconnect source");
     } finally {
@@ -215,7 +216,7 @@ function SourcesPageInner() {
                             {syncing[s.id] ? "Syncing..." : "Sync now"}
                           </button>
                           <button
-                            onClick={() => disconnect(s.id)}
+                            onClick={() => setConfirmDisconnect(s)}
                             disabled={deleting[s.id]}
                             className="rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                           >
@@ -245,6 +246,39 @@ function SourcesPageInner() {
           </p>
         </div>
       </div>
+
+      {confirmDisconnect && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setConfirmDisconnect(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-slate-900">Disconnect {confirmDisconnect.displayName}?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Files already imported stay put, but nothing new will be pulled in from this folder until you connect
+              it again.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDisconnect(null)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDisconnectNow}
+                disabled={deleting[confirmDisconnect.id]}
+                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {deleting[confirmDisconnect.id] ? "Disconnecting..." : "Disconnect"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
