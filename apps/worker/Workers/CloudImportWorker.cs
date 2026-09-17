@@ -79,20 +79,27 @@ public sealed class CloudImportWorker : BackgroundService
 
             try
             {
+                SyncResult result;
                 switch (provider)
                 {
                     case "gdrive":
-                        await SyncGoogleDriveAsync(source, token);
-                        await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
+                        result = await SyncGoogleDriveAsync(source, token);
                         break;
                     case "onedrive":
-                        await SyncOneDriveAsync(source, token);
-                        await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "ok", null, token);
+                        result = await SyncOneDriveAsync(source, token);
                         break;
                     default:
                         _logger.LogWarning("Provider {Provider} not supported for source {Source}", provider, source.DisplayName);
-                        await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "unsupported", $"Provider {provider} not supported", token);
+                        result = SyncResult.Error($"Provider {provider} not supported");
                         break;
+                }
+
+                // Skipped (not configured yet - no folder chosen, no refresh token) deliberately
+                // leaves the status alone rather than reporting "ok" or "error" - a source that's
+                // simply mid-setup shouldn't flash a false success or an alarming failure.
+                if (result.Status is not null)
+                {
+                    await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, result.Status, result.Message, token);
                 }
             }
             catch (Exception ex)
@@ -103,24 +110,36 @@ public sealed class CloudImportWorker : BackgroundService
         }
     }
 
-    private async Task SyncGoogleDriveAsync(SourceDto source, CancellationToken token)
+    // Sync*Async methods return one of these instead of reporting their own status directly - the
+    // earlier version had each method call ReportSourceSyncAsync("error", ...) on a soft failure
+    // and then return normally, only for the caller here to immediately overwrite that with "ok"
+    // right after since no exception had been thrown - a failed sync was silently shown as
+    // succeeding on the Sources page.
+    private readonly record struct SyncResult(string? Status, string? Message)
+    {
+        public static SyncResult Ok() => new("ok", null);
+        public static SyncResult Error(string message) => new("error", message);
+        public static SyncResult Skipped() => new(null, null);
+    }
+
+    private async Task<SyncResult> SyncGoogleDriveAsync(SourceDto source, CancellationToken token)
     {
         if (!source.Config.TryGetValue("refreshToken", out var refreshToken) || string.IsNullOrWhiteSpace(refreshToken))
         {
             _logger.LogWarning("Google Drive source {Source} has no refresh token - reconnect required", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         if (!source.Config.TryGetValue("folderId", out var folderId) || string.IsNullOrWhiteSpace(folderId))
         {
             _logger.LogInformation("Google Drive source {Source} has no folder selected yet; skipping", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         if (string.IsNullOrWhiteSpace(_options.GoogleOAuthClientId) || string.IsNullOrWhiteSpace(_options.GoogleOAuthClientSecret))
         {
             _logger.LogWarning("Google OAuth client not configured on the worker; cannot sync {Source}", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         var http = _httpFactory.CreateClient("cloud-sync");
@@ -137,15 +156,14 @@ public sealed class CloudImportWorker : BackgroundService
         {
             var body = await tokenResp.Content.ReadAsStringAsync(token);
             _logger.LogWarning("Google token refresh failed for {Source}: {Status} {Body}", source.DisplayName, tokenResp.StatusCode, body);
-            await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", "Google authorization expired - please reconnect this source", token);
-            return;
+            return SyncResult.Error("Google authorization expired - please reconnect this source");
         }
 
         var tokenDoc = await tokenResp.Content.ReadFromJsonAsync<GoogleTokenResponse>(cancellationToken: token);
         if (string.IsNullOrWhiteSpace(tokenDoc?.access_token))
         {
             _logger.LogWarning("Google token refresh returned no access token for {Source}", source.DisplayName);
-            return;
+            return SyncResult.Error("Google didn't return an access token");
         }
 
         http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenDoc.access_token);
@@ -162,12 +180,14 @@ public sealed class CloudImportWorker : BackgroundService
             {
                 var body = await listResp.Content.ReadAsStringAsync(token);
                 _logger.LogWarning("Google Drive list failed for {Source}: {Status} {Body}", source.DisplayName, listResp.StatusCode, body);
-                await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", $"list failed {listResp.StatusCode}", token);
-                return;
+                return SyncResult.Error(
+                    listResp.StatusCode == System.Net.HttpStatusCode.NotFound
+                        ? "Folder not found - check the folder ID is correct and this account has access to it"
+                        : $"list failed {listResp.StatusCode}");
             }
 
             var listDoc = await listResp.Content.ReadFromJsonAsync<GoogleDriveListResponse>(cancellationToken: token);
-            if (listDoc?.files is null) return;
+            if (listDoc?.files is null) return SyncResult.Ok();
 
             foreach (var file in listDoc.files)
             {
@@ -198,26 +218,28 @@ public sealed class CloudImportWorker : BackgroundService
 
             pageToken = listDoc.nextPageToken;
         } while (!string.IsNullOrEmpty(pageToken) && !token.IsCancellationRequested);
+
+        return SyncResult.Ok();
     }
 
-    private async Task SyncOneDriveAsync(SourceDto source, CancellationToken token)
+    private async Task<SyncResult> SyncOneDriveAsync(SourceDto source, CancellationToken token)
     {
         if (!source.Config.TryGetValue("refreshToken", out var refreshToken) || string.IsNullOrWhiteSpace(refreshToken))
         {
             _logger.LogWarning("OneDrive source {Source} has no refresh token - reconnect required", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         if (!source.Config.TryGetValue("folderId", out var folderId) || string.IsNullOrWhiteSpace(folderId))
         {
             _logger.LogInformation("OneDrive source {Source} has no folder selected yet; skipping", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         if (string.IsNullOrWhiteSpace(_options.MicrosoftOAuthClientId) || string.IsNullOrWhiteSpace(_options.MicrosoftOAuthClientSecret))
         {
             _logger.LogWarning("Microsoft OAuth client not configured on the worker; cannot sync {Source}", source.DisplayName);
-            return;
+            return SyncResult.Skipped();
         }
 
         var http = _httpFactory.CreateClient("cloud-sync");
@@ -235,15 +257,14 @@ public sealed class CloudImportWorker : BackgroundService
         {
             var body = await tokenResp.Content.ReadAsStringAsync(token);
             _logger.LogWarning("Microsoft token refresh failed for {Source}: {Status} {Body}", source.DisplayName, tokenResp.StatusCode, body);
-            await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", "Microsoft authorization expired - please reconnect this source", token);
-            return;
+            return SyncResult.Error("Microsoft authorization expired - please reconnect this source");
         }
 
         var tokenDoc = await tokenResp.Content.ReadFromJsonAsync<MicrosoftTokenResponse>(cancellationToken: token);
         if (string.IsNullOrWhiteSpace(tokenDoc?.access_token))
         {
             _logger.LogWarning("Microsoft token refresh returned no access token for {Source}", source.DisplayName);
-            return;
+            return SyncResult.Error("Microsoft didn't return an access token");
         }
 
         // Microsoft rotates the refresh token on every use - the one we just used may already be
@@ -263,12 +284,14 @@ public sealed class CloudImportWorker : BackgroundService
             {
                 var body = await listResp.Content.ReadAsStringAsync(token);
                 _logger.LogWarning("OneDrive list failed for {Source}: {Status} {Body}", source.DisplayName, listResp.StatusCode, body);
-                await _apiClient.ReportSourceSyncAsync(_options.DeviceId, _options.DeviceToken, source.Id, "error", $"list failed {listResp.StatusCode}", token);
-                return;
+                return SyncResult.Error(
+                    listResp.StatusCode == System.Net.HttpStatusCode.NotFound
+                        ? "Folder not found - check the folder ID is correct and this account has access to it"
+                        : $"list failed {listResp.StatusCode}");
             }
 
             var listDoc = await listResp.Content.ReadFromJsonAsync<GraphListResponse>(cancellationToken: token);
-            if (listDoc?.value is null) break;
+            if (listDoc?.value is null) return SyncResult.Ok();
 
             foreach (var item in listDoc.value)
             {
@@ -298,6 +321,8 @@ public sealed class CloudImportWorker : BackgroundService
 
             url = listDoc.nextLink ?? string.Empty;
         }
+
+        return SyncResult.Ok();
     }
 
     private string GetDestinationPath(Guid sourceId, string fileName)
