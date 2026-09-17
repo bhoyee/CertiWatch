@@ -2,6 +2,7 @@ using CertiWatch.Api.Domain.Entities;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Contracts.Dtos;
+using CertiWatch.Contracts.Enums;
 using CertiWatch.Contracts.Requests;
 using CertiWatch.Contracts.Responses;
 using FluentValidation;
@@ -36,7 +37,27 @@ public static class StaffEndpoints
             .Where(s => s.TenantId == tenantId)
             .OrderBy(s => s.Name)
             .ToListAsync(token);
-        return Results.Ok(staff.Select(ToDto));
+
+        // Same evidence pool and name-matching rule ComplianceEndpoints already uses - only
+        // accepted records count, matched to a staff member by exact case-insensitive name
+        // equality (there's no persisted staff<->record foreign key).
+        var records = await db.Records.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.ProcessingStatus == ProcessingStatus.Ok)
+            .Select(r => new { r.StaffName, r.ExpiryDate })
+            .ToListAsync(token);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var recordsByStaffName = records
+            .GroupBy(r => r.StaffName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        return Results.Ok(staff.Select(s =>
+        {
+            recordsByStaffName.TryGetValue(s.Name.Trim(), out var matches);
+            var approved = matches?.Count ?? 0;
+            var expired = matches?.Count(r => r.ExpiryDate is not null && r.ExpiryDate < today) ?? 0;
+            return ToDto(s, approved, expired);
+        }));
     }
 
     private static async Task<IResult> CreateAsync(
@@ -179,6 +200,6 @@ public static class StaffEndpoints
         return Results.NoContent();
     }
 
-    private static StaffMemberDto ToDto(StaffMember staff)
-        => new(staff.Id, staff.Name, staff.JobTitle, staff.StartDate, staff.IsActive, staff.CreatedAt);
+    private static StaffMemberDto ToDto(StaffMember staff, int approvedCount = 0, int expiredCount = 0)
+        => new(staff.Id, staff.Name, staff.JobTitle, staff.StartDate, staff.IsActive, staff.CreatedAt, approvedCount, expiredCount);
 }

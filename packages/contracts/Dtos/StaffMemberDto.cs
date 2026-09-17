@@ -6,5 +6,7 @@ public sealed record StaffMemberDto(
     string? JobTitle,
     DateOnly? StartDate,
     bool IsActive,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    int ApprovedCount,
+    int ExpiredCount
 );

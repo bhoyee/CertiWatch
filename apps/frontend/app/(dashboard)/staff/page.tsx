@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson, postJson } from "../../../lib/api";
 
-const COLUMN_KEYS = ["name", "jobTitle", "startDate", "status", "actions"] as const;
+const COLUMN_KEYS = ["name", "jobTitle", "startDate", "status", "approved", "expired", "actions"] as const;
 type ColumnKey = (typeof COLUMN_KEYS)[number];
 // Widths are percentages of the table (not px) that always sum to 100 - resizing a column
 // borrows/gives space to its neighbor rather than growing the table itself, so the table never
 // exceeds its container and never needs a horizontal scrollbar just from resizing.
 const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
-  name: 30,
-  jobTitle: 25,
-  startDate: 17,
-  status: 13,
-  actions: 15
+  name: 24,
+  jobTitle: 19,
+  startDate: 13,
+  status: 11,
+  approved: 11,
+  expired: 10,
+  actions: 12
 };
 const MIN_COL_PCT = 8;
 const COL_WIDTHS_STORAGE_KEY = "cw_staff_col_widths_v1";
@@ -25,6 +27,8 @@ type StaffMemberDto = {
   startDate: string | null;
   isActive: boolean;
   createdAt: string;
+  approvedCount: number;
+  expiredCount: number;
 };
 
 type StaffForm = {
@@ -114,7 +118,7 @@ export default function StaffPage() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
-  const [sort, setSort] = useState<{ key: "name" | "jobTitle" | "startDate" | "status"; dir: "asc" | "desc" }>({
+  const [sort, setSort] = useState<{ key: "name" | "jobTitle" | "startDate" | "status" | "approved" | "expired"; dir: "asc" | "desc" }>({
     key: "name",
     dir: "asc"
   });
@@ -229,6 +233,10 @@ export default function StaffPage() {
           return ((a.startDate ?? "") > (b.startDate ?? "") ? 1 : (a.startDate ?? "") < (b.startDate ?? "") ? -1 : 0) * dir;
         case "status":
           return (a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1) * dir;
+        case "approved":
+          return (a.approvedCount - b.approvedCount) * dir;
+        case "expired":
+          return (a.expiredCount - b.expiredCount) * dir;
         default:
           return 0;
       }
@@ -583,6 +591,8 @@ export default function StaffPage() {
               <col style={{ width: `${colWidths.jobTitle}%` }} />
               <col style={{ width: `${colWidths.startDate}%` }} />
               <col style={{ width: `${colWidths.status}%` }} />
+              <col style={{ width: `${colWidths.approved}%` }} />
+              <col style={{ width: `${colWidths.expired}%` }} />
               <col style={{ width: `${colWidths.actions}%` }} />
             </colgroup>
             <thead className="bg-slate-100">
@@ -627,6 +637,22 @@ export default function StaffPage() {
                 >
                   Status
                 </Header>
+                <Header
+                  onClick={() => setSortKey("approved")}
+                  sorted={sort.key === "approved"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("approved")}
+                >
+                  Approved
+                </Header>
+                <Header
+                  onClick={() => setSortKey("expired")}
+                  sorted={sort.key === "expired"}
+                  dir={sort.dir}
+                  onResizeStart={startResize("expired")}
+                >
+                  Expired
+                </Header>
                 <Header onResizeStart={startResize("actions")}>Actions</Header>
               </tr>
             </thead>
@@ -646,6 +672,12 @@ export default function StaffPage() {
                   <Cell muted={!s.isActive}>{formatDate(s.startDate)}</Cell>
                   <Cell>
                     <StatusPill isActive={s.isActive} />
+                  </Cell>
+                  <Cell>
+                    <CountPill count={s.approvedCount} tone="approved" />
+                  </Cell>
+                  <Cell>
+                    <CountPill count={s.expiredCount} tone="expired" />
                   </Cell>
                   <Cell>
                     <RowActions
@@ -669,7 +701,7 @@ export default function StaffPage() {
               ))}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-3 py-4 text-center text-sm text-slate-500">
                     {staff.length === 0 ? "No staff added yet — add your first one below." : "No staff match your filters."}
                   </td>
                 </tr>
@@ -702,6 +734,10 @@ export default function StaffPage() {
                 <StatusPill isActive={s.isActive} />
               </div>
               <p className="mt-2 text-xs text-slate-500">Started {formatDate(s.startDate)}</p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <CountPill count={s.approvedCount} tone="approved" />
+                <CountPill count={s.expiredCount} tone="expired" />
+              </div>
               <div className="mt-3">
                 <RowActions
                   staff={s}
@@ -969,6 +1005,19 @@ function StatusPill({ isActive }: { isActive: boolean }) {
       {isActive ? "Active" : "Inactive"}
     </span>
   );
+}
+
+function CountPill({ count, tone }: { count: number; tone: "approved" | "expired" }) {
+  const zero = count === 0;
+  const toneClasses =
+    tone === "approved"
+      ? zero
+        ? "bg-slate-100 text-slate-400"
+        : "bg-emerald-100 text-emerald-700"
+      : zero
+        ? "bg-slate-100 text-slate-400"
+        : "bg-rose-100 text-rose-700";
+  return <span className={`inline-flex min-w-[1.75rem] justify-center rounded-full px-2 py-1 text-xs font-semibold ${toneClasses}`}>{count}</span>;
 }
 
 function RowActions({
