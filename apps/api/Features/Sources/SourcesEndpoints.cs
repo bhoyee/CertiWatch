@@ -67,9 +67,16 @@ public static class SourcesEndpoints
         {
             var cfg = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.ConfigJson) ?? new Dictionary<string, string>();
             cfg["folderId"] = request.FolderId;
+            // Always resolve the label alongside the ID rather than only ever setting one: fixing
+            // a mistyped folder ID without this would leave the previous (now-wrong) label
+            // displayed in place of the corrected raw ID.
             if (!string.IsNullOrWhiteSpace(request.FolderLabel))
             {
                 cfg["folderLabel"] = request.FolderLabel;
+            }
+            else
+            {
+                cfg.Remove("folderLabel");
             }
             entity.ConfigJson = JsonSerializer.Serialize(cfg);
         }

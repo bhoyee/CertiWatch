@@ -39,6 +39,7 @@ function SourcesPageInner() {
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [folderDrafts, setFolderDrafts] = useState<Record<string, string>>({});
   const [savingFolder, setSavingFolder] = useState<Record<string, boolean>>({});
+  const [editingFolder, setEditingFolder] = useState<Record<string, boolean>>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState<SourceDto | null>(null);
 
   const load = () => {
@@ -73,7 +74,7 @@ function SourcesPageInner() {
       await postJson(`/api/sources/${id}/sync-now`, {});
       await load();
     } catch (err: any) {
-      setError(err?.message ?? "Failed to trigger sync");
+      setBanner({ tone: "error", text: err?.message ?? "Failed to trigger sync" });
     } finally {
       setSyncing((s) => ({ ...s, [id]: false }));
     }
@@ -88,7 +89,7 @@ function SourcesPageInner() {
       await load();
       setConfirmDisconnect(null);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to disconnect source");
+      setBanner({ tone: "error", text: err?.message ?? "Failed to disconnect source" });
     } finally {
       setDeleting((s) => ({ ...s, [id]: false }));
     }
@@ -99,10 +100,13 @@ function SourcesPageInner() {
     if (!folderId) return;
     setSavingFolder((s) => ({ ...s, [id]: true }));
     try {
-      await patchJson(`/api/sources/${id}`, { folderId });
+      // Clear folderLabel on every save, not just the first - otherwise correcting a mistyped
+      // folder ID would leave the old (now-wrong) label displayed instead of the raw ID.
+      await patchJson(`/api/sources/${id}`, { folderId, folderLabel: "" });
       await load();
+      setEditingFolder((s) => ({ ...s, [id]: false }));
     } catch (err: any) {
-      setError(err?.message ?? "Failed to save folder");
+      setBanner({ tone: "error", text: err?.message ?? "Failed to save folder" });
     } finally {
       setSavingFolder((s) => ({ ...s, [id]: false }));
     }
@@ -180,8 +184,19 @@ function SourcesPageInner() {
                         <div className="text-xs text-slate-500">{providerLabel(provider)}</div>
                       </Cell>
                       <Cell>
-                        {folderId ? (
-                          <span className="text-slate-700">{folderLabel || folderId}</span>
+                        {folderId && !editingFolder[s.id] ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-700">{folderLabel || folderId}</span>
+                            <button
+                              onClick={() => {
+                                setFolderDrafts((d) => ({ ...d, [s.id]: folderId }));
+                                setEditingFolder((e) => ({ ...e, [s.id]: true }));
+                              }}
+                              className="text-xs font-semibold text-blue-600 underline hover:text-blue-700"
+                            >
+                              Change
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex items-center gap-2">
                             <input
@@ -197,6 +212,14 @@ function SourcesPageInner() {
                             >
                               {savingFolder[s.id] ? "Saving..." : "Save"}
                             </button>
+                            {folderId && (
+                              <button
+                                onClick={() => setEditingFolder((e) => ({ ...e, [s.id]: false }))}
+                                className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                              >
+                                Cancel
+                              </button>
+                            )}
                           </div>
                         )}
                       </Cell>
