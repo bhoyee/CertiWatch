@@ -473,6 +473,7 @@ function ReviewCard({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
+  const { refreshPlan } = useRole();
   const [staffName, setStaffName] = useState(record.staffName ?? "");
   const [courseName, setCourseName] = useState(record.courseName ?? "");
   const [issuer, setIssuer] = useState(record.issuer ?? "");
@@ -574,6 +575,7 @@ function ReviewCard({
     try {
       await deleteJson(`/api/records/${record.id}`);
       onDeleted();
+      refreshPlan();
     } catch (err: any) {
       setError(err?.message ?? "Failed to delete record");
     } finally {
