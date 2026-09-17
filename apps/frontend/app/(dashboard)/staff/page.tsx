@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson, postJson } from "../../../lib/api";
 
@@ -674,10 +675,10 @@ export default function StaffPage() {
                     <StatusPill isActive={s.isActive} />
                   </Cell>
                   <Cell>
-                    <CountPill count={s.approvedCount} tone="approved" />
+                    <CountPill count={s.approvedCount} tone="approved" staffName={s.name} />
                   </Cell>
                   <Cell>
-                    <CountPill count={s.expiredCount} tone="expired" />
+                    <CountPill count={s.expiredCount} tone="expired" staffName={s.name} />
                   </Cell>
                   <Cell>
                     <RowActions
@@ -735,8 +736,8 @@ export default function StaffPage() {
               </div>
               <p className="mt-2 text-xs text-slate-500">Started {formatDate(s.startDate)}</p>
               <div className="mt-2 flex items-center gap-1.5">
-                <CountPill count={s.approvedCount} tone="approved" />
-                <CountPill count={s.expiredCount} tone="expired" />
+                <CountPill count={s.approvedCount} tone="approved" staffName={s.name} />
+                <CountPill count={s.expiredCount} tone="expired" staffName={s.name} />
               </div>
               <div className="mt-3">
                 <RowActions
@@ -1007,17 +1008,32 @@ function StatusPill({ isActive }: { isActive: boolean }) {
   );
 }
 
-function CountPill({ count, tone }: { count: number; tone: "approved" | "expired" }) {
+// The count is a link into Records (exact-matched to this staff member, pre-filtered to
+// "ok"/"expired") whenever there's something to see - a zero renders as plain text since
+// there'd be nothing behind it to click through to.
+function CountPill({ count, tone, staffName }: { count: number; tone: "approved" | "expired"; staffName: string }) {
   const zero = count === 0;
   const toneClasses =
     tone === "approved"
       ? zero
         ? "bg-slate-100 text-slate-400"
-        : "bg-emerald-100 text-emerald-700"
+        : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
       : zero
         ? "bg-slate-100 text-slate-400"
-        : "bg-rose-100 text-rose-700";
-  return <span className={`inline-flex min-w-[1.75rem] justify-center rounded-full px-2 py-1 text-xs font-semibold ${toneClasses}`}>{count}</span>;
+        : "bg-rose-100 text-rose-700 hover:bg-rose-200";
+  const pillClasses = `inline-flex min-w-[1.75rem] justify-center rounded-full px-2 py-1 text-xs font-semibold transition ${toneClasses}`;
+
+  if (zero) {
+    return <span className={pillClasses}>{count}</span>;
+  }
+
+  const status = tone === "approved" ? "ok" : "expired";
+  const href = `/records?staffName=${encodeURIComponent(staffName)}&status=${status}`;
+  return (
+    <Link href={href} className={pillClasses} title={`View ${tone === "approved" ? "approved" : "expired"} records for ${staffName}`}>
+      {count}
+    </Link>
+  );
 }
 
 // A single kebab (vertical-dots) trigger that reveals Edit/Deactivate/Delete in a dropdown,

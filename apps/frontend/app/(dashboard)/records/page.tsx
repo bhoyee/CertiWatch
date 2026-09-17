@@ -80,7 +80,24 @@ function RecordsPageInner() {
       setPage(1);
     }
   }, [searchParams]);
-  const [status, setStatus] = useState<string>("all");
+  const [status, setStatus] = useState<string>(() => searchParams?.get("status") ?? "all");
+  // Exact-match staff filter, set only when arriving from a Staff-table Approved/Expired count
+  // link (see staffName below) - distinct from the free-text "search" box above, which does a
+  // substring match across staff/course/issuer and would be too loose for "this exact person".
+  const [staffName, setStaffName] = useState<string>(() => searchParams?.get("staffName") ?? "");
+
+  useEffect(() => {
+    const s = searchParams?.get("status");
+    if (s) {
+      setStatus(s);
+      setPage(1);
+    }
+    const sn = searchParams?.get("staffName");
+    if (sn !== null && sn !== undefined) {
+      setStaffName(sn);
+      setPage(1);
+    }
+  }, [searchParams]);
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(() => {
@@ -179,7 +196,7 @@ function RecordsPageInner() {
         if (!silent) setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search, status, sortField, sortDir]);
+  }, [page, pageSize, search, status, staffName, sortField, sortDir]);
 
   const buildParams = () => {
     const params = new URLSearchParams();
@@ -187,6 +204,7 @@ function RecordsPageInner() {
     params.set("pageSize", String(pageSize));
     if (search.trim()) params.set("filter", search.trim());
     if (status !== "all") params.set("status", status);
+    if (staffName.trim()) params.set("staffName", staffName.trim());
     if (sortField) params.set("sort", `${sortField}:${sortDir}`);
     return params;
   };
@@ -328,6 +346,22 @@ function RecordsPageInner() {
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Records</h1>
           <p className="text-sm text-slate-600">Search, filter, and sort your records.</p>
+          {staffName && (
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+              Staff: {staffName}
+              <button
+                type="button"
+                onClick={() => {
+                  setStaffName("");
+                  setPage(1);
+                }}
+                aria-label="Clear staff filter"
+                className="ml-0.5 text-indigo-500 hover:text-indigo-800"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -350,6 +384,7 @@ function RecordsPageInner() {
           >
             <option value="all">All statuses</option>
             <option value="ok">OK</option>
+            <option value="expired">Expired</option>
             <option value="needs_review">Needs review</option>
             <option value="pending">Pending</option>
             <option value="failed">Failed</option>

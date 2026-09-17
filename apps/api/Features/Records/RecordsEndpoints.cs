@@ -31,11 +31,11 @@ public static class RecordsEndpoints
         return group;
     }
 
-    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, [AsParameters] PagedQuery query, [FromQuery] string? status, CancellationToken token)
+    private static async Task<IResult> ListAsync(AppDbContext db, ITenantContextAccessor tenantAccessor, IOptions<StripeOptions> stripeOptions, [AsParameters] PagedQuery query, [FromQuery] string? status, [FromQuery] string? staffName, CancellationToken token)
     {
         var scope = await RecordVisibility.GetScopeAsync(db, tenantAccessor, token);
         var activeIds = await PlanLimits.GetActiveRecordIdsAsync(db, stripeOptions, tenantAccessor.Current.TenantId, token);
-        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope, activeIds);
+        var baseQuery = BuildBaseQuery(db, tenantAccessor, query.Filter, status, scope, activeIds, staffName);
         // For managers/viewers we have already moved to in-memory filtering.
         var sorted = ApplySort(baseQuery, query.Sort).ToList();
 
@@ -289,7 +289,7 @@ public static class RecordsEndpoints
         return Results.File(pdfBytes, "application/pdf", "records-export.pdf");
     }
 
-    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status, RecordVisibility.Scope? scope, HashSet<Guid>? activeIds = null)
+    private static IQueryable<Record> BuildBaseQuery(AppDbContext db, ITenantContextAccessor tenantAccessor, string? filter, string? status, RecordVisibility.Scope? scope, HashSet<Guid>? activeIds = null, string? staffName = null)
     {
         var tenantId = tenantAccessor.Current.TenantId;
         var baseQuery = db.Records.AsNoTracking().Where(r => r.TenantId == tenantId);
@@ -306,18 +306,28 @@ public static class RecordsEndpoints
         if (!string.IsNullOrWhiteSpace(status))
         {
             var normalized = status.Trim().ToLowerInvariant();
-            var map = new Dictionary<string, ProcessingStatus>(StringComparer.OrdinalIgnoreCase)
+            if (normalized == "expired")
             {
-                ["pending"] = ProcessingStatus.Pending,
-                ["ok"] = ProcessingStatus.Ok,
-                ["needs review"] = ProcessingStatus.NeedsReview,
-                ["needs_review"] = ProcessingStatus.NeedsReview,
-                ["review"] = ProcessingStatus.NeedsReview,
-                ["failed"] = ProcessingStatus.Failed
-            };
-            if (map.TryGetValue(normalized, out var mapped))
+                // Not a ProcessingStatus value - "expired" is derived the same way the Staff
+                // table's own count does: an accepted record whose expiry date has passed.
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                baseQuery = baseQuery.Where(r => r.ProcessingStatus == ProcessingStatus.Ok && r.ExpiryDate != null && r.ExpiryDate < today);
+            }
+            else
             {
-                baseQuery = baseQuery.Where(r => r.ProcessingStatus == mapped);
+                var map = new Dictionary<string, ProcessingStatus>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["pending"] = ProcessingStatus.Pending,
+                    ["ok"] = ProcessingStatus.Ok,
+                    ["needs review"] = ProcessingStatus.NeedsReview,
+                    ["needs_review"] = ProcessingStatus.NeedsReview,
+                    ["review"] = ProcessingStatus.NeedsReview,
+                    ["failed"] = ProcessingStatus.Failed
+                };
+                if (map.TryGetValue(normalized, out var mapped))
+                {
+                    baseQuery = baseQuery.Where(r => r.ProcessingStatus == mapped);
+                }
             }
         }
 
@@ -328,6 +338,15 @@ public static class RecordsEndpoints
                 (r.StaffName ?? string.Empty).ToLower().Contains(term) ||
                 (r.CourseName ?? string.Empty).ToLower().Contains(term) ||
                 (r.Issuer ?? string.Empty).ToLower().Contains(term));
+        }
+
+        // Exact (not substring) match, used by the Staff table's Approved/Expired counts linking
+        // here - a partial match could pull in an unrelated staff member whose name happens to
+        // contain this one's (e.g. "Jane" inside "Jane Doe").
+        if (!string.IsNullOrWhiteSpace(staffName))
+        {
+            var name = staffName.Trim().ToLower();
+            baseQuery = baseQuery.Where(r => (r.StaffName ?? string.Empty).Trim().ToLower() == name);
         }
 
         if (scope is not null)
