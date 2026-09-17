@@ -251,6 +251,11 @@ export default function UploadsPage() {
                 Best results: clear, well-lit, right-side-up scans or photos. Blurry or angled pages often still
                 work, just may need a quick check in Review afterward.
               </span>
+              <span className="text-xs text-slate-500">
+                For a named staff member: training certificates, qualifications, DBS checks, licences. Not for
+                building/business documents like an EPC, gas safety certificate, or insurance policy - there's no
+                staff member for those to attach to.
+              </span>
             </label>
           </div>
 

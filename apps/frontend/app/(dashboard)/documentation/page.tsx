@@ -54,7 +54,8 @@ const sections: Section[] = [
     title: "What CertiWatch can actually read",
     content: (
       <>
-        <p>CertiWatch accepts <strong>PDF, PNG, JPG, and TIFF</strong> files. Within those, results are only as good as the scan:</p>
+        <p className="font-semibold text-slate-900">File format and scan quality</p>
+        <p className="mt-1">CertiWatch accepts <strong>PDF, PNG, JPG, and TIFF</strong> files. Within those, results are only as good as the scan:</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>A clear, well-lit scan or photo reads reliably almost every time.</li>
           <li>Blurry photos, heavy glare, or a page photographed at an angle can still often be read, but are more likely to come back incomplete.</li>
@@ -64,6 +65,22 @@ const sections: Section[] = [
           Importantly, a document CertiWatch isn't confident about is never silently guessed at or dropped - it's
           sent to <strong>Review</strong> with whatever it did manage to read already filled in, so a person only
           has to fix or confirm the parts it couldn't be sure of, not start from scratch.
+        </p>
+
+        <p className="mt-5 font-semibold text-slate-900">What kind of document, not just what kind of scan</p>
+        <p className="mt-1">
+          Getting the file format and scan quality right isn't enough on its own - the document also has to be the
+          right <em>kind</em>. CertiWatch is built to track compliance for a specific, named staff member, so it
+          only really makes sense for documents that belong to a person:
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li><strong>Works well:</strong> training certificates, professional qualifications, DBS checks, licences, right-to-work documents, professional registrations - anything of the shape &ldquo;this person holds/completed X, issued by Y, valid until Z.&rdquo;</li>
+          <li><strong>Doesn't fit the model:</strong> certificates about a building or the business itself - an EPC, a gas safety certificate, an electrical safety certificate, a fire risk assessment, an insurance policy. These have no staff member to attach to, so CertiWatch will still read text off them, but the result won't make sense - for example, a property occupant's name landing in the staff field instead of an actual employee.</li>
+        </ul>
+        <p className="mt-3">
+          If one of these does get uploaded, it will still land in Review rather than being approved automatically -
+          but it's worth not uploading them in the first place, since there's nothing meaningful for CertiWatch to
+          extract from them.
         </p>
       </>
     )
