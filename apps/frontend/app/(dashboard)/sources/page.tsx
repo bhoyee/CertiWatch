@@ -42,15 +42,28 @@ function SourcesPageInner() {
   const [editingFolder, setEditingFolder] = useState<Record<string, boolean>>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState<SourceDto | null>(null);
 
-  const load = () => {
+  const load = (silent = false) => {
     fetchJson<SourceDto[]>("/api/sources")
       .then(setSources)
-      .catch((err) => setError(err.message ?? "Failed to load sources"));
+      .catch((err) => {
+        if (!silent) setError(err.message ?? "Failed to load sources");
+      });
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  // Silently re-poll while any source is still "queued" so a status that resolves on its own
+  // (the worker's next automatic check, usually within a minute) actually shows up here without
+  // the user needing to guess when to refresh, or wonder whether it's stuck.
+  useEffect(() => {
+    if (!sources?.some((s) => getSyncStatus(s).toLowerCase() === "queued")) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") load(true);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [sources]);
 
   // Google/Microsoft redirect back here with ?connected=... or ?error=... once the OAuth flow
   // finishes server-side - there's no client-side callback to handle, just this banner.
@@ -345,14 +358,25 @@ function Cell({ children, className = "" }: { children: React.ReactNode; classNa
 
 function StatusPill({ value }: { value: string }) {
   const normalized = (value || "").toLowerCase();
+
+  if (normalized === "queued") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+        </span>
+        Checking…
+      </span>
+    );
+  }
+
   const styles =
     normalized === "ok" || normalized === "success"
       ? "bg-emerald-100 text-emerald-700"
-      : normalized === "queued"
-        ? "bg-amber-100 text-amber-700"
-        : normalized === "error" || normalized === "failed"
-          ? "bg-rose-100 text-rose-700"
-          : "bg-slate-100 text-slate-700";
+      : normalized === "error" || normalized === "failed"
+        ? "bg-rose-100 text-rose-700"
+        : "bg-slate-100 text-slate-700";
   return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${styles}`}>{value || "--"}</span>;
 }
 
