@@ -97,6 +97,14 @@ services:
     volumes:
       - ./uploads:/uploads
       - ./samples/documents:/samples/documents:ro
+      # Read-only: the API only needs to read a cloud-imported file once, to archive it into
+      # IFileStorage (see DocumentIngestionWorker.ArchiveDocumentIfNeededAsync) - without this
+      # mount at all, that path doesn't exist inside this container, File.Exists on it is always
+      # false, and the document silently never gets archived. Its PathOrUrl was then left pointing
+      # at a path that only ever existed inside the *worker* container, which a later preview/
+      # download request would try to read as if it were an R2 object key - producing an unhandled
+      # Amazon.Runtime.Internal.HttpErrorResponseException instead of the actual file.
+      - ./cloud-import:/tmp/cloud-import:ro
 
   worker:
     build:
@@ -144,6 +152,11 @@ services:
       # data the worker should never remove.
       - ./uploads:/uploads
       - ./samples/documents:/samples/documents:ro
+      # Read-write: CloudImportWorker downloads Google Drive/OneDrive files here, and OcrWorker
+      # deletes them from here once fully processed. Bind-mounted (rather than a bare container
+      # path) so the API container can also see the same files under this same path - see the
+      # matching mount on the api service for why that matters.
+      - ./cloud-import:/tmp/cloud-import
 
   frontend:
     build:
