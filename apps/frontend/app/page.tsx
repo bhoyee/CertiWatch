@@ -36,28 +36,34 @@ const steps = [
 
 const features = [
   {
+    icon: "grid" as const,
     title: "A live compliance matrix, not a spreadsheet",
     description:
       "Every active staff member against every requirement, recalculated the moment anything changes. Filter to who's expiring, export a CSV, or print an audit-ready report in one click."
   },
   {
+    icon: "inbox" as const,
     title: "One inbox for every certificate and licence",
     description:
       "A watched folder, Google Drive, OneDrive, or a no-login upload link you send to anyone — it all lands in the same review queue."
   },
   {
+    icon: "sliders" as const,
     title: "A rule engine that knows your exceptions",
     description: "Global defaults per document type, overridden per tenant — not a flat 12-month guess for something that genuinely varies."
   },
   {
+    icon: "loupe" as const,
     title: "Nothing goes in unreviewed",
     description: "Low-confidence extractions land in a review queue instead of being silently accepted or dropped."
   },
   {
+    icon: "bell" as const,
     title: "Reminders that actually fire",
     description: "A weekly digest plus expiry alerts, sent before the renewal window closes — not after."
   },
   {
+    icon: "lock" as const,
     title: "Access scoped to the job",
     description: "Admins see everything, managers see their team, viewers see their own record — set once, enforced everywhere."
   }
@@ -198,7 +204,12 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="border-b border-[#16140F]">
+      <section
+        className="relative border-b border-[#16140F]"
+        style={{
+          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(22,20,15,0.05) 28px)"
+        }}
+      >
         <div className="mx-auto grid max-w-6xl gap-16 px-6 py-16 md:grid-cols-[1.1fr_0.9fr] md:items-center md:py-24">
           <div className="animate-fade-in-up">
             <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-[#57534A]">
@@ -242,8 +253,12 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Compliance ledger visual - a miniature of the real Compliance Matrix screen */}
+          {/* Compliance ledger visual - a miniature of the real Compliance Matrix screen, given
+              physical depth (a stack of certificates, not a flat card) via two offset sheets
+              peeking out behind the top one. */}
           <div className="relative mx-auto w-full max-w-sm animate-fade-in-up" style={{ animationDelay: "120ms" }}>
+            <div className="absolute inset-0 rotate-[3deg] border-2 border-[#16140F]/30 bg-[#FAFAF6]" />
+            <div className="absolute inset-0 rotate-[-2deg] border-2 border-[#16140F]/50 bg-[#FDFDF9]" />
             <div className="relative border-2 border-[#16140F] bg-white p-7">
               <div className="pointer-events-none absolute inset-[6px] border border-[#16140F]/25" />
               <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-[#8A887C]">
@@ -314,17 +329,20 @@ export default function LandingPage() {
           <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">
             Everything between a scanned document and a peaceful audit.
           </h2>
-          <div className="mt-10 border border-[#16140F]">
+          <div className="mt-10 grid gap-5 sm:grid-cols-2">
             {features.map((feature, i) => (
               <div
                 key={feature.title}
-                className={`grid gap-2 px-6 py-6 sm:grid-cols-[3rem_1fr] sm:gap-8 sm:px-8 ${i !== 0 ? "border-t border-[#16140F]/20" : ""}`}
+                className="group border border-[#16140F] bg-white p-6 transition duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_0_#16140F]"
               >
-                <span className="font-[family-name:var(--font-mono)] text-xs text-[#8A887C]">{String(i + 1).padStart(2, "0")}</span>
-                <div>
-                  <h3 className="font-[family-name:var(--font-display)] text-lg font-bold">{feature.title}</h3>
-                  <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-[#57534A]">{feature.description}</p>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#16140F] text-[#16140F] transition group-hover:bg-[#16140F] group-hover:text-[#FAFAF6]">
+                    <FeatureIcon name={feature.icon} className="h-5 w-5" />
+                  </span>
+                  <span className="font-[family-name:var(--font-mono)] text-xs text-[#8A887C]">{String(i + 1).padStart(2, "0")}</span>
                 </div>
+                <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-bold">{feature.title}</h3>
+                <p className="mt-1.5 text-[15px] leading-relaxed text-[#57534A]">{feature.description}</p>
               </div>
             ))}
           </div>
@@ -338,18 +356,23 @@ export default function LandingPage() {
           <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-bold md:text-4xl">
             Four steps, and none of them are "chase someone over email."
           </h2>
-          <div className="mt-10 grid gap-5 md:grid-cols-2">
-            {steps.map((step) => (
-              <div key={step.n} className="flex gap-4 border border-[#16140F] p-6">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#16140F] font-[family-name:var(--font-mono)] text-xs font-bold">
-                  {step.n}
-                </span>
-                <div>
-                  <h3 className="font-[family-name:var(--font-display)] text-base font-bold">{step.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-[#57534A]">{step.description}</p>
+          {/* A stamp trail, not a numbered list - four passport-style stamps along one line,
+              since "steps in a process" is literally what a stamped ledger already looks like. */}
+          <div className="relative mt-16">
+            <div className="absolute left-5 top-5 bottom-5 w-px bg-[#16140F]/25 md:left-0 md:right-0 md:top-5 md:bottom-auto md:h-px md:w-auto" />
+            <div className="grid gap-10 md:grid-cols-4">
+              {steps.map((step) => (
+                <div key={step.n} className="relative flex gap-4 pl-0 md:flex-col md:gap-3 md:pl-0">
+                  <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-[#16140F] bg-[#FAFAF6] font-[family-name:var(--font-mono)] text-xs font-bold">
+                    {step.n}
+                  </span>
+                  <div className="pt-1 md:pt-0">
+                    <h3 className="font-[family-name:var(--font-display)] text-base font-bold">{step.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-[#57534A]">{step.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -377,12 +400,14 @@ export default function LandingPage() {
             ))}
           </ul>
 
-          <div className="mt-6 grid border border-[#16140F] md:grid-cols-3">
-            {plans.map((plan, i) => (
+          <div className="mt-6 grid gap-0 md:grid-cols-3 md:gap-6">
+            {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`flex flex-col p-7 ${i !== 0 ? "border-t border-[#16140F] md:border-t-0 md:border-l" : ""} ${
-                  plan.highlighted ? "bg-[#16140F] text-[#FAFAF6]" : "bg-white"
+                className={`relative flex flex-col border border-[#16140F] p-7 transition duration-150 ${
+                  plan.highlighted
+                    ? "z-10 bg-[#16140F] text-[#FAFAF6] md:-translate-y-2 md:shadow-[8px_8px_0_0_#B3271E]"
+                    : "bg-white hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_0_#16140F]"
                 }`}
               >
                 {plan.highlighted && (
@@ -505,6 +530,60 @@ export default function LandingPage() {
       </footer>
     </div>
   );
+}
+
+// Bespoke line-art matching the ledger's own ink-stroke language (2px, rounded caps, no fill) -
+// not a generic icon-library set, so the feature grid reads as drawn for this page rather than
+// dropped in from a component kit.
+type FeatureIconName = "grid" | "inbox" | "sliders" | "loupe" | "bell" | "lock";
+function FeatureIcon({ name, className }: { name: FeatureIconName; className?: string }) {
+  const common = { className, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (name) {
+    case "grid":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="3.5" width="17" height="17" rx="0.5" />
+          <path d="M3.5 9.5h17M3.5 15.5h17M9.5 3.5v17M15.5 3.5v17" />
+        </svg>
+      );
+    case "inbox":
+      return (
+        <svg {...common}>
+          <path d="M3.5 13.5h4.8l1.4 2.2h4.6l1.4-2.2h4.8" />
+          <path d="M5.2 13.5 7 5.5h10l1.8 8" />
+        </svg>
+      );
+    case "sliders":
+      return (
+        <svg {...common}>
+          <path d="M4 6h9M17 6h3M4 12h4M12 12h8M4 18h9M17 18h3" />
+          <circle cx="14.5" cy="6" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="8" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="14.5" cy="18" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "loupe":
+      return (
+        <svg {...common}>
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m20 20-4.4-4.4M8 10.5l1.8 1.8L13.5 8" />
+        </svg>
+      );
+    case "bell":
+      return (
+        <svg {...common}>
+          <path d="M6 17v-5.5a6 6 0 0 1 12 0V17l1.8 2.2H4.2Z" />
+          <path d="M10 20a2 2 0 0 0 4 0" />
+        </svg>
+      );
+    case "lock":
+      return (
+        <svg {...common}>
+          <rect x="5" y="11" width="14" height="9" rx="1" />
+          <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+        </svg>
+      );
+  }
 }
 
 function LedgerMark({ status }: { status: LedgerStatus }) {
