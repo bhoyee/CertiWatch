@@ -103,6 +103,12 @@ public sealed class OcrWorker : BackgroundService
                 if (!forceReprocess && hashStatus is not null && hashStatus.Exists && !hashStatus.ShouldReprocess)
                 {
                     _logger.LogInformation("Skipping {File} because hash already ingested or tenant subscription is inactive", file);
+                    // Already durably archived and stable - same reasoning as the cleanup after a
+                    // fresh publish below: nothing further needs this raw copy sitting in the
+                    // watch folder, and leaving it here just means re-doing this same hash check
+                    // (harmless but wasteful) forever, or worse, silently recreating the record if
+                    // it's ever deleted after this point without this file being cleaned up first.
+                    TryDeleteProcessedFile(file);
                     continue;
                 }
                 if (hashStatus is not null && hashStatus.Exists && hashStatus.ShouldReprocess)
@@ -300,7 +306,29 @@ public sealed class OcrWorker : BackgroundService
 
                     await PublishWithRetryAsync(payload, token);
                 }
+
+                // The raw file was only ever a one-time drop into this watched folder - its
+                // content is already durably archived by the API (under its own storage key,
+                // unrelated to this path) as part of publishing each page above. Leaving it here
+                // meant every worker restart rescanned it and re-published every page all over
+                // again; for a page whose record had since been deleted, the hash-check then finds
+                // nothing on record and silently recreates it - a "deleted" record reappearing for
+                // no visible reason, purely because this leftover file was still sitting in the
+                // inbox. Removing it now is what makes deletion actually stick across restarts.
+                TryDeleteProcessedFile(file);
       }
+    }
+  }
+
+  private void TryDeleteProcessedFile(string file)
+  {
+    try
+    {
+      File.Delete(file);
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(ex, "Could not remove processed file {File} from the watch folder", file);
     }
   }
 

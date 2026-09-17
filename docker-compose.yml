@@ -118,7 +118,11 @@ services:
       # them in .env as WORKER__DeviceId / WORKER__DeviceToken - do not hardcode real values here.
       WORKER__DeviceId: ${WORKER__DeviceId:-}
       WORKER__DeviceToken: ${WORKER__DeviceToken:-}
-      WORKER__TenantId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      # Not a secret, but kept overridable rather than hardcoded to one real tenant - this local
+      # worker/device pairing can be pointed at whichever tenant you're actually testing against
+      # (set WORKER__DeviceId/DeviceToken/TenantId together in .env for a real enrolled device;
+      # they must all belong to the same tenant or ingestion will reject everything).
+      WORKER__TenantId: ${WORKER__TenantId:-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}
       WORKER__DoctrBaseUrl: ${WORKER__DoctrBaseUrl:-http://paddleocr:8000}
       # Same OAuth app credentials as the api service above - the worker needs them too, since
       # refreshing a tenant's Google/Microsoft access token requires the app's client_id/secret
@@ -131,7 +135,11 @@ services:
       WORKER__EnableWatcher: "true"
       WORKER__EnableSampleDocuments: "false"
     volumes:
-      - ./uploads:/uploads:ro
+      # Was :ro (read-only) - the worker only ever needed to read here to OCR a file, until
+      # cleanup-after-processing was added so a deleted record can't silently reappear on the next
+      # restart (see OcrWorker.TryDeleteProcessedFile). Samples stay read-only since they're seed
+      # data the worker should never remove.
+      - ./uploads:/uploads
       - ./samples/documents:/samples/documents:ro
 
   frontend:
