@@ -153,11 +153,6 @@ export default function CompliancePage() {
     () => columnOrder.map((id) => requirementById.get(id)).filter((r): r is RequirementTypeDto => !!r && !hiddenColumns.has(r.id)),
     [columnOrder, hiddenColumns, requirementById]
   );
-  const visibleRequirements = useMemo(() => {
-    if (!requirementFilter) return columnManagerRequirements;
-    const req = requirementById.get(requirementFilter);
-    return req ? [req] : columnManagerRequirements;
-  }, [requirementFilter, requirementById, columnManagerRequirements]);
 
   // Row-level "has a gap" is derived once here rather than recomputed per render pass - the
   // summary counts and mobile cards read off this flag. Scoped to just the selected requirement
@@ -189,6 +184,27 @@ export default function CompliancePage() {
       return row.staffName.toLowerCase().includes(term) || (row.jobTitle ?? "").toLowerCase().includes(term);
     });
   }, [rowsWithFlag, search, statusFilter, requirementFilter]);
+
+  // A Requirement pick always wins and narrows to that one column. Otherwise, a status filter
+  // (e.g. clicking "Expired") narrows the columns too - not just the rows - to only the
+  // requirements that actually have that status among the staff currently on screen, so picking
+  // "Expired" doesn't still show a person's 13 unrelated compliant/missing columns alongside it.
+  const visibleRequirements = useMemo(() => {
+    if (requirementFilter) {
+      const req = requirementById.get(requirementFilter);
+      return req ? [req] : columnManagerRequirements;
+    }
+    if (statusFilter) {
+      const relevantIds = new Set<string>();
+      filtered.forEach(({ row }) => {
+        row.cells.forEach((c) => {
+          if (c.status === statusFilter) relevantIds.add(c.requirementTypeId);
+        });
+      });
+      return columnManagerRequirements.filter((r) => relevantIds.has(r.id));
+    }
+    return columnManagerRequirements;
+  }, [requirementFilter, statusFilter, filtered, requirementById, columnManagerRequirements]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -296,7 +312,7 @@ export default function CompliancePage() {
               requirementTypes={matrix.requirementTypes}
               order={columnOrder}
               hidden={hiddenColumns}
-              disabled={!!requirementFilter}
+              disabled={!!requirementFilter || !!statusFilter}
               open={columnsOpen}
               onOpenChange={setColumnsOpen}
               onChange={persistColumns}
@@ -335,8 +351,10 @@ export default function CompliancePage() {
             <div className="space-y-3 md:hidden">
               {paged.map(({ row, hasGap }, i) => {
                 // Same narrowing as the desktop table's columns - the expanded card lists
-                // exactly what's visible, not all 14 requirements when only one is in view.
-                const cardRow = requirementFilter ? { ...row, cells: row.cells.filter((c) => c.requirementTypeId === requirementFilter) } : row;
+                // exactly what's visible, whether that's a single picked requirement or the set
+                // a status filter narrowed things down to, not every requirement tracked.
+                const visibleIds = new Set(visibleRequirements.map((r) => r.id));
+                const cardRow = { ...row, cells: row.cells.filter((c) => visibleIds.has(c.requirementTypeId)) };
                 return <ComplianceCard key={row.staffId} index={i} row={cardRow} requirementTypes={visibleRequirements} hasGap={hasGap} />;
               })}
               {paged.length === 0 && <p className="py-8 text-center text-sm text-slate-500">No staff match your filters.</p>}
@@ -383,7 +401,9 @@ function ComplianceTable({
 }) {
   return (
     <div className="hidden md:block">
-      {requirements.length === 0 ? (
+      {rows.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">No staff match your filters.</p>
+      ) : requirements.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">All columns are hidden - use "Columns" to bring some back.</p>
       ) : (
         <div className="max-h-[65vh] overflow-auto rounded-lg border border-slate-200">
@@ -426,13 +446,6 @@ function ComplianceTable({
                     })}
                 </tr>
               ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={requirements.length + 1} className="px-4 py-8 text-center text-sm text-slate-500">
-                    No staff match your filters.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -584,7 +597,7 @@ function ColumnManager({
       <button
         onClick={() => !disabled && onOpenChange(!open)}
         disabled={disabled}
-        title={disabled ? "Clear the Requirement filter to choose columns manually" : undefined}
+        title={disabled ? "Clear the active filter to choose columns manually" : undefined}
         className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-50"
       >
         <Icon name="sliders" className="h-4 w-4" />
