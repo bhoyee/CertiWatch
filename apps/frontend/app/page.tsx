@@ -199,21 +199,22 @@ const plans = [
 
 const industries = ["Care homes", "Construction", "Hospitality", "Facilities"];
 
-// The hero visual - a compliance-matrix preview using the same card and colored-pill language
-// as the rest of the app (the success/error tones already established on /login and /signup are
-// reused directly for "compliant"/"expired", with one new muted amber added for "expiring").
-type HeroStatus = "compliant" | "expiring" | "expired";
-const heroStatusStyles: Record<HeroStatus, string> = {
+// The compliance-report spotlight - a preview of the real /compliance screen using the same card
+// and colored-pill language as the rest of the app (the success/error tones already established
+// on /login and /signup are reused directly for "compliant"/"expired", with one new muted amber
+// added for "expiring").
+type MatrixStatus = "compliant" | "expiring" | "expired";
+const matrixStatusStyles: Record<MatrixStatus, string> = {
   compliant: "bg-[#EDF5EF] text-[#1F6B45]",
   expiring: "bg-[#FBF3DC] text-[#92700E]",
   expired: "bg-[#FBECEA] text-[#B3432B]"
 };
-const heroStatusLabels: Record<HeroStatus, string> = {
+const matrixStatusLabels: Record<MatrixStatus, string> = {
   compliant: "Compliant",
   expiring: "Expiring",
   expired: "Expired"
 };
-const heroRows: { name: string; role: string; status: HeroStatus }[] = [
+const matrixRows: { name: string; role: string; status: MatrixStatus }[] = [
   { name: "Jordan Diaz", role: "Senior Carer", status: "compliant" },
   { name: "Sam Whitlock", role: "Carer", status: "expiring" },
   { name: "Priya Nair", role: "Support Worker", status: "expired" }
@@ -276,40 +277,24 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Hero visual - a compliance-matrix preview in the same card and pill language as
-              the rest of the app, floating on the dark panel with a soft green glow instead of
-              a decorative illustration unrelated to the actual product. */}
-          <div className="relative mx-auto w-full max-w-sm">
-            <div aria-hidden="true" className="absolute -inset-8 rounded-[2.5rem] bg-[#4E9C74]/10 blur-3xl" />
-            <div className="relative rounded-2xl border border-black/5 bg-[#F5F3EE] p-6 shadow-2xl shadow-black/40">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
-                  <p className="text-xs text-[#8A8A7E]">42 staff tracked · 91% compliant</p>
-                </div>
-                <span className="rounded-full bg-[#FBECEA] px-2.5 py-1 text-[11px] font-semibold text-[#B3432B]">2 need attention</span>
-              </div>
-              <div className="mt-5 space-y-1">
-                {heroRows.map((row) => (
-                  <div key={row.name} className="flex items-center justify-between border-t border-[#E5E0D2] py-3 first:border-t-0">
-                    <div>
-                      <p className="text-sm font-medium text-[#1B1B16]">{row.name}</p>
-                      <p className="text-xs text-[#8A8A7E]">{row.role}</p>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${heroStatusStyles[row.status]}`}>
-                      {heroStatusLabels[row.status]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="absolute -bottom-4 -left-4 hidden items-center gap-2.5 rounded-xl border border-black/5 bg-[#F5F3EE] px-3.5 py-2.5 shadow-xl shadow-black/30 sm:flex">
+          {/* Hero visual - the real generated certificate photograph (stamped, cast shadow, on
+              its own transparent canvas) floating on the dark panel with a soft green glow,
+              plus a small UI notification chip bridging "a real document" to "the product that
+              watches it". */}
+          <div className="relative mx-auto w-full max-w-md">
+            <div aria-hidden="true" className="absolute -inset-10 rounded-[3rem] bg-[#4E9C74]/10 blur-3xl" />
+            <img
+              src="/landing/certificate-hero.png"
+              alt="A CertiWatch compliance certificate, stamped Compliant"
+              className="relative w-full drop-shadow-2xl"
+            />
+            <div className="absolute -bottom-2 -left-4 hidden items-center gap-2.5 rounded-xl border border-black/5 bg-[#F5F3EE] px-3.5 py-2.5 shadow-xl shadow-black/30 sm:flex">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45]">
                 <IconBell />
               </span>
               <div className="leading-tight">
                 <p className="text-xs font-semibold text-[#1B1B16]">Reminder sent</p>
-                <p className="text-[11px] text-[#8A8A7E]">Priya's DBS check</p>
+                <p className="text-[11px] text-[#8A8A7E]">12 days before expiry</p>
               </div>
             </div>
           </div>
@@ -346,9 +331,58 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Compliance report spotlight - a preview of the real /compliance screen, so the
+          headline feature is something you can actually see rather than just a bullet point. */}
+      <section className="border-y border-[#E5E0D2] bg-[#FCFAF5] py-20">
+        <div className="mx-auto grid max-w-6xl items-center gap-14 px-6 md:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">Compliance report</p>
+            <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
+              Every staff member, every requirement, one screen.
+            </h2>
+            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-[#6B6A61]">
+              No spreadsheet to maintain — the matrix recalculates the moment a document is
+              accepted or a rule changes. Filter to who's expiring, export a CSV for an
+              inspector, or print an audit-ready report in one click.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {["Compliant, expiring, and expired — always current", "Filter, search, and export in one click", "The same view an inspector would ask to see"].map((item) => (
+                <li key={item} className="flex items-start gap-2.5 text-sm text-[#1B1B16]">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#1F6B45]" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-[#E5E0D2] bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
+                <p className="text-xs text-[#8A8A7E]">42 staff tracked · 91% compliant</p>
+              </div>
+              <span className="rounded-full bg-[#FBECEA] px-2.5 py-1 text-[11px] font-semibold text-[#B3432B]">2 need attention</span>
+            </div>
+            <div className="mt-5">
+              {matrixRows.map((row) => (
+                <div key={row.name} className="flex items-center justify-between border-t border-[#EFEAE0] py-3 first:border-t-0">
+                  <div>
+                    <p className="text-sm font-medium text-[#1B1B16]">{row.name}</p>
+                    <p className="text-xs text-[#8A8A7E]">{row.role}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${matrixStatusStyles[row.status]}`}>
+                    {matrixStatusLabels[row.status]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How it works - icons on a connecting line instead of numbered circles, framed in its
           own soft panel for a more considered, editorial feel than a plain full-bleed grid. */}
-      <section id="how" className="border-y border-[#E5E0D2] bg-[#FCFAF5] py-20">
+      <section id="how" className="border-b border-[#E5E0D2] bg-white py-20">
         <div className="mx-auto max-w-6xl px-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">How it works</p>
           <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
