@@ -319,8 +319,11 @@ export default function LandingPage() {
           </h2>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map(({ icon: Icon, title, description }) => (
-              <div key={title} className="rounded-2xl border border-[#E5E0D2] bg-white p-6 transition hover:border-[#1F6B45]/40">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45]">
+              <div
+                key={title}
+                className="group rounded-2xl border border-[#E5E0D2] bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-[#1F6B45]/40 hover:shadow-lg hover:shadow-black/5"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45] transition group-hover:bg-[#1F6B45] group-hover:text-white">
                   <Icon />
                 </span>
                 <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-medium text-[#1B1B16]">{title}</h3>
@@ -355,7 +358,7 @@ export default function LandingPage() {
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-[#E5E0D2] bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-[#E5E0D2] bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
@@ -437,8 +440,10 @@ export default function LandingPage() {
             {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`relative flex flex-col rounded-2xl border p-6 ${
-                  plan.highlighted ? "border-[#1F6B45] bg-[#12140F] text-[#F5F3EE] shadow-xl shadow-black/10" : "border-[#E5E0D2] bg-white text-[#1B1B16]"
+                className={`relative flex flex-col rounded-2xl border p-6 transition duration-200 hover:-translate-y-1 ${
+                  plan.highlighted
+                    ? "border-[#1F6B45] bg-[#12140F] text-[#F5F3EE] shadow-xl shadow-black/10 hover:shadow-2xl"
+                    : "border-[#E5E0D2] bg-white text-[#1B1B16] hover:border-[#1F6B45]/40 hover:shadow-lg hover:shadow-black/5"
                 }`}
               >
                 {plan.highlighted && (
@@ -481,7 +486,10 @@ export default function LandingPage() {
           </h2>
           <div className="mt-10 space-y-3">
             {faqs.map((item) => (
-              <details key={item.question} className="group rounded-2xl border border-[#E5E0D2] bg-white px-6 py-5 open:border-[#1F6B45]/30">
+              <details
+                key={item.question}
+                className="group rounded-2xl border border-[#E5E0D2] bg-white px-6 py-5 transition hover:border-[#1F6B45]/30 hover:shadow-sm open:border-[#1F6B45]/30 open:shadow-sm"
+              >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
                   <span className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">{item.question}</span>
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45] transition group-open:rotate-45">
