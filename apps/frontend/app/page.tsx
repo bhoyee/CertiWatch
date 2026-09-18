@@ -17,41 +17,34 @@ const GRID_TEXTURE = {
   backgroundSize: "48px 48px"
 };
 
-function IconGrid() {
+type IconProps = { className?: string };
+function IconGrid({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <rect x="4" y="4" width="16" height="16" rx="1.5" />
       <path d="M4 10h16M4 16h16M10 4v16M16 4v16" />
     </svg>
   );
 }
-function IconPerson() {
+function IconBell({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
-      <circle cx="12" cy="8.5" r="3.2" />
-      <path d="M5.5 19c1.3-3.2 4-4.8 6.5-4.8s5.2 1.6 6.5 4.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-function IconBell() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <path d="M6.5 16.5v-4.8a5.5 5.5 0 0 1 11 0v4.8L19 18.7H5Z" strokeLinejoin="round" />
       <path d="M10.2 20.5a1.8 1.8 0 0 0 3.6 0" strokeLinecap="round" />
     </svg>
   );
 }
-function IconInbox() {
+function IconInbox({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <path d="M4 13.5h4.6l1.3 2h4.2l1.3-2H20" strokeLinejoin="round" />
       <path d="M5.4 13.5 7 6h10l1.6 7.5" strokeLinejoin="round" />
     </svg>
   );
 }
-function IconSliders() {
+function IconSliders({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <path d="M4 7h8M16 7h4M4 12h3M11 12h9M4 17h8M16 17h4" strokeLinecap="round" />
       <circle cx="13" cy="7" r="1.7" fill="currentColor" stroke="none" />
       <circle cx="7" cy="12" r="1.7" fill="currentColor" stroke="none" />
@@ -59,47 +52,45 @@ function IconSliders() {
     </svg>
   );
 }
-function IconCheckShield() {
+function IconCheckShield({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <path d="M12 3.5 5 6.2v5.3c0 4.3 3 7.6 7 8.9 4-1.3 7-4.6 7-8.9V6.2L12 3.5Z" strokeLinejoin="round" />
       <path d="m9 12 2.2 2.2L15.5 10" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
-function IconLock() {
+function IconLock({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <rect x="5.5" y="11" width="13" height="8.5" rx="1.5" />
       <path d="M8.2 11V7.8a3.8 3.8 0 0 1 7.6 0V11" />
     </svg>
   );
 }
 
-const heroPoints = [
-  { icon: IconPerson, text: "Every accepted document is matched to the person it belongs to, not just filed away." },
-  { icon: IconGrid, text: "A live compliance matrix — every staff member against every requirement, always current." },
-  { icon: IconBell, text: "Reminders go out before the renewal window closes, not after." }
-];
-
 const steps = [
   {
-    n: "01",
+    eyebrow: "To start",
+    icon: IconLock,
     title: "Enroll",
     description: "Register a device agent, or connect Google Drive or Microsoft OneDrive with a short-lived code — no shared passwords, ever."
   },
   {
-    n: "02",
+    eyebrow: "Then",
+    icon: IconInbox,
     title: "Ingest",
     description: "New documents land from a watched folder, a connected drive, or a no-login upload link you can send to anyone."
   },
   {
-    n: "03",
+    eyebrow: "Next",
+    icon: IconCheckShield,
     title: "Extract & review",
     description: "OCR reads who it's for, the issuer, and the dates. Anything uncertain is held in a review queue instead of guessed at."
   },
   {
-    n: "04",
+    eyebrow: "Finally",
+    icon: IconBell,
     title: "Track & remind",
     description: "The record lands on the right person's row in the compliance matrix, and reminders go out before it becomes a problem."
   }
@@ -208,6 +199,26 @@ const plans = [
 
 const industries = ["Care homes", "Construction", "Hospitality", "Facilities"];
 
+// The hero visual - a compliance-matrix preview using the same card and colored-pill language
+// as the rest of the app (the success/error tones already established on /login and /signup are
+// reused directly for "compliant"/"expired", with one new muted amber added for "expiring").
+type HeroStatus = "compliant" | "expiring" | "expired";
+const heroStatusStyles: Record<HeroStatus, string> = {
+  compliant: "bg-[#EDF5EF] text-[#1F6B45]",
+  expiring: "bg-[#FBF3DC] text-[#92700E]",
+  expired: "bg-[#FBECEA] text-[#B3432B]"
+};
+const heroStatusLabels: Record<HeroStatus, string> = {
+  compliant: "Compliant",
+  expiring: "Expiring",
+  expired: "Expired"
+};
+const heroRows: { name: string; role: string; status: HeroStatus }[] = [
+  { name: "Jordan Diaz", role: "Senior Carer", status: "compliant" },
+  { name: "Sam Whitlock", role: "Carer", status: "expiring" },
+  { name: "Priya Nair", role: "Support Worker", status: "expired" }
+];
+
 export default function LandingPage() {
   const [hasSession, setHasSession] = useState(false);
 
@@ -265,16 +276,43 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <ul className="space-y-5">
-            {heroPoints.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-3.5 text-[15px] leading-relaxed text-[#C9C7BC]">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-[#4E9C74]">
-                  <Icon />
-                </span>
-                {text}
-              </li>
-            ))}
-          </ul>
+          {/* Hero visual - a compliance-matrix preview in the same card and pill language as
+              the rest of the app, floating on the dark panel with a soft green glow instead of
+              a decorative illustration unrelated to the actual product. */}
+          <div className="relative mx-auto w-full max-w-sm">
+            <div aria-hidden="true" className="absolute -inset-8 rounded-[2.5rem] bg-[#4E9C74]/10 blur-3xl" />
+            <div className="relative rounded-2xl border border-black/5 bg-[#F5F3EE] p-6 shadow-2xl shadow-black/40">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
+                  <p className="text-xs text-[#8A8A7E]">42 staff tracked · 91% compliant</p>
+                </div>
+                <span className="rounded-full bg-[#FBECEA] px-2.5 py-1 text-[11px] font-semibold text-[#B3432B]">2 need attention</span>
+              </div>
+              <div className="mt-5 space-y-1">
+                {heroRows.map((row) => (
+                  <div key={row.name} className="flex items-center justify-between border-t border-[#E5E0D2] py-3 first:border-t-0">
+                    <div>
+                      <p className="text-sm font-medium text-[#1B1B16]">{row.name}</p>
+                      <p className="text-xs text-[#8A8A7E]">{row.role}</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${heroStatusStyles[row.status]}`}>
+                      {heroStatusLabels[row.status]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="absolute -bottom-4 -left-4 hidden items-center gap-2.5 rounded-xl border border-black/5 bg-[#F5F3EE] px-3.5 py-2.5 shadow-xl shadow-black/30 sm:flex">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45]">
+                <IconBell />
+              </span>
+              <div className="leading-tight">
+                <p className="text-xs font-semibold text-[#1B1B16]">Reminder sent</p>
+                <p className="text-[11px] text-[#8A8A7E]">Priya's DBS check</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -308,25 +346,28 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="border-y border-[#E5E0D2] bg-white py-20">
+      {/* How it works - icons on a connecting line instead of numbered circles, framed in its
+          own soft panel for a more considered, editorial feel than a plain full-bleed grid. */}
+      <section id="how" className="border-y border-[#E5E0D2] bg-[#FCFAF5] py-20">
         <div className="mx-auto max-w-6xl px-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">How it works</p>
           <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            Four steps, and none of them are "chase someone over email."
+            From a scanned document to a peaceful audit.
           </h2>
-          <div className="relative mt-16">
-            <div className="absolute left-5 top-5 bottom-5 w-px bg-[#E5E0D2] md:left-0 md:right-0 md:top-5 md:bottom-auto md:h-px md:w-auto" />
-            <div className="grid gap-10 md:grid-cols-4">
-              {steps.map((step) => (
-                <div key={step.n} className="relative flex gap-4 md:flex-col md:gap-4">
-                  <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1F6B45] text-xs font-bold text-white">
-                    {step.n}
+
+          <div className="mt-12 rounded-3xl border border-[#E5E0D2] bg-white p-8 shadow-sm md:p-12">
+            <div className="grid gap-12 md:grid-cols-4 md:gap-8">
+              {steps.map((step, i) => (
+                <div key={step.title} className="relative">
+                  {i < steps.length - 1 && (
+                    <div className="pointer-events-none absolute left-7 top-7 hidden h-px w-full bg-gradient-to-r from-[#1F6B45]/30 to-transparent md:block" />
+                  )}
+                  <span className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-[#1F6B45] text-white shadow-md shadow-[#1F6B45]/25">
+                    <step.icon className="h-6 w-6" />
                   </span>
-                  <div className="pt-1 md:pt-0">
-                    <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">{step.title}</h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-[#6B6A61]">{step.description}</p>
-                  </div>
+                  <p className="mt-5 font-[family-name:var(--font-display)] text-sm italic text-[#1F6B45]">{step.eyebrow}</p>
+                  <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-medium text-[#1B1B16]">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#6B6A61]">{step.description}</p>
                 </div>
               ))}
             </div>
