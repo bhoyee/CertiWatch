@@ -281,7 +281,7 @@ export default function LandingPage() {
               its own transparent canvas) floating on the dark panel with a soft green glow,
               plus a small UI notification chip bridging "a real document" to "the product that
               watches it". */}
-          <div className="relative mx-auto w-full max-w-md">
+          <div className="relative mx-auto w-full max-w-xl md:max-w-none md:-mr-20 lg:-mr-32">
             <div aria-hidden="true" className="absolute -inset-10 rounded-[3rem] bg-[#4E9C74]/10 blur-3xl" />
             <img
               src="/landing/certificate-hero.png"
