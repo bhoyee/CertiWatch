@@ -185,6 +185,7 @@ function RequirementsPageInner() {
   return (
     <div className="space-y-6">
       <ReminderSettingsCard />
+      <ManagerVisibilityCard />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -797,6 +798,106 @@ function ReminderSettingsCard() {
       {saved && !saveError && (
         <p className="mt-2 text-sm text-emerald-700">Saved — applies to every reminder scheduled from now on.</p>
       )}
+    </div>
+  );
+}
+
+// Whether a manager sees every tenant record (Records, Review, Compliance) or only records they
+// (or a viewer they invited) uploaded themselves - see RecordVisibility.GetScopeAsync on the API.
+// Defaults to the scoped behavior for every tenant; this is purely an admin's trust decision, not
+// something that should silently change.
+function ManagerVisibilityCard() {
+  const [seesAll, setSeesAll] = useState<boolean | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchJson<{ managerSeesAllRecords: boolean }>("/api/tenant/manager-visibility")
+      .then((data) => {
+        setSeesAll(data.managerSeesAllRecords);
+        setLoadError(null);
+      })
+      .catch((err) => setLoadError(err.message ?? "Failed to load manager visibility setting"));
+  }, []);
+
+  const update = (value: boolean) => {
+    if (value === seesAll) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    patchJson<{ managerSeesAllRecords: boolean }, Record<string, unknown>>("/api/tenant/manager-visibility", {
+      managerSeesAllRecords: value
+    })
+      .then((res) => {
+        setSeesAll(res.managerSeesAllRecords);
+        setSaved(true);
+      })
+      .catch((err: any) => setSaveError(err?.message ?? "Failed to update manager visibility"))
+      .finally(() => setSaving(false));
+  };
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+        Failed to load manager visibility setting: {loadError}
+      </div>
+    );
+  }
+
+  if (seesAll === null) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+        Loading manager visibility setting…
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-md font-semibold text-slate-900">Manager visibility</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        What managers can see on Records, Review, and Compliance — this is a trust decision for
+        your organization, not something managers can change themselves.
+      </p>
+      <div className="mt-4 space-y-2">
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+          <input
+            type="radio"
+            name="manager-visibility"
+            checked={!seesAll}
+            onChange={() => update(false)}
+            disabled={saving}
+            className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Only their own scope (default)</span>
+            <span className="block text-xs text-slate-500">
+              A manager sees records they uploaded, records from a device or cloud drive they set up, and anything
+              uploaded by a viewer they personally invited.
+            </span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+          <input
+            type="radio"
+            name="manager-visibility"
+            checked={seesAll}
+            onChange={() => update(true)}
+            disabled={saving}
+            className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Every record in the organization</span>
+            <span className="block text-xs text-slate-500">
+              A manager sees the same full record set an admin does. Viewers are never affected by this setting.
+            </span>
+          </span>
+        </label>
+      </div>
+      {saveError && <p className="mt-2 text-sm text-rose-700">{saveError}</p>}
+      {saved && !saveError && <p className="mt-2 text-sm text-emerald-700">Saved.</p>}
     </div>
   );
 }

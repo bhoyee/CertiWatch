@@ -42,6 +42,20 @@ internal static class RecordVisibility
         var email = accessor.Current.Email?.Trim();
         var userId = accessor.Current.UserId;
 
+        // A tenant admin can opt managers into seeing every record tenant-wide instead of just
+        // their own uploads - viewers are never affected by this, only managers.
+        if (isManager)
+        {
+            var seesAll = await db.Tenants.AsNoTracking()
+                .Where(t => t.Id == tenantId)
+                .Select(t => t.ManagerSeesAllRecords)
+                .FirstOrDefaultAsync(token);
+            if (seesAll)
+            {
+                return null;
+            }
+        }
+
         // Collect allowed creator ids
         var creatorIds = new List<Guid>();
         if (userId != Guid.Empty)

@@ -67,6 +67,25 @@ public sealed class DocumentIngestionWorker : BackgroundService
 
                 // Resolve uploader identity up-front so records/documents use a consistent CreatedBy
                 Guid? createdBy = docEvent.CreatedByUserId;
+
+                // Device folder-watching and cloud sync never carry a real creator on the event
+                // itself - there's no "acting user" for a background watcher (see
+                // DeviceEndpoints.cs's /upload and OcrWorker.cs, both of which pass null here).
+                // Fall back to whoever connected the Source (an OAuth-connected Google Drive/
+                // OneDrive) or, failing that, whoever enrolled the reporting Device - identified
+                // by the token it authenticated with, since the event carries no device id.
+                // Without this, manager visibility scoping (keyed entirely off CreatedByUserId)
+                // has nothing to key off for the app's two primary ingestion channels, and a
+                // manager would see effectively none of a tenant's real documents.
+                createdBy ??= source.CreatedByUserId;
+                if (createdBy is null && !string.IsNullOrWhiteSpace(docEvent.DeviceToken))
+                {
+                    createdBy = await db.Devices.AsNoTracking()
+                        .Where(d => d.DeviceToken == docEvent.DeviceToken)
+                        .Select(d => d.CreatedByUserId)
+                        .FirstOrDefaultAsync(stoppingToken);
+                }
+
                 User? resolvedUploader = null;
                 if (docEvent.ExtractedFields.TryGetValue("staff_email", out var staffEmail) &&
                     !string.IsNullOrWhiteSpace(staffEmail))

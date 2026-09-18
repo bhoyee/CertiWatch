@@ -144,7 +144,8 @@ public static class SourceOAuthEndpoints
             Type = SourceType.CloudImport,
             DisplayName = "Google Drive",
             ConfigJson = JsonSerializer.Serialize(new Dictionary<string, string> { ["provider"] = "gdrive" }),
-            CreatedAt = clock.UtcNow
+            CreatedAt = clock.UtcNow,
+            CreatedByUserId = tenantAccessor.Current.UserId == Guid.Empty ? null : tenantAccessor.Current.UserId
         };
         db.Sources.Add(source);
         db.SourceSecrets.Add(new SourceSecret
@@ -259,7 +260,8 @@ public static class SourceOAuthEndpoints
             Type = SourceType.CloudImport,
             DisplayName = "Microsoft OneDrive",
             ConfigJson = JsonSerializer.Serialize(new Dictionary<string, string> { ["provider"] = "onedrive" }),
-            CreatedAt = clock.UtcNow
+            CreatedAt = clock.UtcNow,
+            CreatedByUserId = tenantAccessor.Current.UserId == Guid.Empty ? null : tenantAccessor.Current.UserId
         };
         db.Sources.Add(source);
         db.SourceSecrets.Add(new SourceSecret

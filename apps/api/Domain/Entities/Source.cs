@@ -8,5 +8,10 @@ public sealed class Source : BaseEntity
     public SourceType Type { get; set; }
     public required string DisplayName { get; set; }
     public string ConfigJson { get; set; } = "{}";
+    // The admin who connected this source (set at OAuth-connect time for Google Drive/OneDrive).
+    // Auto-created placeholder sources ("Local Agent", "Worker Source") are left null - there's
+    // no single owner for those, so document attribution falls back to the reporting Device
+    // instead (see DocumentIngestionWorker's createdBy resolution).
+    public Guid? CreatedByUserId { get; set; }
     public Tenant? Tenant { get; set; }
 }

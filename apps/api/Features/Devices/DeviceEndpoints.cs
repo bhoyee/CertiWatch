@@ -117,7 +117,8 @@ public static class DeviceEndpoints
             TenantId = tenantId,
             CodeHash = DeviceSecrets.Hash(plaintext),
             ExpiresAt = clock.UtcNow.AddHours(24),
-            CreatedAt = clock.UtcNow
+            CreatedAt = clock.UtcNow,
+            CreatedByUserId = tenantAccessor.Current.UserId == Guid.Empty ? null : tenantAccessor.Current.UserId
         };
         db.DeviceEnrollmentCodes.Add(enrollmentCode);
         await db.SaveChangesAsync(token);
@@ -146,7 +147,8 @@ public static class DeviceEndpoints
             DeviceToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             Status = Contracts.Enums.DeviceStatus.Enrolled,
             EnrolledAt = clock.UtcNow,
-            CreatedAt = clock.UtcNow
+            CreatedAt = clock.UtcNow,
+            CreatedByUserId = enrollmentCode.CreatedByUserId
         };
 
         db.Devices.Add(device);
@@ -331,7 +333,7 @@ public static class DeviceEndpoints
             tenantId,
             source.Id,
             deviceToken,
-            null,
+            device.CreatedByUserId,
             fileName,
             destPath,
             fileHash,

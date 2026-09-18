@@ -20,6 +20,11 @@ public sealed class Tenant : BaseEntity
     // ReminderOptions.LeadDays default" - most tenants never need to touch this, so there's no
     // row to backfill for existing tenants, just an absence of an override.
     public string? ReminderLeadDaysCsv { get; set; }
+    // Default (false) preserves today's behavior: a manager only sees records they (or a viewer
+    // they invited) created - see RecordVisibility.GetScopeAsync. Set true to let this tenant's
+    // admin trust managers with the full tenant-wide record set, matching what they can already
+    // see on Compliance. Never affects viewers, who stay scoped either way.
+    public bool ManagerSeesAllRecords { get; set; } = false;
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<CourseRule> Rules { get; set; } = new List<CourseRule>();
 }
