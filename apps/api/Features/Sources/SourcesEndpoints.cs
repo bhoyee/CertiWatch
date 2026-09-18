@@ -63,6 +63,11 @@ public static class SourcesEndpoints
             entity.DisplayName = request.DisplayName;
         }
 
+        if (request.SharedWithAllManagers.HasValue)
+        {
+            entity.SharedWithAllManagers = request.SharedWithAllManagers.Value;
+        }
+
         if (request.FolderId is not null)
         {
             var cfg = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.ConfigJson) ?? new Dictionary<string, string>();
@@ -141,6 +146,7 @@ public static class SourcesEndpoints
             source.CreatedAt,
             lastSync,
             syncStatus,
-            syncError);
+            syncError,
+            source.SharedWithAllManagers);
     }
 }

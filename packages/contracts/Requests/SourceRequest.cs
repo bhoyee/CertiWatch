@@ -8,4 +8,6 @@ public sealed class UpdateSourceConfigRequest
     public string? DisplayName { get; init; }
     public string? FolderId { get; init; }
     public string? FolderLabel { get; init; }
+    // Null means "leave as-is" - only set when the admin actually toggles the sharing control.
+    public bool? SharedWithAllManagers { get; init; }
 }
