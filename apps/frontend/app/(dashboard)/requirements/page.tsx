@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchJson, postJson } from "../../../lib/api";
+import { fetchJson, postJson, patchJson } from "../../../lib/api";
 
 type RequirementTypeDto = {
   id: string;
@@ -184,6 +184,8 @@ function RequirementsPageInner() {
 
   return (
     <div className="space-y-6">
+      <ReminderSettingsCard />
+
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -625,6 +627,151 @@ function Checkbox({ label, checked, onChange }: { label: string; checked: boolea
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+type ReminderSettings = { leadDays: number[]; isCustom: boolean; defaultLeadDays: number[] };
+
+// Tenant-wide "how many days before expiry do we alert" schedule - admin-only, same gate as the
+// requirement types below. Every tenant used to share one hardcoded schedule (60/30/7/1 days);
+// this lets an org override it while defaulting to that same schedule if they never touch it.
+function ReminderSettingsCard() {
+  const [settings, setSettings] = useState<ReminderSettings | null>(null);
+  const [draft, setDraft] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const load = () => {
+    fetchJson<ReminderSettings>("/api/tenant/reminder-settings")
+      .then((data) => {
+        setSettings(data);
+        setDraft(data.leadDays.join(", "));
+        setLoadError(null);
+      })
+      .catch((err) => setLoadError(err.message ?? "Failed to load reminder settings"));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const parseDraft = (): number[] | null => {
+    const parts = draft
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsed = parts.map((p) => Number(p));
+    if (parsed.length === 0 || parsed.some((n) => !Number.isInteger(n))) {
+      return null;
+    }
+    return parsed;
+  };
+
+  const save = async () => {
+    const parsed = parseDraft();
+    if (!parsed) {
+      setSaveError("Enter whole numbers separated by commas, e.g. 60, 30, 7, 1");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const updated = await patchJson<ReminderSettings, Record<string, unknown>>("/api/tenant/reminder-settings", {
+        leadDays: parsed
+      });
+      setSettings(updated);
+      setDraft(updated.leadDays.join(", "));
+      setSaved(true);
+    } catch (err: any) {
+      setSaveError(err?.message ?? "Failed to save reminder settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetToDefault = async () => {
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const updated = await patchJson<ReminderSettings, Record<string, unknown>>("/api/tenant/reminder-settings", {
+        leadDays: null
+      });
+      setSettings(updated);
+      setDraft(updated.leadDays.join(", "));
+      setSaved(true);
+    } catch (err: any) {
+      setSaveError(err?.message ?? "Failed to reset reminder settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+        Failed to load reminder settings: {loadError}
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+        Loading reminder settings…
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-md font-semibold text-slate-900">Reminder timing</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        How many days before something expires should we send an alert — comma-separated, e.g. "60, 30, 7, 1" sends
+        four alerts counting down to the deadline.{" "}
+        {settings.isCustom ? (
+          "You're using a custom schedule."
+        ) : (
+          <>Currently the default ({settings.defaultLeadDays.join(", ")} days).</>
+        )}
+      </p>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSaved(false);
+          }}
+          placeholder="60, 30, 7, 1"
+          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none sm:max-w-sm"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+          {settings.isCustom && (
+            <button
+              onClick={resetToDefault}
+              disabled={saving}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Reset to default
+            </button>
+          )}
+        </div>
+      </div>
+      {saveError && <p className="mt-2 text-sm text-rose-700">{saveError}</p>}
+      {saved && !saveError && (
+        <p className="mt-2 text-sm text-emerald-700">Saved — applies to every reminder scheduled from now on.</p>
+      )}
+    </div>
   );
 }
 

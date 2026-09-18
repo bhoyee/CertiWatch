@@ -56,6 +56,12 @@ public sealed class ReminderScheduler : BackgroundService
 
         var tenantRuleMap = await db.CourseRules.AsNoTracking().ToListAsync(token);
 
+        // Per-tenant override of the global lead-day schedule (see Tenant.ReminderLeadDaysCsv) -
+        // a tenant with no override falls straight through to _options.LeadDays.
+        var tenantLeadDays = await db.Tenants.AsNoTracking()
+            .Select(t => new { t.Id, t.ReminderLeadDaysCsv })
+            .ToDictionaryAsync(t => t.Id, t => ReminderLeadDays.Parse(t.ReminderLeadDaysCsv), token);
+
         foreach (var record in candidates)
         {
             if (IsOneTime(record, tenantRuleMap))
@@ -63,7 +69,11 @@ public sealed class ReminderScheduler : BackgroundService
                 continue;
             }
 
-            foreach (var lead in _options.LeadDays)
+            var leadDays = tenantLeadDays.TryGetValue(record.TenantId, out var custom) && custom is not null
+                ? custom
+                : _options.LeadDays;
+
+            foreach (var lead in leadDays)
             {
                 // Ensure we store UTC DateTimes for Postgres timestamp with time zone
                 var expiryUtc = DateTime.SpecifyKind(

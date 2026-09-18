@@ -78,6 +78,15 @@ builder.Services.AddHostedService<WeeklyDigestJob>();
 builder.Services.Configure<MagicLinkOptions>(builder.Configuration.GetSection("MagicLinks"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ReminderOptions>(builder.Configuration.GetSection("Reminders"));
+// Applied after binding, only when "Reminders:LeadDays" was absent from config entirely - see
+// the comment on ReminderOptions.LeadDays for why the default can't just live on the property.
+builder.Services.PostConfigure<ReminderOptions>(options =>
+{
+    if (options.LeadDays.Length == 0)
+    {
+        options.LeadDays = new[] { 60, 30, 7, 1 };
+    }
+});
 builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.Configure<GoogleOAuthOptions>(builder.Configuration.GetSection("GoogleOAuth"));
 builder.Services.Configure<MicrosoftOAuthOptions>(builder.Configuration.GetSection("MicrosoftOAuth"));

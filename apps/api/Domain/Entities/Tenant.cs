@@ -11,6 +11,10 @@ public sealed class Tenant : BaseEntity
     public DateTime? CurrentPeriodEndUtc { get; set; }
     public DateTime? CancelAtUtc { get; set; }
     public string? BillingEmail { get; set; }
+    // Comma-separated days-before-expiry (e.g. "60,30,7,1"). Null/empty means "use the global
+    // ReminderOptions.LeadDays default" - most tenants never need to touch this, so there's no
+    // row to backfill for existing tenants, just an absence of an override.
+    public string? ReminderLeadDaysCsv { get; set; }
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<CourseRule> Rules { get; set; } = new List<CourseRule>();
 }

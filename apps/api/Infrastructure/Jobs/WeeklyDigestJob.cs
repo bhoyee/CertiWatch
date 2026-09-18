@@ -82,8 +82,29 @@ public sealed class WeeklyDigestJob : BackgroundService
                 records.Where(r => r.Confidence < 0.6m).Select(ToDto).ToList());
 
             var html = _renderer.RenderDigest(digest);
-            var adminEmail = tenant.Users.FirstOrDefault()?.Email ?? "admin@tenant.local";
-            await _emailService.SendAsync(adminEmail, $"CertiWatch Weekly Digest - {tenant.Name}", html, token);
+
+            // Every admin and manager, not just whichever user happens to be first in the
+            // collection (which could be a viewer, or a disabled account) - a tenant-wide
+            // operational summary belongs to everyone who can act on it.
+            var recipients = tenant.Users
+                .Where(u => !u.IsDisabled &&
+                    (string.Equals(u.Role, "admin", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(u.Role, "superadmin", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(u.Role, "manager", StringComparison.OrdinalIgnoreCase)))
+                .Select(u => u.Email)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (recipients.Count == 0)
+            {
+                _logger.LogWarning("No admin/manager recipient found for tenant {TenantId} ({TenantName}); skipping weekly digest", tenant.Id, tenant.Name);
+                continue;
+            }
+
+            foreach (var email in recipients)
+            {
+                await _emailService.SendAsync(email, $"CertiWatch Weekly Digest - {tenant.Name}", html, token);
+            }
         }
     }
 
