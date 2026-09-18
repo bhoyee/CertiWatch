@@ -194,6 +194,38 @@ const sections: Section[] = [
           here directly from the Review page with the name already filled in, if a document mentions a requirement
           type that doesn't exist yet.
         </p>
+        <p className="mt-3">
+          The <strong>Reminder timing</strong> card at the top of this page controls when expiry alerts go out for
+          your whole organization - see <strong>Reminders</strong> below for details.
+        </p>
+      </>
+    )
+  },
+  {
+    id: "reminders",
+    title: "Reminders",
+    content: (
+      <>
+        <p>
+          CertiWatch sends two kinds of email: an <strong>expiry alert</strong> counting down to a specific
+          record's deadline, and a <strong>weekly digest</strong> summarizing everything across your organization at
+          once.
+        </p>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>Expiry alerts</strong> fire on a schedule of "days before expiry" - by default 60, 30, 7, and 1
+            days out, so a lapsing certificate gets four separate warnings, not one easy-to-miss email. Admins can
+            change this schedule for the whole organization from the <strong>Reminder timing</strong> card on the{" "}
+            <strong>Requirements</strong> page - enter whole numbers separated by commas (1-365 days each, up to 8
+            values), or use <strong>Reset to default</strong> to go back to 60/30/7/1. There's no per-requirement or
+            per-person override yet - one schedule applies to everything you track.
+          </li>
+          <li>
+            <strong>The weekly digest</strong> goes out every Monday morning and covers what's new, what's expiring
+            in the next 30 days, what's already expired, and anything sitting in Review with low confidence. It goes
+            to every admin and manager on the account, not just one person.
+          </li>
+        </ul>
       </>
     )
   },

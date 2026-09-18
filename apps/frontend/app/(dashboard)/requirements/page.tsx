@@ -635,6 +635,35 @@ type ReminderSettings = { leadDays: number[]; isCustom: boolean; defaultLeadDays
 // Tenant-wide "how many days before expiry do we alert" schedule - admin-only, same gate as the
 // requirement types below. Every tenant used to share one hardcoded schedule (60/30/7/1 days);
 // this lets an org override it while defaulting to that same schedule if they never touch it.
+// Mirrors ReminderLeadDays' constants on the API (apps/api/Infrastructure/Jobs/ReminderLeadDays.cs)
+// so a bad value is caught the instant you leave the field instead of only after a round trip -
+// there's no shared contracts constant for these since that class is internal to the API.
+const MIN_LEAD_DAYS = 1;
+const MAX_LEAD_DAYS = 365;
+const MAX_LEAD_COUNT = 8;
+
+function parseLeadDaysDraft(draft: string): { values: number[]; error?: undefined } | { values?: undefined; error: string } {
+  const parts = draft
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return { error: "Enter at least one number of days, e.g. 60, 30, 7, 1." };
+  }
+  const parsed = parts.map((p) => Number(p));
+  if (parsed.some((n) => !Number.isInteger(n))) {
+    return { error: "Use whole numbers only, separated by commas — e.g. 60, 30, 7, 1." };
+  }
+  if (parsed.some((n) => n < MIN_LEAD_DAYS || n > MAX_LEAD_DAYS)) {
+    return { error: `Each value must be between ${MIN_LEAD_DAYS} and ${MAX_LEAD_DAYS} days.` };
+  }
+  const deduped = Array.from(new Set(parsed));
+  if (deduped.length > MAX_LEAD_COUNT) {
+    return { error: `Use ${MAX_LEAD_COUNT} or fewer values — that's plenty of advance warning.` };
+  }
+  return { values: deduped };
+}
+
 function ReminderSettingsCard() {
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [draft, setDraft] = useState("");
@@ -657,22 +686,10 @@ function ReminderSettingsCard() {
     load();
   }, []);
 
-  const parseDraft = (): number[] | null => {
-    const parts = draft
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const parsed = parts.map((p) => Number(p));
-    if (parsed.length === 0 || parsed.some((n) => !Number.isInteger(n))) {
-      return null;
-    }
-    return parsed;
-  };
-
   const save = async () => {
-    const parsed = parseDraft();
-    if (!parsed) {
-      setSaveError("Enter whole numbers separated by commas, e.g. 60, 30, 7, 1");
+    const result = parseLeadDaysDraft(draft);
+    if (result.error) {
+      setSaveError(result.error);
       return;
     }
     setSaving(true);
@@ -680,12 +697,14 @@ function ReminderSettingsCard() {
     setSaved(false);
     try {
       const updated = await patchJson<ReminderSettings, Record<string, unknown>>("/api/tenant/reminder-settings", {
-        leadDays: parsed
+        leadDays: result.values
       });
       setSettings(updated);
       setDraft(updated.leadDays.join(", "));
       setSaved(true);
     } catch (err: any) {
+      // Falls back to whatever the API returned (e.g. a range/count rule this client-side check
+      // doesn't happen to catch) - the two are meant to agree, but the server is the last word.
       setSaveError(err?.message ?? "Failed to save reminder settings");
     } finally {
       setSaving(false);
@@ -738,15 +757,22 @@ function ReminderSettingsCard() {
           <>Currently the default ({settings.defaultLeadDays.join(", ")} days).</>
         )}
       </p>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <p className="mt-1 text-xs text-slate-400">
+        Whole numbers, {MIN_LEAD_DAYS}–{MAX_LEAD_DAYS} days each, up to {MAX_LEAD_COUNT} values.
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <input
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
             setSaved(false);
+            if (saveError) setSaveError(null);
           }}
           placeholder="60, 30, 7, 1"
-          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none sm:max-w-sm"
+          aria-invalid={saveError ? true : undefined}
+          className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none sm:max-w-sm ${
+            saveError ? "border-rose-300 focus:border-rose-500" : "border-slate-200 focus:border-blue-500"
+          }`}
         />
         <div className="flex gap-2">
           <button
@@ -760,7 +786,7 @@ function ReminderSettingsCard() {
             <button
               onClick={resetToDefault}
               disabled={saving}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
             >
               Reset to default
             </button>
