@@ -6,43 +6,57 @@ import { postJson } from "@/lib/api";
 export function ActionButtons({ tenantId, isSuspended }: { tenantId: string; isSuspended: boolean }) {
   const [pending, startTransition] = useTransition();
   const [localSuspended, setLocalSuspended] = useState(isSuspended);
+  const [error, setError] = useState<string | null>(null);
 
-  async function call(action: "suspend" | "resume" | "reset-subscription") {
+  // Was a bare fetch("/api/...") - a relative path that hits the Next.js server itself (no
+  // rewrite/proxy is configured for /api/*), not the actual API on its own origin. It 404'd
+  // silently every time (the response was never checked) and the page still reloaded, so the
+  // button looked like it "did nothing" - postJson resolves against the real API base URL and
+  // throws on a failed request instead of pretending it worked.
+  function call(action: "suspend" | "resume" | "reset-subscription") {
+    setError(null);
     startTransition(async () => {
-      await fetch(`/api/platform/tenants/${tenantId}/${action}`, { method: "POST", credentials: "include" });
-      if (action === "suspend") setLocalSuspended(true);
-      if (action === "resume") setLocalSuspended(false);
-      // reset-subscription is fire-and-forget
-      window.location.reload();
+      try {
+        await postJson(`/api/platform/tenants/${tenantId}/${action}`, {});
+        if (action === "suspend") setLocalSuspended(true);
+        if (action === "resume") setLocalSuspended(false);
+        // reset-subscription is fire-and-forget
+        window.location.reload();
+      } catch (err: any) {
+        setError(err?.message ?? `Failed to ${action.replace("-", " ")}`);
+      }
     });
   }
 
   return (
-    <div className="flex gap-2">
-      <button
-        onClick={() => call("reset-subscription")}
-        disabled={pending}
-        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-      >
-        {pending ? "Resetting..." : "Reset subscription"}
-      </button>
-      {localSuspended ? (
+    <div>
+      <div className="flex gap-2">
         <button
-          onClick={() => call("resume")}
+          onClick={() => call("reset-subscription")}
           disabled={pending}
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
         >
-          {pending ? "Resuming..." : "Resume tenant"}
+          {pending ? "Resetting..." : "Reset subscription"}
         </button>
-      ) : (
-        <button
-          onClick={() => call("suspend")}
-          disabled={pending}
-          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
-        >
-          {pending ? "Suspending..." : "Suspend tenant"}
-        </button>
-      )}
+        {localSuspended ? (
+          <button
+            onClick={() => call("resume")}
+            disabled={pending}
+            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+          >
+            {pending ? "Resuming..." : "Resume tenant"}
+          </button>
+        ) : (
+          <button
+            onClick={() => call("suspend")}
+            disabled={pending}
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+          >
+            {pending ? "Suspending..." : "Suspend tenant"}
+          </button>
+        )}
+      </div>
+      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
     </div>
   );
 }
@@ -81,8 +95,12 @@ export function PilotAccessControls({ tenantId, pilotAccessUntilUtc }: { tenantI
 
   const clear = () => {
     startTransition(async () => {
-      await fetch(`/api/platform/tenants/${tenantId}/clear-pilot-access`, { method: "POST", credentials: "include" });
-      setUntil(null);
+      try {
+        await postJson(`/api/platform/tenants/${tenantId}/clear-pilot-access`, {});
+        setUntil(null);
+      } catch (err: any) {
+        setError(err?.message ?? "Failed to clear pilot access");
+      }
     });
   };
 
@@ -181,12 +199,10 @@ export function UserStatusButtons({ tenantId, userId, isDisabled }: { tenantId: 
   const [pending, start] = useTransition();
   const [localDisabled, setLocalDisabled] = useState(isDisabled);
 
+  // Same relative-URL bug as ActionButtons.call above - fixed the same way.
   const call = (action: "disable" | "enable" | "force-reset") => {
     start(async () => {
-      await fetch(`/api/platform/tenants/${tenantId}/users/${userId}/${action}`, {
-        method: "POST",
-        credentials: "include"
-      });
+      await postJson(`/api/platform/tenants/${tenantId}/users/${userId}/${action}`, {});
       if (action === "disable") setLocalDisabled(true);
       if (action === "enable") setLocalDisabled(false);
     });
