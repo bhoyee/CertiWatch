@@ -1,6 +1,8 @@
+using CertiWatch.Api.Infrastructure.Jobs;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
 using CertiWatch.Contracts.Dtos;
+using CertiWatch.Contracts.Requests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using CertiWatch.Api.Configuration;
@@ -13,6 +15,8 @@ public static class TenantEndpoints
     {
         var group = routes.MapGroup("/api/tenant").RequireAuthorization();
         group.MapGet("/me", GetAsync);
+        group.MapGet("/reminder-settings", GetReminderSettingsAsync);
+        group.MapPatch("/reminder-settings", UpdateReminderSettingsAsync);
         return group;
     }
 
@@ -44,5 +48,69 @@ public static class TenantEndpoints
             tenant.SubscriptionStatus,
             tenant.CurrentPeriodEndUtc);
         return Results.Ok(dto);
+    }
+
+    // Admin-only, same gate as the requirement-types page this setting lives next to on the
+    // frontend - a tenant-wide schedule isn't something a manager or viewer should be able to
+    // change.
+    private static async Task<IResult> GetReminderSettingsAsync(
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IOptions<ReminderOptions> reminderOptions,
+        CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var csv = await db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.ReminderLeadDaysCsv).FirstOrDefaultAsync(token);
+        var custom = ReminderLeadDays.Parse(csv);
+        var defaultDays = reminderOptions.Value.LeadDays;
+
+        return Results.Ok(new TenantReminderSettingsDto(
+            LeadDays: custom ?? defaultDays,
+            IsCustom: custom is not null,
+            DefaultLeadDays: defaultDays));
+    }
+
+    private static async Task<IResult> UpdateReminderSettingsAsync(
+        UpdateTenantReminderSettingsRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        IOptions<ReminderOptions> reminderOptions,
+        CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, token);
+        if (tenant is null)
+        {
+            return Results.NotFound();
+        }
+
+        var defaultDays = reminderOptions.Value.LeadDays;
+
+        if (request.LeadDays is null || request.LeadDays.Count == 0)
+        {
+            tenant.ReminderLeadDaysCsv = null;
+            await db.SaveChangesAsync(token);
+            return Results.Ok(new TenantReminderSettingsDto(defaultDays, IsCustom: false, DefaultLeadDays: defaultDays));
+        }
+
+        var (ok, error, cleaned) = ReminderLeadDays.Validate(request.LeadDays);
+        if (!ok)
+        {
+            return Results.BadRequest(new { error });
+        }
+
+        tenant.ReminderLeadDaysCsv = ReminderLeadDays.ToCsv(cleaned);
+        await db.SaveChangesAsync(token);
+        return Results.Ok(new TenantReminderSettingsDto(cleaned, IsCustom: true, DefaultLeadDays: defaultDays));
     }
 }
