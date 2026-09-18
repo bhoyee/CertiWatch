@@ -33,7 +33,8 @@ public static class ComplianceEndpoints
             return Results.Forbid();
         }
 
-        var matrix = await BuildMatrixAsync(db, accessor.Current.TenantId, token);
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+        var matrix = await BuildMatrixAsync(db, accessor.Current.TenantId, scope, token);
         return Results.Ok(matrix);
     }
 
@@ -66,7 +67,8 @@ public static class ComplianceEndpoints
 
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+        var fullMatrix = await BuildMatrixAsync(db, tenantId, scope, token);
         var requirementName = ResolveRequirementName(fullMatrix, requirement);
         var matrix = FilterMatrix(fullMatrix, status, search, requirement);
         var tenantName = tenant?.Name ?? "CertiWatch";
@@ -122,7 +124,8 @@ public static class ComplianceEndpoints
 
         var tenantId = accessor.Current.TenantId;
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, token);
-        var fullMatrix = await BuildMatrixAsync(db, tenantId, token);
+        var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+        var fullMatrix = await BuildMatrixAsync(db, tenantId, scope, token);
         var requirementName = ResolveRequirementName(fullMatrix, requirement);
         var matrix = FilterMatrix(fullMatrix, status, search, requirement);
 
@@ -207,7 +210,7 @@ public static class ComplianceEndpoints
         return parts.Count == 0 ? "None (full snapshot)" : string.Join("; ", parts);
     }
 
-    private static async Task<ComplianceMatrixDto> BuildMatrixAsync(AppDbContext db, Guid tenantId, CancellationToken token)
+    private static async Task<ComplianceMatrixDto> BuildMatrixAsync(AppDbContext db, Guid tenantId, RecordVisibility.Scope? scope, CancellationToken token)
     {
         var activeStaff = await db.StaffMembers.AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.IsActive)
@@ -221,9 +224,28 @@ public static class ComplianceEndpoints
 
         // Only accepted uploads count as evidence - NeedsReview/Pending/Failed records haven't
         // been confirmed yet, same distinction ReportsEndpoints.AnalyticsAsync already draws.
-        var records = await db.Records.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.ProcessingStatus == ProcessingStatus.Ok)
-            .ToListAsync(token);
+        var recordsQuery = db.Records.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.ProcessingStatus == ProcessingStatus.Ok);
+
+        // A manager only sees the same records they'd see on Records/Review (their own uploads,
+        // plus viewers they invited) - without this, a manager could see "Jordan is expired on
+        // First Aid" here but have no way to open the actual record, since it belongs to a
+        // colleague's upload they can't see anywhere else.
+        var records = RecordVisibility.ApplyScope(recordsQuery, scope).ToList();
+
+        // Staff rows are narrowed to match: a manager whose scope shows zero records for someone
+        // would otherwise see that person as "missing" on every requirement, which reads as a far
+        // bigger problem than reality - better to just not show a staff member at all than to
+        // imply they have no compliance evidence when the truth is just "not in this manager's
+        // scope".
+        if (scope is not null)
+        {
+            var visibleStaffNames = records
+                .Select(r => r.StaffName?.Trim())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            activeStaff = activeStaff.Where(s => visibleStaffNames.Contains(s.Name.Trim())).ToList();
+        }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var expiringThreshold = today.AddDays(30);
