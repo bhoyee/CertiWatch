@@ -17,6 +17,8 @@ public static class TenantEndpoints
         group.MapGet("/me", GetAsync);
         group.MapGet("/reminder-settings", GetReminderSettingsAsync);
         group.MapPatch("/reminder-settings", UpdateReminderSettingsAsync);
+        group.MapGet("/manager-visibility", GetManagerVisibilityAsync);
+        group.MapPatch("/manager-visibility", UpdateManagerVisibilityAsync);
         return group;
     }
 
@@ -112,5 +114,45 @@ public static class TenantEndpoints
         tenant.ReminderLeadDaysCsv = ReminderLeadDays.ToCsv(cleaned);
         await db.SaveChangesAsync(token);
         return Results.Ok(new TenantReminderSettingsDto(cleaned, IsCustom: true, DefaultLeadDays: defaultDays));
+    }
+
+    // Admin-only - whether managers see every tenant record or just their own scope is a
+    // trust decision for this tenant's own admin to make, not something a manager grants
+    // themselves.
+    private static async Task<IResult> GetManagerVisibilityAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var seesAll = await db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.ManagerSeesAllRecords).FirstOrDefaultAsync(token);
+        return Results.Ok(new { managerSeesAllRecords = seesAll });
+    }
+
+    private sealed record UpdateManagerVisibilityRequest(bool ManagerSeesAllRecords);
+
+    private static async Task<IResult> UpdateManagerVisibilityAsync(
+        UpdateManagerVisibilityRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, token);
+        if (tenant is null)
+        {
+            return Results.NotFound();
+        }
+
+        tenant.ManagerSeesAllRecords = request.ManagerSeesAllRecords;
+        await db.SaveChangesAsync(token);
+        return Results.Ok(new { managerSeesAllRecords = tenant.ManagerSeesAllRecords });
     }
 }

@@ -9,5 +9,7 @@ public sealed class DeviceEnrollmentCode : BaseEntity
     public required string CodeHash { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
+    // Copied onto the resulting Device once it enrolls - see Device.CreatedByUserId.
+    public Guid? CreatedByUserId { get; set; }
     public Tenant? Tenant { get; set; }
 }
