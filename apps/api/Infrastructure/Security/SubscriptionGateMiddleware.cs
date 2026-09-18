@@ -52,7 +52,7 @@ public sealed class SubscriptionGateMiddleware
             return;
         }
 
-        if (IsSubscriptionActive(tenant.SubscriptionStatus, tenant.CurrentPeriodEndUtc))
+        if (IsSubscriptionActive(tenant.SubscriptionStatus, tenant.CurrentPeriodEndUtc, tenant.PilotAccessUntilUtc))
         {
             await _next(context);
             return;
@@ -66,14 +66,28 @@ public sealed class SubscriptionGateMiddleware
         });
     }
 
-    private static bool IsSubscriptionActive(string? status, DateTimeOffset? currentPeriodEndUtc)
+    private static bool IsSubscriptionActive(string? status, DateTimeOffset? currentPeriodEndUtc, DateTime? pilotAccessUntilUtc)
     {
-        if (string.IsNullOrWhiteSpace(status))
+        var normalized = status?.Trim().ToLowerInvariant();
+
+        // An explicit platform suspension always wins, even over an active pilot grant - suspend
+        // is the kill switch for abuse/nonpayment and shouldn't be silently overridden by an
+        // earlier "grant this tenant 3 months of pilot access" call.
+        if (normalized == "suspended")
+        {
+            return false;
+        }
+
+        if (pilotAccessUntilUtc.HasValue && pilotAccessUntilUtc.Value > DateTime.UtcNow)
         {
             return true;
         }
 
-        var normalized = status.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
         if (normalized is "active" or "trialing")
         {
             return true;

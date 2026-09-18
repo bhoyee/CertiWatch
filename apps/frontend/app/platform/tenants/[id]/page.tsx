@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { fetchJson } from "@/lib/api";
+import { ActionButtons, PilotAccessControls } from "./ClientActions";
 
 type TenantUser = {
   id: string;
@@ -28,6 +29,7 @@ type TenantDetail = {
   createdAtUtc?: string | null;
   billingEmail?: string | null;
   cancelAtUtc?: string | null;
+  pilotAccessUntilUtc?: string | null;
   users?: TenantUser[];
 };
 
@@ -111,13 +113,18 @@ export default function TenantDetailPage() {
             {tenant.subscriptionStatus || "unknown"}
           </p>
         </div>
-        <Link
-          href="/platform/tenants"
-          className="text-sm text-indigo-600 hover:text-indigo-800"
-        >
-          ← Back to tenants
-        </Link>
+        <div className="flex flex-col items-end gap-3">
+          <Link
+            href="/platform/tenants"
+            className="text-sm text-indigo-600 hover:text-indigo-800"
+          >
+            ← Back to tenants
+          </Link>
+          <ActionButtons tenantId={tenantId} isSuspended={tenant.subscriptionStatus === "suspended"} />
+        </div>
       </div>
+
+      <PilotAccessControls tenantId={tenantId} pilotAccessUntilUtc={tenant.pilotAccessUntilUtc ?? null} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <DetailCard title="Subscription">
@@ -139,6 +146,14 @@ export default function TenantDetailPage() {
             value={
               tenant.cancelAtUtc
                 ? new Date(tenant.cancelAtUtc).toLocaleString()
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Pilot access until"
+            value={
+              tenant.pilotAccessUntilUtc
+                ? new Date(tenant.pilotAccessUntilUtc).toLocaleString()
                 : "—"
             }
           />
