@@ -10,5 +10,6 @@ public sealed record SourceDto(
     DateTime CreatedAt,
     string? LastSync = null,
     string? SyncStatus = null,
-    string? SyncError = null
+    string? SyncError = null,
+    bool SharedWithAllManagers = true
 );

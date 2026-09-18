@@ -13,6 +13,7 @@ type SourceDto = {
   lastSync?: string | null;
   syncStatus?: string | null;
   syncError?: string | null;
+  sharedWithAllManagers: boolean;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -41,6 +42,7 @@ function SourcesPageInner() {
   const [savingFolder, setSavingFolder] = useState<Record<string, boolean>>({});
   const [editingFolder, setEditingFolder] = useState<Record<string, boolean>>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState<SourceDto | null>(null);
+  const [savingShared, setSavingShared] = useState<Record<string, boolean>>({});
 
   const load = (silent = false) => {
     fetchJson<SourceDto[]>("/api/sources")
@@ -125,6 +127,19 @@ function SourcesPageInner() {
     }
   };
 
+  const toggleShared = async (source: SourceDto) => {
+    const next = !source.sharedWithAllManagers;
+    setSavingShared((s) => ({ ...s, [source.id]: true }));
+    try {
+      await patchJson(`/api/sources/${source.id}`, { sharedWithAllManagers: next });
+      await load();
+    } catch (err: any) {
+      setBanner({ tone: "error", text: err?.message ?? "Failed to update sharing" });
+    } finally {
+      setSavingShared((s) => ({ ...s, [source.id]: false }));
+    }
+  };
+
   if (error) return <ErrorCard message={error} />;
   if (!sources) return <LoadingCard />;
 
@@ -182,6 +197,7 @@ function SourcesPageInner() {
                   <Header>Status</Header>
                   <Header>Last sync</Header>
                   <Header>Connected</Header>
+                  <Header>Shared</Header>
                   <Header>Actions</Header>
                 </tr>
               </thead>
@@ -241,6 +257,24 @@ function SourcesPageInner() {
                       </Cell>
                       <Cell>{formatDate(getSyncDate(s))}</Cell>
                       <Cell>{new Date(s.createdAt).toLocaleDateString()}</Cell>
+                      <Cell>
+                        <button
+                          onClick={() => toggleShared(s)}
+                          disabled={savingShared[s.id]}
+                          title={
+                            s.sharedWithAllManagers
+                              ? "Every manager can see records from this source. Click to make it visible only to you."
+                              : "Only you can see records from this source. Click to share with every manager."
+                          }
+                          className={`rounded-full px-2 py-1 text-xs font-semibold disabled:opacity-50 ${
+                            s.sharedWithAllManagers
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {savingShared[s.id] ? "..." : s.sharedWithAllManagers ? "All managers" : "Just you"}
+                        </button>
+                      </Cell>
                       <Cell>
                         <div className="flex items-center gap-2">
                           <button

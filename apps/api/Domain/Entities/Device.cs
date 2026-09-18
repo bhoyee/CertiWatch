@@ -20,5 +20,10 @@ public sealed class Device : BaseEntity
     // documents this device reports, so manager visibility scoping has something to key off for
     // folder-watching ingestion, which otherwise has no "acting user" at all.
     public Guid? CreatedByUserId { get; set; }
+    // Same standard "private vs shared with the team" flag as Source.SharedWithAllManagers -
+    // defaults true since enrollment codes are always minted by an admin (RequireAuthorization
+    // "Admin" on /enrollment-codes), so there's no "a manager enrolled their own private device"
+    // case yet either.
+    public bool SharedWithAllManagers { get; set; } = true;
     public Tenant? Tenant { get; set; }
 }

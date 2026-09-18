@@ -71,6 +71,24 @@ internal static class RecordVisibility
                 .Select(u => u.Id)
                 .ToListAsync(token);
             creatorIds.AddRange(invitedIds);
+
+            // Plus whoever owns a Source/Device explicitly marked "shared with all managers" -
+            // the standard "private vs. shared with the team" integration pattern (Slack/Notion/
+            // Zapier all work this way). This is what makes an admin's shared organizational
+            // Google Drive visible to every manager by default, not just whoever happened to
+            // connect it - without adding a whole separate per-record filtering path, since
+            // "allowed creator" is exactly the mechanism ApplyScope already checks below.
+            var sharedSourceOwners = await db.Sources.AsNoTracking()
+                .Where(s => s.TenantId == tenantId && s.SharedWithAllManagers && s.CreatedByUserId.HasValue)
+                .Select(s => s.CreatedByUserId!.Value)
+                .ToListAsync(token);
+            creatorIds.AddRange(sharedSourceOwners);
+
+            var sharedDeviceOwners = await db.Devices.AsNoTracking()
+                .Where(d => d.TenantId == tenantId && d.SharedWithAllManagers && d.CreatedByUserId.HasValue)
+                .Select(d => d.CreatedByUserId!.Value)
+                .ToListAsync(token);
+            creatorIds.AddRange(sharedDeviceOwners);
         }
 
         // Staff tokens used as a fallback for legacy rows without CreatedByUserId.
