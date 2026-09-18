@@ -23,6 +23,8 @@ public static class PlatformEndpoints
         group.MapPost("/tenants/{id:guid}/suspend", SuspendTenantAsync);
         group.MapPost("/tenants/{id:guid}/resume", ResumeTenantAsync);
         group.MapPost("/tenants/{id:guid}/reset-subscription", ResetSubscriptionAsync);
+        group.MapPost("/tenants/{id:guid}/grant-pilot-access", GrantPilotAccessAsync);
+        group.MapPost("/tenants/{id:guid}/clear-pilot-access", ClearPilotAccessAsync);
         group.MapGet("/tenants/{id:guid}/api-keys", ListApiKeysAsync);
         group.MapPost("/tenants/{id:guid}/api-keys", CreateApiKeyAsync);
         group.MapPost("/api-keys/{keyId:guid}/revoke", RevokeApiKeyAsync);
@@ -106,6 +108,7 @@ public static class PlatformEndpoints
             t.CreatedAtUtc,
             t.SubscriptionStatus,
             t.CurrentPeriodEndUtc,
+            t.PilotAccessUntilUtc,
             t.StripeCustomerId,
             t.StripeSubscriptionId,
             RecordCount = recordCounts.TryGetValue(t.Id, out var rc) ? rc : 0,
@@ -186,6 +189,7 @@ public static class PlatformEndpoints
             tenant.CreatedAtUtc,
             tenant.SubscriptionStatus,
             tenant.CurrentPeriodEndUtc,
+            tenant.PilotAccessUntilUtc,
             tenant.StripeCustomerId,
             tenant.StripeSubscriptionId,
             tenant.BillingEmail,
@@ -285,6 +289,48 @@ public static class PlatformEndpoints
         tenant.CurrentPeriodEndUtc = null;
         await db.SaveChangesAsync(token);
         await LogAuditAsync(db, id, accessor, "platform_reset_subscription", new { tenantId = id }, token);
+        return Results.NoContent();
+    }
+
+    private sealed record GrantPilotAccessRequest(int Days);
+
+    // Lets a superadmin give a tenant free access for a fixed window - e.g. a pilot organisation
+    // trying the product for a week or three months before committing to pay - independently of
+    // Stripe. SubscriptionGateMiddleware checks Tenant.PilotAccessUntilUtc directly, so this needs
+    // no Stripe customer/subscription to exist at all. Always SETS the window (not additive) -
+    // granting again just replaces the end date, which is simpler to reason about than stacking.
+    private static async Task<IResult> GrantPilotAccessAsync(
+        Guid id,
+        GrantPilotAccessRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (request.Days < 1 || request.Days > 730)
+        {
+            return Results.BadRequest(new { error = "Days must be between 1 and 730." });
+        }
+
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == id, token);
+        if (tenant is null) return Results.NotFound();
+
+        var until = DateTime.UtcNow.AddDays(request.Days);
+        tenant.PilotAccessUntilUtc = until;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, id, accessor, "platform_grant_pilot_access", new { tenantId = id, request.Days, untilUtc = until }, token);
+
+        return Results.Ok(new { pilotAccessUntilUtc = until });
+    }
+
+    private static async Task<IResult> ClearPilotAccessAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == id, token);
+        if (tenant is null) return Results.NotFound();
+
+        tenant.PilotAccessUntilUtc = null;
+        await db.SaveChangesAsync(token);
+        await LogAuditAsync(db, id, accessor, "platform_clear_pilot_access", new { tenantId = id }, token);
+
         return Results.NoContent();
     }
 

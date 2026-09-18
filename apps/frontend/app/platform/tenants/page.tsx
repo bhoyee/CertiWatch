@@ -10,6 +10,7 @@ type Tenant = {
   plan?: string | null;
   subscriptionStatus?: string | null;
   currentPeriodEndUtc?: string | null;
+  pilotAccessUntilUtc?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   recordCount?: number;
@@ -87,6 +88,14 @@ export default function PlatformTenantsPage() {
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
                     {t.subscriptionStatus || "unknown"}
                   </span>
+                  {t.pilotAccessUntilUtc && new Date(t.pilotAccessUntilUtc).getTime() > Date.now() && (
+                    <span
+                      className="ml-1.5 rounded-full bg-indigo-100 px-2 py-1 text-xs font-medium text-indigo-700"
+                      title={`Pilot access until ${new Date(t.pilotAccessUntilUtc).toLocaleString()}`}
+                    >
+                      Pilot
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   {t.userCount ?? 0}
