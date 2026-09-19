@@ -49,11 +49,11 @@ services:
       Stripe__Plans__0__PlanId: starter
       Stripe__Plans__0__PriceId: ${Stripe__Plans__0__PriceId:-price_starter}
       Stripe__Plans__0__DisplayName: Starter
-      Stripe__Plans__0__RecordLimit: 50
+      Stripe__Plans__0__RecordLimit: 300
       Stripe__Plans__1__PlanId: growth
       Stripe__Plans__1__PriceId: ${Stripe__Plans__1__PriceId:-price_growth}
       Stripe__Plans__1__DisplayName: Growth
-      Stripe__Plans__1__RecordLimit: 500
+      Stripe__Plans__1__RecordLimit: 1500
       Stripe__Plans__2__PlanId: pro
       Stripe__Plans__2__PriceId: ${Stripe__Plans__2__PriceId:-price_pro}
       Stripe__Plans__2__DisplayName: Pro
