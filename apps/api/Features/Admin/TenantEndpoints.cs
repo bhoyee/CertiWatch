@@ -31,7 +31,10 @@ public static class TenantEndpoints
             return Results.NotFound();
         }
 
-        var recordCount = await db.Records.AsNoTracking().CountAsync(r => r.TenantId == tenantId, token);
+        // Distinct (staff, requirement) pairs, not raw record rows - matches what PlanLimits
+        // actually gates, so a home renewing existing certificates never sees this number climb
+        // toward the limit on its own; only a genuinely new person or requirement does.
+        var recordCount = await PlanLimits.GetTrackedItemCountAsync(db, tenantId, token);
         var deviceCount = await db.Devices.AsNoTracking().CountAsync(d => d.TenantId == tenantId, token);
         var sourceCount = await db.Sources.AsNoTracking().CountAsync(s => s.TenantId == tenantId, token);
 

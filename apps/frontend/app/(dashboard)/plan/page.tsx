@@ -24,30 +24,32 @@ type Invoice = {
   downloadUrl?: string;
 };
 
+// Every plan runs the same product (see PlanLimits.cs) - what actually differs is headcount and
+// support level, not invented per-plan capabilities.
 const catalog = [
   {
     id: "starter",
     name: "Starter",
     price: "$99/mo",
     summary: "For small teams getting off spreadsheets.",
-    limits: "50 records/month",
-    extras: ["Local folders", "30-day retention"]
+    limits: "Up to 15 staff",
+    extras: ["Local folders & cloud drives", "Standard support"]
   },
   {
     id: "growth",
     name: "Growth",
     price: "$249/mo",
     summary: "For growing orgs with cloud connectors.",
-    limits: "500 records/month",
-    extras: ["Google/OneDrive/Dropbox", "1-year retention"]
+    limits: "Up to 75 staff",
+    extras: ["Google Drive & OneDrive", "Standard support"]
   },
   {
     id: "pro",
     name: "Pro",
     price: "$499/mo",
     summary: "For ops teams that need everything.",
-    limits: "Unlimited records",
-    extras: ["Webhooks/API", "Priority support"]
+    limits: "Unlimited staff",
+    extras: ["Everything in Growth", "Priority support"]
   }
 ];
 
@@ -194,7 +196,7 @@ export default function PlanPage() {
                 {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} - Status: {subscriptionLabel}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <UsageCard label="Records" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
+                <UsageCard label="Certifications tracked" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
                 <UsageCard label="Devices" used={plan.deviceCount} limit="Included" percent={0} />
                 <UsageCard label="Sources" used={plan.sourceCount} limit="Included" percent={0} />
               </div>

@@ -159,11 +159,15 @@ const faqs = [
   }
 ];
 
-// The only thing that actually differs by plan on the backend is how many records count toward
-// your allowance (see PlanLimits.GetRecordLimitAsync) - there's no code-level gating on ingestion
-// channels, retention, or an API that doesn't exist. So the tiers are honest about that: same
-// platform on every plan, priced by how much you're tracking - not three different feature lists
-// invented to make three columns look different.
+// The only thing that actually differs by plan on the backend is how many staff certifications
+// count toward your allowance (see PlanLimits.GetActiveRecordIdsAsync) - there's no code-level
+// gating on ingestion channels, retention, or an API that doesn't exist. So the tiers are honest
+// about that: same platform on every plan, sized by how many people you're tracking - not three
+// different feature lists invented to make three columns look different. The allowance is a
+// standing total, not a monthly quota that resets - and renewing a certificate you already track
+// never counts against it, only a new staff member or a newly-tracked requirement does. It's sized
+// generously against the staff count so a full onboarding import (everyone's existing history at
+// once) fits comfortably inside the plan that actually matches your headcount.
 const sharedFeatures = [
   "Staff directory & live compliance matrix",
   "Local folder, Google Drive & OneDrive ingestion",
@@ -177,14 +181,14 @@ const plans = [
     name: "Starter",
     price: "$99",
     blurb: "For small teams tracking their first few renewal dates.",
-    limit: "50 records / month",
+    limit: "Up to 15 staff",
     support: "Standard support"
   },
   {
     name: "Growth",
     price: "$249",
     blurb: "For growing orgs juggling certs, licenses, and insurance.",
-    limit: "500 records / month",
+    limit: "Up to 75 staff",
     support: "Standard support",
     highlighted: true
   },
@@ -192,7 +196,7 @@ const plans = [
     name: "Pro",
     price: "$499",
     blurb: "For ops teams tracking everything that could lapse.",
-    limit: "Unlimited records",
+    limit: "Unlimited staff",
     support: "Priority support"
   }
 ];
@@ -418,11 +422,12 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">Pricing</p>
           <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            One platform, priced by how much you're tracking.
+            One platform, sized to your headcount.
           </h2>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#6B6A61]">
             Every plan below runs the exact same product — the compliance matrix, both cloud connectors, custom
-            rules, reminders, the lot. The only thing that changes is your monthly record allowance.
+            rules, reminders, the lot. The only thing that changes is how many staff you're tracking, and every
+            plan leaves generous headroom for onboarding a whole staff history at once.
           </p>
 
           {/* What's included everywhere - stated once so the three cards below aren't three

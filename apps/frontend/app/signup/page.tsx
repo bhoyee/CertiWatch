@@ -15,20 +15,24 @@ type Plan = {
   highlighted?: boolean;
 };
 
+// Every plan runs the exact same product - local folder + Google Drive/OneDrive ingestion, the
+// compliance matrix, custom requirement rules, reminders. There's no per-plan feature gating on
+// the backend (see PlanLimits.cs), so these lists describe what actually differs: headcount and
+// support level, not invented capabilities like retention windows or an API that doesn't exist.
 const plans: Plan[] = [
   {
     id: "starter",
     name: "Starter",
     price: "$99",
     description: "For small teams getting off spreadsheets.",
-    features: ["50 records / month", "Local folder ingestion", "30-day document retention"]
+    features: ["Up to 15 staff", "Local folder & cloud drive ingestion", "Standard support"]
   },
   {
     id: "growth",
     name: "Growth",
     price: "$249",
     description: "For growing orgs bringing cloud drives online.",
-    features: ["500 records / month", "Google Drive, OneDrive, Dropbox", "1-year document retention"],
+    features: ["Up to 75 staff", "Google Drive & OneDrive sync", "Standard support"],
     highlighted: true
   },
   {
@@ -36,7 +40,7 @@ const plans: Plan[] = [
     name: "Pro",
     price: "$499",
     description: "For ops teams that need it all wired in.",
-    features: ["Unlimited records", "Webhooks & API access", "Priority support"]
+    features: ["Unlimited staff", "Everything in Growth", "Priority support"]
   }
 ];
 
