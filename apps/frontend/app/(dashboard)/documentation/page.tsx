@@ -270,6 +270,13 @@ const sections: Section[] = [
           New files typically show up within about a minute of being added to the connected folder. Status goes from
           &ldquo;checking…&rdquo; to &ldquo;ok&rdquo; automatically - there's nothing to refresh manually.
         </p>
+        <p className="mt-3">
+          Unlike a local folder agent or upload link, CertiWatch never keeps a permanent copy of a Google Drive or
+          OneDrive file - it reads the file from your own Drive when it needs to (to run extraction, or when you
+          open it on the review screen or an export) and nothing is duplicated into our storage. If a file is later
+          moved, renamed, or deleted in your Drive, or access is revoked, opening it in CertiWatch will fail even
+          though the extracted record itself is unaffected.
+        </p>
       </>
     )
   },

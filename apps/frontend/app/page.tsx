@@ -87,7 +87,7 @@ const faqs = [
   {
     question: "Where are documents stored?",
     answer:
-      "Once a document is processed, we keep a secure archived copy — encrypted in transit and at rest — for the review screen, exports, and audits. Nothing is deleted from wherever you originally dropped it. Google Drive access is limited to the specific folder you choose, never your whole Drive; OneDrive uses read-only access."
+      "For Google Drive and OneDrive, we don't keep a copy at all — CertiWatch reads the file from your own Drive whenever it's needed (to run OCR, or when you open it on the review screen) and never duplicates it into our storage. Google Drive access is limited to the specific folder you choose, never your whole Drive; OneDrive uses read-only access. For documents that come from a local folder agent or a no-login upload link, we keep a secure archived copy — encrypted in transit and at rest — since there's no cloud original to read back from later; nothing is deleted from wherever you originally dropped it either way."
   },
   {
     question: "What documents does it actually read reliably?",

@@ -1,5 +1,6 @@
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Security;
+using CertiWatch.Api.Infrastructure.Services;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using CertiWatch.Storage;
@@ -58,11 +59,14 @@ public static class DocumentsEndpoints
         });
     }
 
+    private const string CloudReferencePrefix = "cloudref:";
+
     private static async Task<IResult> StreamAsync(
         Guid id,
         AppDbContext db,
         ITenantContextAccessor accessor,
         IFileStorage fileStorage,
+        ICloudDocumentFetcher cloudFetcher,
         HttpContext httpContext,
         CancellationToken token)
     {
@@ -84,7 +88,7 @@ public static class DocumentsEndpoints
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, token);
 
-        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl) || !await fileStorage.ExistsAsync(document.PathOrUrl, token))
+        if (document is null || string.IsNullOrWhiteSpace(document.PathOrUrl))
         {
             return Results.NotFound();
         }
@@ -101,7 +105,38 @@ public static class DocumentsEndpoints
             }
         }
 
-        var stream = await fileStorage.OpenReadAsync(document.PathOrUrl, token);
+        Stream stream;
+        // A live-proxied network stream from Drive/Graph doesn't support seeking the way a local
+        // disk or S3 stream does - range processing needs that, so it's only enabled for the
+        // archived-copy path.
+        var enableRangeProcessing = true;
+        if (document.PathOrUrl.StartsWith(CloudReferencePrefix, StringComparison.Ordinal))
+        {
+            // No permanent copy of this one was ever kept (see DocumentIngestionWorker.
+            // SetCloudReference) - fetch it live from Google Drive/OneDrive instead.
+            var cloudFileId = document.PathOrUrl[CloudReferencePrefix.Length..];
+            var result = await cloudFetcher.FetchAsync(tenantId, document.SourceId, cloudFileId, token);
+            if (result is null)
+            {
+                return Results.Problem(
+                    "This document could not be retrieved from Google Drive/OneDrive - it may have been moved, deleted, or access revoked.",
+                    statusCode: 502);
+            }
+            stream = result.Content;
+            enableRangeProcessing = false;
+            if (!string.IsNullOrWhiteSpace(result.ContentType))
+            {
+                contentType = result.ContentType;
+            }
+        }
+        else
+        {
+            if (!await fileStorage.ExistsAsync(document.PathOrUrl, token))
+            {
+                return Results.NotFound();
+            }
+            stream = await fileStorage.OpenReadAsync(document.PathOrUrl, token);
+        }
 
         // Force inline preview instead of attachment
         httpContext.Response.Headers["Content-Disposition"] =
@@ -110,7 +145,7 @@ public static class DocumentsEndpoints
         // Optional hardening
         httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
 
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        return Results.File(stream, contentType, enableRangeProcessing: enableRangeProcessing);
     }
 
     private static async Task<IResult> ReprocessAsync(

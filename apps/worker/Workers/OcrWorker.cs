@@ -302,7 +302,8 @@ public sealed class OcrWorker : BackgroundService
                         initialStatus,
                         DateTime.UtcNow,
                         _options.DocumentType,
-                        page.ExtractionConfidence);
+                        page.ExtractionConfidence,
+                        ResolveCloudFileId(file));
 
                     await PublishWithRetryAsync(payload, token);
                 }
@@ -967,6 +968,24 @@ public sealed class OcrWorker : BackgroundService
       }
     }
     return _options.SourceId;
+  }
+
+  // CloudImportWorker lays each file out as {CloudImportDownloadPath}/{sourceId}/{fileId}/{name} -
+  // the fileId gets its own path segment rather than a filename prefix specifically so it can be
+  // recovered here without mangling the display name read elsewhere off this same path. Returns
+  // null for anything else (local uploads have no cloud file to reference back to).
+  private string? ResolveCloudFileId(string path)
+  {
+    var cloudRoot = _options.CloudImportDownloadPath.Replace('\\', '/').TrimEnd('/');
+    var normalizedPath = path.Replace('\\', '/');
+    if (!normalizedPath.StartsWith(cloudRoot + "/", StringComparison.OrdinalIgnoreCase))
+    {
+      return null;
+    }
+
+    var relative = normalizedPath[(cloudRoot.Length + 1)..];
+    var segments = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
+    return segments.Length >= 3 ? segments[1] : null;
   }
 
   private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
