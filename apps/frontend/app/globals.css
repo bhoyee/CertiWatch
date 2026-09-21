@@ -39,3 +39,22 @@ body {
 .cw-badge {
   @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
 }
+
+/* Landing page "How it works" connectors - a small pulse travels along the line between each
+   step card, left-to-right (or top-to-bottom on mobile), so the sequence reads as a live
+   pipeline rather than four cards that happen to sit in a row. */
+@keyframes cw-pulse-x {
+  0% { transform: translateX(-4px); opacity: 0; }
+  18% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translateX(2.25rem); opacity: 0; }
+}
+@keyframes cw-pulse-y {
+  0% { transform: translateY(-4px); opacity: 0; }
+  18% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translateY(2.25rem); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-flow-dot { animation: none !important; opacity: 0.9; }
+}
