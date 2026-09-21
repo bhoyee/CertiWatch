@@ -153,25 +153,37 @@ const industries = [
   { name: "Facilities", classes: "bg-[#EAF0F5] text-[#2F5D82]" }
 ];
 
-// The compliance-report spotlight - a preview of the real /compliance screen using the same card
-// and colored-pill language as the rest of the app (the success/error tones already established
-// on /login and /signup are reused directly for "compliant"/"expired", with one new muted amber
-// added for "expiring").
+// The compliance-report spotlight - a preview of the real /compliance screen, built to match what
+// that screen (and its CSV/HTML export - see ComplianceEndpoints.cs) actually produce: one row per
+// (staff, requirement) pair, not a per-person summary, and the exact compliant/expiring/expired
+// segment colors the real generated report uses (#10b981/#f59e0b/#ef4444 in BuildReportHtml).
 type MatrixStatus = "compliant" | "expiring" | "expired";
 const matrixStatusStyles: Record<MatrixStatus, string> = {
   compliant: "bg-[#EDF5EF] text-[#1F6B45]",
   expiring: "bg-[#FBF3DC] text-[#92700E]",
   expired: "bg-[#FBECEA] text-[#B3432B]"
 };
+const matrixSegmentColors: Record<MatrixStatus, string> = {
+  compliant: "#10b981",
+  expiring: "#f59e0b",
+  expired: "#ef4444"
+};
 const matrixStatusLabels: Record<MatrixStatus, string> = {
   compliant: "Compliant",
   expiring: "Expiring",
   expired: "Expired"
 };
-const matrixRows: { name: string; role: string; status: MatrixStatus }[] = [
-  { name: "Jordan Diaz", role: "Senior Carer", status: "compliant" },
-  { name: "Sam Whitlock", role: "Carer", status: "expiring" },
-  { name: "Priya Nair", role: "Support Worker", status: "expired" }
+const matrixOverall: { status: MatrixStatus; pct: number }[] = [
+  { status: "compliant", pct: 82 },
+  { status: "expiring", pct: 11 },
+  { status: "expired", pct: 7 }
+];
+const matrixRows: { name: string; requirement: string; status: MatrixStatus; expiry: string }[] = [
+  { name: "Jordan Diaz", requirement: "First Aid at Work", status: "compliant", expiry: "12 Mar 2027" },
+  { name: "Jordan Diaz", requirement: "DBS Check", status: "compliant", expiry: "04 Aug 2026" },
+  { name: "Sam Whitlock", requirement: "Food Hygiene", status: "expiring", expiry: "03 Oct 2026" },
+  { name: "Priya Nair", requirement: "Manual Handling", status: "expired", expiry: "18 Jul 2026" },
+  { name: "Priya Nair", requirement: "Fire Safety", status: "compliant", expiry: "22 Jan 2027" }
 ];
 
 export default function LandingPage() {
@@ -301,26 +313,73 @@ export default function LandingPage() {
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-[#E5E0D2] bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
-                <p className="text-xs text-[#8A8A7E]">42 staff tracked · 91% compliant</p>
-              </div>
-              <span className="rounded-full bg-[#FBECEA] px-2.5 py-1 text-[11px] font-semibold text-[#B3432B]">2 need attention</span>
+          {/* Framed as an app window (dot chrome + fake address bar) rather than a bare card, so
+              it reads as a screenshot of running software instead of decorative UI art - and its
+              contents mirror the real export's shape: one row per (staff, requirement) pair, an
+              overall segmented bar, dated like an audit document. */}
+          <div className="overflow-hidden rounded-2xl border border-[#E5E0D2] bg-white shadow-lg shadow-black/5 transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+            <div className="flex items-center gap-1.5 border-b border-[#EFEAE0] bg-[#FAF8F3] px-4 py-2.5">
+              <span className="h-2 w-2 rounded-full bg-[#E7A97A]" />
+              <span className="h-2 w-2 rounded-full bg-[#E8C97A]" />
+              <span className="h-2 w-2 rounded-full bg-[#8FBBA2]" />
+              <span className="ml-2.5 truncate text-[11px] font-medium text-[#9B9A8E]">app.certiwatch.com/compliance</span>
             </div>
-            <div className="mt-5">
-              {matrixRows.map((row) => (
-                <div key={row.name} className="flex items-center justify-between border-t border-[#EFEAE0] py-3 first:border-t-0">
-                  <div>
-                    <p className="text-sm font-medium text-[#1B1B16]">{row.name}</p>
-                    <p className="text-xs text-[#8A8A7E]">{row.role}</p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${matrixStatusStyles[row.status]}`}>
-                    {matrixStatusLabels[row.status]}
-                  </span>
+
+            <div className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-[family-name:var(--font-display)] text-base font-medium text-[#1B1B16]">Hull House</p>
+                  <p className="text-xs text-[#8A8A7E]">Compliance register &middot; generated 21 Sep 2026</p>
                 </div>
-              ))}
+                <span className="shrink-0 rounded-md border border-[#E5E0D2] px-2.5 py-1.5 text-[11px] font-semibold text-[#4B4A42]">
+                  Export CSV
+                </span>
+              </div>
+
+              {/* Overall bar - same three-color split and legend pattern as the real generated
+                  report (BuildReportHtml's .overall-bar), not a chart invented just for marketing. */}
+              <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-[#F1EFE7]">
+                {matrixOverall.map((seg) => (
+                  <span key={seg.status} style={{ width: `${seg.pct}%`, backgroundColor: matrixSegmentColors[seg.status] }} />
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                {matrixOverall.map((seg) => (
+                  <span key={seg.status} className="flex items-center gap-1.5 text-[11px] text-[#8A8A7E]">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: matrixSegmentColors[seg.status] }} />
+                    {matrixStatusLabels[seg.status]} {seg.pct}%
+                  </span>
+                ))}
+              </div>
+
+              {/* Toolbar - decorative (this is a static preview, not a live search/filter) but
+                  named after the exact controls the real /compliance page has. */}
+              <div className="mt-4 flex items-center gap-2">
+                <span className="flex-1 rounded-md border border-[#E5E0D2] px-2.5 py-1.5 text-[11px] text-[#9B9A8E]">Search staff or requirement&hellip;</span>
+                <span className="rounded-md border border-[#E5E0D2] px-2.5 py-1.5 text-[11px] text-[#6B6A61]">All statuses ▾</span>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-lg border border-[#EFEAE0]">
+                <div className="grid grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr] gap-2 bg-[#FAF8F3] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#9B9A8E]">
+                  <span>Staff</span>
+                  <span>Requirement</span>
+                  <span>Status</span>
+                  <span>Expires</span>
+                </div>
+                {matrixRows.map((row, i) => (
+                  <div
+                    key={`${row.name}-${row.requirement}`}
+                    className={`grid grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr] items-center gap-2 px-3 py-2.5 text-[11px] ${i > 0 ? "border-t border-[#EFEAE0]" : ""}`}
+                  >
+                    <span className="truncate font-medium text-[#1B1B16]">{row.name}</span>
+                    <span className="truncate text-[#6B6A61]">{row.requirement}</span>
+                    <span className={`inline-flex w-fit rounded-full px-2 py-0.5 font-semibold ${matrixStatusStyles[row.status]}`}>
+                      {matrixStatusLabels[row.status]}
+                    </span>
+                    <span className="text-[#8A8A7E]">{row.expiry}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
