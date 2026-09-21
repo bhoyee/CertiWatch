@@ -256,9 +256,10 @@ const sections: Section[] = [
       <>
         <p>
           <strong>Sources</strong> connects a cloud folder directly - no secret keys or technical setup. Click
-          Connect Google Drive or Connect Microsoft OneDrive, sign in the normal way through Google/Microsoft's own
-          screen, and grant read-only access. You'll only ever be asked for a folder ID (found in that folder's own
-          web address) to tell CertiWatch which folder to watch.
+          Connect Google Drive or Connect Microsoft OneDrive and sign in the normal way through Google/Microsoft's
+          own screen. For Google Drive, you then pick the folder visually - CertiWatch only ever gets access to that
+          one folder, never your whole Drive. For OneDrive, you'll be asked for a folder ID (found in that folder's
+          own web address).
         </p>
         <p className="mt-3">
           Because this uses a real sign-in rather than a pasted key, you can revoke access at any time from your own

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchJson, patchJson, deleteJson, postJson, apiUrl } from "../../../lib/api";
+import { isGooglePickerConfigured, pickGoogleDriveFolder } from "../../../lib/googlePicker";
 
 type SourceDto = {
   id: string;
@@ -43,6 +44,7 @@ function SourcesPageInner() {
   const [editingFolder, setEditingFolder] = useState<Record<string, boolean>>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState<SourceDto | null>(null);
   const [savingShared, setSavingShared] = useState<Record<string, boolean>>({});
+  const [pickingFolder, setPickingFolder] = useState<Record<string, boolean>>({});
 
   const load = (silent = false) => {
     fetchJson<SourceDto[]>("/api/sources")
@@ -124,6 +126,21 @@ function SourcesPageInner() {
       setBanner({ tone: "error", text: err?.message ?? "Failed to save folder" });
     } finally {
       setSavingFolder((s) => ({ ...s, [id]: false }));
+    }
+  };
+
+  const chooseFolderViaPicker = async (id: string) => {
+    setPickingFolder((s) => ({ ...s, [id]: true }));
+    try {
+      const picked = await pickGoogleDriveFolder();
+      if (!picked) return;
+      await patchJson(`/api/sources/${id}`, { folderId: picked.id, folderLabel: picked.name });
+      await load();
+      setEditingFolder((e) => ({ ...e, [id]: false }));
+    } catch (err: any) {
+      setBanner({ tone: "error", text: err?.message ?? "Failed to open the Google Drive picker" });
+    } finally {
+      setPickingFolder((s) => ({ ...s, [id]: false }));
     }
   };
 
@@ -214,18 +231,36 @@ function SourcesPageInner() {
                       </Cell>
                       <Cell>
                         {folderId && !editingFolder[s.id] ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-slate-700">{folderLabel || folderId}</span>
-                            <button
-                              onClick={() => {
-                                setFolderDrafts((d) => ({ ...d, [s.id]: folderId }));
-                                setEditingFolder((e) => ({ ...e, [s.id]: true }));
-                              }}
-                              className="text-xs font-semibold text-blue-600 underline hover:text-blue-700"
-                            >
-                              Change
-                            </button>
+                            {provider === "gdrive" && isGooglePickerConfigured() ? (
+                              <button
+                                onClick={() => chooseFolderViaPicker(s.id)}
+                                disabled={pickingFolder[s.id]}
+                                className="text-xs font-semibold text-blue-600 underline hover:text-blue-700 disabled:opacity-50"
+                              >
+                                {pickingFolder[s.id] ? "Opening..." : "Change"}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setFolderDrafts((d) => ({ ...d, [s.id]: folderId }));
+                                  setEditingFolder((e) => ({ ...e, [s.id]: true }));
+                                }}
+                                className="text-xs font-semibold text-blue-600 underline hover:text-blue-700"
+                              >
+                                Change
+                              </button>
+                            )}
                           </div>
+                        ) : provider === "gdrive" && isGooglePickerConfigured() ? (
+                          <button
+                            onClick={() => chooseFolderViaPicker(s.id)}
+                            disabled={pickingFolder[s.id]}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {pickingFolder[s.id] ? "Opening..." : "Choose folder"}
+                          </button>
                         ) : (
                           <div className="flex items-center gap-2">
                             <input
@@ -306,10 +341,17 @@ function SourcesPageInner() {
 
         <div className="mt-6 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
           <p className="font-semibold text-slate-600">Where do I find a folder ID?</p>
-          <p className="mt-1">
-            Google Drive: open the folder in your browser - the ID is the last part of the address, after{" "}
-            <code>folders/</code>.
-          </p>
+          {isGooglePickerConfigured() ? (
+            <p className="mt-1">
+              Google Drive: click &ldquo;Choose folder&rdquo; and pick it visually - CertiWatch only ever gets
+              access to the folder you select, never your whole Drive.
+            </p>
+          ) : (
+            <p className="mt-1">
+              Google Drive: open the folder in your browser - the ID is the last part of the address, after{" "}
+              <code>folders/</code>.
+            </p>
+          )}
           <p className="mt-1">
             OneDrive: open the folder, click Details, and copy the ID shown there (or use the &ldquo;Embed&rdquo;
             link, which contains it).

@@ -13,14 +13,24 @@ namespace CertiWatch.Api.Features.Sources;
 
 // Google Drive and Microsoft OneDrive connect through real OAuth instead of the tenant pasting a
 // static secret key into a form (see the removed S3/GCS/Azure/Dropbox/WebDAV providers) - the
-// tenant's admin is redirected to Google/Microsoft's own consent screen, grants read-only access,
-// and we only ever receive a scoped, revocable token back. Neither provider can be connected by
-// posting to /api/sources directly; a Source for either only ever comes from finishing this flow.
+// tenant's admin is redirected to Google/Microsoft's own consent screen, grants access, and we
+// only ever receive a scoped, revocable token back. Neither provider can be connected by posting
+// to /api/sources directly; a Source for either only ever comes from finishing this flow.
+//
+// The Google scope is deliberately drive.file, not drive.readonly. drive.readonly is one of
+// Google's "restricted" scopes - publishing an app that requests it past the 100-test-user cap
+// requires an annual third-party CASA security assessment (paid, typically weeks, often
+// four-figures - a real blocker for a bootstrapped app). drive.file only ever grants access to
+// items the user explicitly picks (via the Google Picker on the frontend - see sources/page.tsx),
+// never blanket access to their whole Drive. That's not a restricted scope, so verification to
+// leave testing mode is Google's own review only - free, and no security assessment. It's also a
+// better privacy story for a compliance product: "only the folder you chose", not "everything in
+// your Drive".
 public static class SourceOAuthEndpoints
 {
     private const string GoogleStateCookie = "oauth_state_google";
     private const string MicrosoftStateCookie = "oauth_state_microsoft";
-    private static readonly string[] GoogleScopes = ["https://www.googleapis.com/auth/drive.readonly"];
+    private static readonly string[] GoogleScopes = ["https://www.googleapis.com/auth/drive.file"];
     private const string MicrosoftScope = "Files.Read.All offline_access";
 
     // One shared static client for these infrequent token-exchange calls - same reasoning as
