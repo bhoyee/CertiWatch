@@ -223,7 +223,14 @@ public sealed class DocumentIngestionWorker : BackgroundService
                         CreatedAt = docEvent.DetectedAt
                     };
                     db.Documents.Add(document);
-                    await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                    if (!string.IsNullOrWhiteSpace(docEvent.CloudFileId))
+                    {
+                        SetCloudReference(document, docEvent.CloudFileId);
+                    }
+                    else
+                    {
+                        await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                    }
 
                     var record = new Record
                     {
@@ -268,7 +275,14 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     // pass over a file the queue already saw once) carries identical bytes - if the
                     // first pass already archived them, leave PathOrUrl pointing at that archived
                     // key instead of clobbering it back to the raw local staging path.
-                    await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                    if (!string.IsNullOrWhiteSpace(docEvent.CloudFileId))
+                    {
+                        SetCloudReference(document, docEvent.CloudFileId);
+                    }
+                    else
+                    {
+                        await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                    }
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
                     document.ProcessingStatus = processingStatus; // Use updated status
@@ -436,6 +450,15 @@ public sealed class DocumentIngestionWorker : BackgroundService
     // "still just the raw local staging path the OCR watcher found it at".
     private static bool IsArchived(Document document) =>
         document.PathOrUrl.StartsWith($"{document.TenantId}/documents/", StringComparison.Ordinal);
+
+    // Set instead of ArchiveDocumentIfNeededAsync for a Google Drive/OneDrive-sourced document -
+    // CloudDocumentFetcher (Features/Documents) recognizes this prefix and fetches the bytes live
+    // from the source on demand, rather than a permanent copy ever landing in IFileStorage. The
+    // local staging copy OcrWorker downloaded is left for the ingestion queue's usual delayed
+    // cleanup (the hash-status check, same as every other file) - nothing here needs it kept any
+    // longer than that.
+    private static void SetCloudReference(Document document, string cloudFileId) =>
+        document.PathOrUrl = $"cloudref:{cloudFileId}";
 
     // Best-effort: archiving is a durability upgrade on top of ingestion that already succeeded
     // (the Document/Record rows are saved either way), not a precondition for it - if IFileStorage

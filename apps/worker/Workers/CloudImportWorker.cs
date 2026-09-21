@@ -201,7 +201,7 @@ public sealed class CloudImportWorker : BackgroundService
                 var keyId = $"{source.Id}:{file.id}";
                 if (!_seenKeys.TryAdd(keyId, 0)) continue;
 
-                var destPath = GetDestinationPath(source.Id, file.name);
+                var destPath = GetDestinationPath(source.Id, file.id, file.name);
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
 
                 _logger.LogInformation("Downloading Google Drive file {Name} to {Dest}", file.name, destPath);
@@ -299,12 +299,13 @@ public sealed class CloudImportWorker : BackgroundService
                 // facet in Graph's response, which is how we tell the two apart.
                 if (item.file is null) continue;
                 if (string.IsNullOrWhiteSpace(item.name) || string.IsNullOrWhiteSpace(item.downloadUrl)) continue;
+                if (string.IsNullOrWhiteSpace(item.id)) continue;
                 if (!IsSupportedExtension(item.name)) continue;
 
                 var keyId = $"{source.Id}:{item.id}";
                 if (!_seenKeys.TryAdd(keyId, 0)) continue;
 
-                var destPath = GetDestinationPath(source.Id, item.name);
+                var destPath = GetDestinationPath(source.Id, item.id, item.name);
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
 
                 _logger.LogInformation("Downloading OneDrive file {Name} to {Dest}", item.name, destPath);
@@ -325,10 +326,15 @@ public sealed class CloudImportWorker : BackgroundService
         return SyncResult.Ok();
     }
 
-    private string GetDestinationPath(Guid sourceId, string fileName)
+    // The provider's file id gets its own path segment (not a filename prefix) so
+    // OcrWorker.ResolveCloudFileId can recover it later, and so the file's display name - read
+    // straight off this path elsewhere in the pipeline - stays exactly what it was in Drive/
+    // OneDrive, with no id text to strip back out.
+    private string GetDestinationPath(Guid sourceId, string fileId, string fileName)
     {
         var safeName = fileName.Replace("..", string.Empty).Replace('/', '_').Replace('\\', '_');
-        return Path.Combine(_options.CloudImportDownloadPath, sourceId.ToString(), safeName);
+        var safeFileId = fileId.Replace("..", string.Empty).Replace('/', '_').Replace('\\', '_');
+        return Path.Combine(_options.CloudImportDownloadPath, sourceId.ToString(), safeFileId, safeName);
     }
 
     private static bool IsSupportedExtension(string path)
