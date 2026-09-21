@@ -18,14 +18,6 @@ const GRID_TEXTURE = {
 };
 
 type IconProps = { className?: string };
-function IconGrid({ className = "h-4 w-4" }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
-      <rect x="4" y="4" width="16" height="16" rx="1.5" />
-      <path d="M4 10h16M4 16h16M10 4v16M16 4v16" />
-    </svg>
-  );
-}
 function IconBell({ className = "h-4 w-4" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
@@ -39,16 +31,6 @@ function IconInbox({ className = "h-4 w-4" }: IconProps) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
       <path d="M4 13.5h4.6l1.3 2h4.2l1.3-2H20" strokeLinejoin="round" />
       <path d="M5.4 13.5 7 6h10l1.6 7.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconSliders({ className = "h-4 w-4" }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
-      <path d="M4 7h8M16 7h4M4 12h3M11 12h9M4 17h8M16 17h4" strokeLinecap="round" />
-      <circle cx="13" cy="7" r="1.7" fill="currentColor" stroke="none" />
-      <circle cx="7" cy="12" r="1.7" fill="currentColor" stroke="none" />
-      <circle cx="13" cy="17" r="1.7" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -96,41 +78,6 @@ const steps = [
   }
 ];
 
-const features = [
-  {
-    icon: IconGrid,
-    title: "A live compliance matrix, not a spreadsheet",
-    description:
-      "Every active staff member against every requirement, recalculated the moment anything changes. Filter to who's expiring, export a CSV, or print an audit-ready report in one click."
-  },
-  {
-    icon: IconInbox,
-    title: "One inbox for every certificate and licence",
-    description:
-      "A watched folder, Google Drive, OneDrive, or a no-login upload link you send to anyone — it all lands in the same review queue."
-  },
-  {
-    icon: IconSliders,
-    title: "A rule engine that knows your exceptions",
-    description: "Global defaults per document type, overridden per tenant — not a flat 12-month guess for something that genuinely varies."
-  },
-  {
-    icon: IconCheckShield,
-    title: "Nothing goes in unreviewed",
-    description: "Low-confidence extractions land in a review queue instead of being silently accepted or dropped."
-  },
-  {
-    icon: IconBell,
-    title: "Reminders that actually fire",
-    description: "A weekly digest plus expiry alerts, sent before the renewal window closes — not after."
-  },
-  {
-    icon: IconLock,
-    title: "Access scoped to the job",
-    description: "Admins see everything, managers see their team, viewers see their own record — set once, enforced everywhere."
-  }
-];
-
 const faqs = [
   {
     question: "How does onboarding work?",
@@ -141,11 +88,6 @@ const faqs = [
     question: "Where are documents stored?",
     answer:
       "Once a document is processed, we keep a secure archived copy — encrypted in transit and at rest — for the review screen, exports, and audits. Nothing is deleted from wherever you originally dropped it. Cloud connectors (Google Drive, Microsoft OneDrive) use read-only access."
-  },
-  {
-    question: "Can I change rules later?",
-    answer:
-      "Yes. Set global defaults per document type, then override per tenant. Compliance status is calculated fresh every time the matrix loads, so a rule change applies to every existing record immediately — no reprocessing to wait on."
   },
   {
     question: "What documents does it actually read reliably?",
@@ -305,36 +247,19 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Trust strip */}
+      {/* Trust strip - who it's for, plus the two capabilities that aren't already shown
+          concretely elsewhere (the How-it-works steps and the matrix spotlight below cover
+          ingestion/review/reminders on their own; custom rules and role-scoped access don't get
+          a visual anywhere else, so they're named here instead of earning a whole card each). */}
       <section className="border-b border-[#E5E0D2] bg-white py-6">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 text-center md:flex-row md:justify-between md:text-left">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-6 text-center md:flex-row md:justify-between md:text-left">
           <p className="text-sm font-medium text-[#6B6A61]">Built for teams that can't afford to guess</p>
           <p className="text-sm font-medium text-[#1B1B16]">{industries.join("   ·   ")}</p>
         </div>
-      </section>
-
-      {/* Features - the same rounded-2xl bordered white card already used for the signup plan
-          picker, with a small icon-in-circle instead of a plan's radio dot. */}
-      <section id="features" className="py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1F6B45]">What you get</p>
-          <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-3xl font-medium text-[#1B1B16] md:text-4xl">
-            Everything between a scanned document and a peaceful audit.
-          </h2>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map(({ icon: Icon, title, description }) => (
-              <div
-                key={title}
-                className="group rounded-2xl border border-[#E5E0D2] bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-[#1F6B45]/40 hover:shadow-lg hover:shadow-black/5"
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EDF2EC] text-[#1F6B45] transition group-hover:bg-[#1F6B45] group-hover:text-white">
-                  <Icon />
-                </span>
-                <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-medium text-[#1B1B16]">{title}</h3>
-                <p className="mt-2 text-[15px] leading-relaxed text-[#6B6A61]">{description}</p>
-              </div>
-            ))}
-          </div>
+        <div className="mx-auto mt-3 max-w-6xl px-6 text-center md:text-left">
+          <p className="text-xs text-[#8A8A7E]">
+            Custom rules per document type &nbsp;·&nbsp; role-scoped access for admins, managers &amp; viewers
+          </p>
         </div>
       </section>
 
