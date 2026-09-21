@@ -143,7 +143,15 @@ const plans = [
   }
 ];
 
-const industries = ["Care homes", "Construction", "Hospitality", "Facilities"];
+// Distinct hues per sector rather than one flat color - deliberately not reusing the
+// compliant/expiring/expired greens-and-reds from the matrix spotlight below, so a badge here
+// never reads as a status. Kept muted/pastel to match the page's warm paper palette.
+const industries = [
+  { name: "Care homes", classes: "bg-[#EDF5EF] text-[#1F6B45]" },
+  { name: "Construction", classes: "bg-[#FBEEE3] text-[#A15A2A]" },
+  { name: "Hospitality", classes: "bg-[#F5EAF0] text-[#8A3E63]" },
+  { name: "Facilities", classes: "bg-[#EAF0F5] text-[#2F5D82]" }
+];
 
 // The compliance-report spotlight - a preview of the real /compliance screen using the same card
 // and colored-pill language as the rest of the app (the success/error tones already established
@@ -252,9 +260,15 @@ export default function LandingPage() {
           ingestion/review/reminders on their own; custom rules and role-scoped access don't get
           a visual anywhere else, so they're named here instead of earning a whole card each). */}
       <section className="border-b border-[#E5E0D2] bg-white py-6">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-6 text-center md:flex-row md:justify-between md:text-left">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 text-center md:flex-row md:justify-between md:text-left">
           <p className="text-sm font-medium text-[#6B6A61]">Built for teams that can't afford to guess</p>
-          <p className="text-sm font-medium text-[#1B1B16]">{industries.join("   ·   ")}</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
+            {industries.map((industry) => (
+              <span key={industry.name} className={`rounded-full px-3 py-1 text-xs font-semibold ${industry.classes}`}>
+                {industry.name}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="mx-auto mt-3 max-w-6xl px-6 text-center md:text-left">
           <p className="text-xs text-[#8A8A7E]">
@@ -321,22 +335,38 @@ export default function LandingPage() {
             From a scanned document to a peaceful audit.
           </h2>
 
-          <div className="mt-12 rounded-3xl border border-[#E5E0D2] bg-white p-8 shadow-sm md:p-12">
-            <div className="grid gap-12 md:grid-cols-4 md:gap-8">
-              {steps.map((step, i) => (
-                <div key={step.title} className="relative">
-                  {i < steps.length - 1 && (
-                    <div className="pointer-events-none absolute left-7 top-7 hidden h-px w-full bg-gradient-to-r from-[#1F6B45]/30 to-transparent md:block" />
-                  )}
-                  <span className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-[#1F6B45] text-white shadow-md shadow-[#1F6B45]/25">
-                    <step.icon className="h-6 w-6" />
+          {/* Four independent cards, not one shared panel - each step stands on its own, and the
+              connector between them carries a small animated pulse (a plain CSS keyframe, see
+              globals.css) so the sequence reads as a live pipeline rather than a static diagram. */}
+          <div className="mt-12 flex flex-col md:flex-row md:items-stretch">
+            {steps.map((step, i) => (
+              <div key={step.title} className="flex flex-1 flex-col md:flex-row md:items-stretch">
+                <div className="flex-1 rounded-2xl border border-[#E5E0D2] bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#1F6B45]/40 hover:shadow-lg hover:shadow-black/5">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1F6B45] text-white shadow-md shadow-[#1F6B45]/25">
+                    <step.icon className="h-5 w-5" />
                   </span>
-                  <p className="mt-5 font-[family-name:var(--font-display)] text-sm italic text-[#1F6B45]">{step.eyebrow}</p>
+                  <p className="mt-4 font-[family-name:var(--font-display)] text-sm italic text-[#1F6B45]">{step.eyebrow}</p>
                   <h3 className="mt-1 font-[family-name:var(--font-display)] text-lg font-medium text-[#1B1B16]">{step.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-[#6B6A61]">{step.description}</p>
                 </div>
-              ))}
-            </div>
+
+                {i < steps.length - 1 && (
+                  <div className="relative flex h-8 w-full items-center justify-center md:h-auto md:w-8 md:flex-col">
+                    <span className="h-full w-px bg-[#E5E0D2] md:h-px md:w-full" />
+                    <span
+                      aria-hidden="true"
+                      className="cw-flow-dot absolute h-2 w-2 rounded-full bg-[#4E9C74] shadow-[0_0_6px_rgba(78,156,116,0.8)] md:hidden"
+                      style={{ animation: `cw-pulse-y 2.2s ease-in-out ${i * 0.5}s infinite` }}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="cw-flow-dot absolute hidden h-2 w-2 rounded-full bg-[#4E9C74] shadow-[0_0_6px_rgba(78,156,116,0.8)] md:block"
+                      style={{ animation: `cw-pulse-x 2.2s ease-in-out ${i * 0.5}s infinite` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </section>
