@@ -166,12 +166,19 @@ services:
         # Use host-exposed API so browser calls succeed
         NEXT_PUBLIC_API_BASE_URL: http://localhost:5002
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
+        # Both blank by default - the Google Drive folder picker (sources/page.tsx) falls back to
+        # the manual "paste a folder ID" input when these aren't set, so local dev works with no
+        # Google Cloud project of its own.
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        NEXT_PUBLIC_GOOGLE_PICKER_API_KEY: ${NEXT_PUBLIC_GOOGLE_PICKER_API_KEY:-}
     depends_on:
       - api
       - worker
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:5002
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_xxx}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+      NEXT_PUBLIC_GOOGLE_PICKER_API_KEY: ${NEXT_PUBLIC_GOOGLE_PICKER_API_KEY:-}
     ports:
       - "3300:3000"
     volumes:

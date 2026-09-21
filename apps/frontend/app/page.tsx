@@ -87,7 +87,7 @@ const faqs = [
   {
     question: "Where are documents stored?",
     answer:
-      "Once a document is processed, we keep a secure archived copy — encrypted in transit and at rest — for the review screen, exports, and audits. Nothing is deleted from wherever you originally dropped it. Cloud connectors (Google Drive, Microsoft OneDrive) use read-only access."
+      "Once a document is processed, we keep a secure archived copy — encrypted in transit and at rest — for the review screen, exports, and audits. Nothing is deleted from wherever you originally dropped it. Google Drive access is limited to the specific folder you choose, never your whole Drive; OneDrive uses read-only access."
   },
   {
     question: "What documents does it actually read reliably?",
