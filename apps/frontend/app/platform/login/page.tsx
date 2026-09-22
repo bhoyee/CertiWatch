@@ -61,11 +61,48 @@ export default function PlatformLoginPage() {
             {status === "loading" ? "Sending..." : "Send magic link"}
           </button>
         </form>
-        {status === "sent" && (
-          <p className="mt-4 text-sm text-green-600">Sent! Check your inbox for the platform link.</p>
-        )}
         {status === "error" && <p className="mt-4 text-sm text-red-600">{error}</p>}
       </div>
+
+      {/* Sent confirmation - a centered modal instead of a small inline line, so it's obvious
+          nothing failed and an email (not an in-app redirect) is what happens next. */}
+      {status === "sent" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setStatus("idle")}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="platform-magic-link-sent-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-9 w-9">
+                <rect x="3" y="5.5" width="18" height="13" rx="2" />
+                <path d="m4 7 8 6 8-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <h3 id="platform-magic-link-sent-title" className="mt-5 text-2xl font-semibold text-slate-900">
+              Check your inbox
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              We sent a platform sign-in link to <strong>{email}</strong>. Open that email and click the link — that
+              logs you in, no password needed.
+            </p>
+            <p className="mt-3 rounded-md bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-600">
+              Don&apos;t see it? Check your spam or junk folder — it can take a minute to arrive.
+            </p>
+            <button
+              onClick={() => setStatus("idle")}
+              className="mt-6 w-full rounded-md bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
