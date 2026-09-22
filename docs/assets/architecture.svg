@@ -69,7 +69,7 @@
   <text class="box-line" x="58" y="250">Local agent — folder watch</text>
   <text class="box-line" x="58" y="268">Magic-link upload — staff, no login</text>
   <text class="box-line" x="58" y="286">Bulk upload — admin</text>
-  <text class="box-line" x="58" y="304">Cloud sources — Drive / OneDrive / Dropbox</text>
+  <text class="box-line" x="58" y="304">Cloud sources — Google Drive / OneDrive</text>
 
   <!-- B API -->
   <rect class="box-core" x="330" y="60" width="230" height="230" rx="8" />
@@ -83,10 +83,10 @@
   <!-- C Worker -->
   <rect class="box-core" x="620" y="90" width="230" height="170" rx="8" />
   <text class="box-title" x="638" y="116">Worker — .NET 8</text>
-  <text class="box-line" x="638" y="142">OCR call — Tesseract, or docTR /</text>
-  <text class="box-line" x="638" y="158">PaddleOCR sidecar</text>
-  <text class="box-line" x="638" y="182">Parsing pipeline</text>
-  <text class="box-line" x="638" y="204">Rule engine — tenant + global rules</text>
+  <text class="box-line" x="638" y="142">OCR — docTR / OCR.space /</text>
+  <text class="box-line" x="638" y="158">Tesseract, then DeepSeek extract</text>
+  <text class="box-line" x="638" y="182">Rule engine — tenant + global rules</text>
+  <text class="box-line" x="638" y="204">Drive / OneDrive polling sync</text>
 
   <!-- D1 Postgres -->
   <rect class="box-data" x="910" y="60" width="230" height="90" rx="8" />
@@ -96,7 +96,7 @@
   <!-- D2 Redis -->
   <rect class="box-data" x="910" y="200" width="230" height="90" rx="8" />
   <text class="box-title" x="928" y="226">Redis</text>
-  <text class="box-line" x="928" y="252">Cache / queue support (provisioned)</text>
+  <text class="box-line" x="928" y="252">Ingestion queue (Redis Stream)</text>
 
   <!-- E1 Stripe -->
   <rect class="box-ext" x="320" y="400" width="150" height="80" rx="8" />
