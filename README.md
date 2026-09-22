@@ -1,8 +1,10 @@
 # CertiWatch
 
-**CertiWatch stops a business from finding out a staff certificate has expired only after an inspector, auditor, or client asks for it.**
+**CertiWatch is a multi-tenant SaaS platform that stops a business from finding out a staff certificate has expired only after an inspector, auditor, or client asks for it.**
 
 It's built for organizations that are legally or contractually required to keep every member of staff currently certified in things like First Aid, Fire Safety, Manual Handling, Safeguarding, or a DBS check — care homes, construction firms, and hospitality businesses being the typical case. Today, most of them track this in a spreadsheet someone has to remember to update. CertiWatch replaces that spreadsheet: point it at wherever your certificates already land, and it reads them, tracks who's covered for what, and tells you before something lapses — not after.
+
+As a SaaS product, every tenant (a care home, a construction firm, whoever signs up) gets its own isolated data and its own subscription, self-served through Stripe Checkout with a 7-day trial — there's no per-customer deployment or manual setup. A separate superadmin console (`/platform`) lets CertiWatch's own operators manage every tenant, billing, and support ticket from one place.
 
 ## What it actually does, in plain terms
 
@@ -11,6 +13,19 @@ It's built for organizations that are legally or contractually required to keep 
 3. **It works out when it actually expires.** A rule engine resolves the real validity period for that course — tenant-specific overrides take precedence over sane global defaults — rather than guessing. Anything it isn't confident about lands in a review queue for a human to check, instead of being silently accepted or dropped.
 4. **You see it on one screen.** A live compliance matrix shows every active staff member against every requirement your organization tracks — compliant, expiring soon, or expired — searchable, filterable, and exportable as a CSV or a print-ready audit report.
 5. **It reminds people before it's a problem.** A weekly digest plus configurable expiry reminders go out by email, timed to actually give someone time to act.
+
+## Screenshots
+
+The marketing site and auth screens (public, no login needed to view):
+
+| Landing page | Sign up | Log in |
+|---|---|---|
+| [![Landing page](docs/assets/screenshots/landing.png)](docs/assets/screenshots/landing.png) | [![Signup page](docs/assets/screenshots/signup.png)](docs/assets/screenshots/signup.png) | [![Login page](docs/assets/screenshots/login.png)](docs/assets/screenshots/login.png) |
+
+The tenant dashboard (compliance matrix, records, review queue, sources) and the `/platform`
+superadmin console both sit behind a real login with no password — a magic link sent by real
+email, since this project doesn't have a fabricated dev-login bypass. Screenshots of those aren't
+included here for that reason; run the app yourself (see Quickstart below) to see them.
 
 ## How ingestion actually works (the part that's easy to get wrong)
 
@@ -101,9 +116,6 @@ scripts/migrate.sh
 # optional sample data
 # scripts/seed.sh
 
-# run backend tests
-dotnet test
-
 # frontend dev server
 cd apps/frontend
 npm install
@@ -111,6 +123,22 @@ npm run dev
 ```
 
 See `docs/setup.md` for environment prep, `docs/api.md` for endpoint contracts, `docs/agent-install.md` for packaging/installing the local agent, and `docs/onboarding.md` for the billing/onboarding sequence.
+
+## Testing
+
+The same three commands CI runs on every push to `main` (`.github/workflows/ci.yml`):
+
+```bash
+# .NET - api, worker, agent, and the shared contracts/storage/parsing packages
+dotnet test
+
+# frontend unit tests
+cd apps/frontend
+npm run test
+
+# end-to-end (builds the frontend first, then drives it with a real browser)
+npm run test:e2e
+```
 
 ## Docker quickstart
 
