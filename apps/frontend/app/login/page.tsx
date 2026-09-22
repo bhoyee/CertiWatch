@@ -32,6 +32,15 @@ function IconDevice() {
   );
 }
 
+function IconMailBig() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-9 w-9">
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="m4 7 8 6 8-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const trustPoints = [
   { icon: IconShield, text: "No password to leak — every login is a fresh, signed link." },
   { icon: IconClock, text: "Links expire in minutes. Sessions can too, once you close the tab." },
@@ -186,14 +195,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {status === "sent" && (
-            <div className="mt-5 flex items-start gap-2.5 rounded-md border border-[#CFE3D6] bg-[#EDF5EF] px-3.5 py-3 text-sm text-[#1F6B45]">
-              <span className="mt-0.5">✓</span>
-              <span>
-                Sent! Check your inbox{fallbackEmail ? ` (and ${fallbackEmail})` : ""}.
-              </span>
-            </div>
-          )}
           {status === "error" && (
             <div className="mt-5 rounded-md border border-[#F0C9C3] bg-[#FBECEA] px-3.5 py-3 text-sm text-[#B3432B]">
               {error}
@@ -208,6 +209,49 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+
+      {/* Sent confirmation - a centered modal instead of a small inline banner, since this is
+          the one moment someone used to typing a password and getting straight into the app
+          needs it spelled out plainly: nothing failed, an email is coming, click the link in it. */}
+      {status === "sent" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setStatus("idle")}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="magic-link-sent-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#EDF5EF] text-[#1F6B45]">
+              <IconMailBig />
+            </span>
+            <h3 id="magic-link-sent-title" className="mt-5 font-[family-name:var(--font-display)] text-2xl font-semibold text-[#1B1B16]">
+              Check your inbox
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-[#4B4A42]">
+              We sent a sign-in link to <strong>{email}</strong>
+              {fallbackEmail ? (
+                <>
+                  {" "}and <strong>{fallbackEmail}</strong>
+                </>
+              ) : null}
+              . Open that email and click the link — that logs you in, no password needed.
+            </p>
+            <p className="mt-3 rounded-md bg-[#FAF7F0] px-3 py-2.5 text-sm font-medium text-[#6B6A61]">
+              Don&apos;t see it? Check your spam or junk folder — it can take a minute to arrive.
+            </p>
+            <button
+              onClick={() => setStatus("idle")}
+              className="mt-6 w-full rounded-md bg-[#1F6B45] py-2.5 text-sm font-semibold text-white transition hover:bg-[#195939]"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
