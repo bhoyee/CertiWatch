@@ -46,6 +46,11 @@ const sections: Section[] = [
           take anywhere from a few seconds to a couple of minutes depending on the file and how many pages it has -
           there's no need to re-upload or refresh; it updates on its own once extraction finishes.
         </p>
+        <p className="mt-3">
+          If a Google Drive or OneDrive folder is connected (see Sources below), files from the Upload page and
+          staff upload links are saved straight into that folder instead of CertiWatch&apos;s own storage - see the
+          Sources section for how that's chosen when both are connected.
+        </p>
       </>
     )
   },
@@ -271,11 +276,18 @@ const sections: Section[] = [
           &ldquo;checking…&rdquo; to &ldquo;ok&rdquo; automatically - there's nothing to refresh manually.
         </p>
         <p className="mt-3">
-          Unlike a local folder agent or upload link, CertiWatch never keeps a permanent copy of a Google Drive or
-          OneDrive file - it reads the file from your own Drive when it needs to (to run extraction, or when you
-          open it on the review screen or an export) and nothing is duplicated into our storage. If a file is later
-          moved, renamed, or deleted in your Drive, or access is revoked, opening it in CertiWatch will fail even
-          though the extracted record itself is unaffected.
+          Unlike a local folder agent, CertiWatch never keeps a permanent copy of a file that came from a watched
+          Google Drive or OneDrive folder - it reads the file from your own Drive when it needs to (to run
+          extraction, or when you open it on the review screen or an export) and nothing is duplicated into our
+          storage. If a file is later moved, renamed, or deleted in your Drive, or access is revoked, opening it in
+          CertiWatch will fail even though the extracted record itself is unaffected.
+        </p>
+        <p className="mt-3">
+          Once a Drive or OneDrive folder is connected, a staff upload link or the Upload page saves new files
+          straight into that folder too, instead of CertiWatch&apos;s own storage - same reasoning as above, just in
+          the other direction. If both are connected, Google Drive is used by default; the &ldquo;Where should
+          direct uploads go?&rdquo; control on the Sources page lets an admin choose OneDrive instead. With neither
+          connected, those files are archived on our own storage as before.
         </p>
       </>
     )

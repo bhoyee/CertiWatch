@@ -87,7 +87,7 @@ const faqs = [
   {
     question: "Where are documents stored?",
     answer:
-      "For Google Drive and OneDrive, we don't keep a copy at all — CertiWatch reads the file from your own Drive whenever it's needed (to run OCR, or when you open it on the review screen) and never duplicates it into our storage. Google Drive access is limited to the specific folder you choose, never your whole Drive; OneDrive uses read-only access. For documents that come from a local folder agent or a no-login upload link, we keep a secure archived copy — encrypted in transit and at rest — since there's no cloud original to read back from later; nothing is deleted from wherever you originally dropped it either way."
+      "For anything that comes from a connected Google Drive or OneDrive folder, we don't keep a copy at all — CertiWatch reads the file from your own Drive whenever it's needed (to run OCR, or when you open it on the review screen) and never duplicates it into our storage. Access is limited to the specific folder you choose, never your whole Drive or OneDrive account. A staff upload link or the Upload page saves new files straight into that same connected folder too, once one is set up — Google Drive by default if both are connected, OneDrive if you choose it. Without either connected, or for a local folder agent, we keep a secure archived copy instead — encrypted in transit and at rest — since there's no cloud original to read back from later; nothing is deleted from wherever you originally dropped it either way."
   },
   {
     question: "What documents does it actually read reliably?",

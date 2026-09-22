@@ -339,6 +339,8 @@ function SourcesPageInner() {
 
         {getErrorRow(sources)}
 
+        <UploadDestinationCard sources={sources} />
+
         <div className="mt-6 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
           <p className="font-semibold text-slate-600">Where do I find a folder ID?</p>
           {isGooglePickerConfigured() ? (
@@ -391,6 +393,84 @@ function SourcesPageInner() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Only relevant once at least a Google Drive or OneDrive source has a folder chosen - a staff
+// upload link or the Upload page routes new files there instead of our own storage (see
+// DocumentIngestionWorker.ArchiveOrRouteToCloudAsync). Renders nothing when neither is connected,
+// since there's nothing to choose between yet.
+function UploadDestinationCard({ sources }: { sources: SourceDto[] }) {
+  const [preferred, setPreferred] = useState<string | null | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const hasGoogle = sources.some((s) => s.config?.provider === "gdrive" && s.config?.folderId);
+  const hasOneDrive = sources.some((s) => s.config?.provider === "onedrive" && s.config?.folderId);
+
+  useEffect(() => {
+    if (!hasGoogle && !hasOneDrive) return;
+    fetchJson<{ preferredUploadProvider: string | null }>("/api/tenant/upload-destination")
+      .then((d) => setPreferred(d.preferredUploadProvider))
+      .catch(() => setPreferred(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasGoogle, hasOneDrive]);
+
+  if (!hasGoogle && !hasOneDrive) {
+    return null;
+  }
+
+  const effective = preferred === "onedrive" && hasOneDrive ? "onedrive" : hasGoogle ? "gdrive" : "onedrive";
+
+  const choose = async (provider: "gdrive" | "onedrive") => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body = { preferredUploadProvider: provider === "gdrive" ? null : provider };
+      const result = await patchJson<{ preferredUploadProvider: string | null }, typeof body>("/api/tenant/upload-destination", body);
+      setPreferred(result.preferredUploadProvider);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to update upload destination");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
+      <p className="text-sm font-semibold text-slate-900">Where should direct uploads go?</p>
+      <p className="mt-1 text-xs text-slate-500">
+        A staff upload link or the Upload page saves straight into whichever of these is selected, instead of
+        CertiWatch&apos;s own storage. Google Drive is the default when both are connected.
+      </p>
+      {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => choose("gdrive")}
+          disabled={!hasGoogle || saving || effective === "gdrive"}
+          title={hasGoogle ? undefined : "Connect Google Drive and choose a folder first"}
+          className={`rounded-md border px-3 py-1.5 text-xs font-semibold disabled:cursor-default ${
+            effective === "gdrive"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+              : "border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          }`}
+        >
+          {effective === "gdrive" ? "✓ " : ""}Google Drive
+        </button>
+        <button
+          onClick={() => choose("onedrive")}
+          disabled={!hasOneDrive || saving || effective === "onedrive"}
+          title={hasOneDrive ? undefined : "Connect OneDrive and choose a folder first"}
+          className={`rounded-md border px-3 py-1.5 text-xs font-semibold disabled:cursor-default ${
+            effective === "onedrive"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+              : "border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          }`}
+        >
+          {effective === "onedrive" ? "✓ " : ""}OneDrive
+        </button>
+      </div>
     </div>
   );
 }

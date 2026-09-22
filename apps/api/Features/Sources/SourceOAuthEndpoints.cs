@@ -26,12 +26,18 @@ namespace CertiWatch.Api.Features.Sources;
 // leave testing mode is Google's own review only - free, and no security assessment. It's also a
 // better privacy story for a compliance product: "only the folder you chose", not "everything in
 // your Drive".
+// Microsoft's scope is Files.ReadWrite, not Files.Read.All - a staff upload link or the Upload
+// page can now place a new file directly into the tenant's connected OneDrive folder (see
+// CloudDocumentTransfer.UploadAsync and DocumentIngestionWorker's upload-destination branch),
+// which needs write access. A OneDrive source connected before this change still only has a
+// read-only refresh token; uploads to it fail gracefully (falls back to local storage) until the
+// tenant reconnects it.
 public static class SourceOAuthEndpoints
 {
     private const string GoogleStateCookie = "oauth_state_google";
     private const string MicrosoftStateCookie = "oauth_state_microsoft";
     private static readonly string[] GoogleScopes = ["https://www.googleapis.com/auth/drive.file"];
-    private const string MicrosoftScope = "Files.Read.All offline_access";
+    private const string MicrosoftScope = "Files.ReadWrite offline_access";
 
     // One shared static client for these infrequent token-exchange calls - same reasoning as
     // BillingEndpoints.InvoicePdfClient: avoids socket exhaustion from a fresh HttpClient per call
