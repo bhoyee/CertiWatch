@@ -19,6 +19,8 @@ public static class TenantEndpoints
         group.MapPatch("/reminder-settings", UpdateReminderSettingsAsync);
         group.MapGet("/manager-visibility", GetManagerVisibilityAsync);
         group.MapPatch("/manager-visibility", UpdateManagerVisibilityAsync);
+        group.MapGet("/upload-destination", GetUploadDestinationAsync);
+        group.MapPatch("/upload-destination", UpdateUploadDestinationAsync);
         return group;
     }
 
@@ -157,5 +159,53 @@ public static class TenantEndpoints
         tenant.ManagerSeesAllRecords = request.ManagerSeesAllRecords;
         await db.SaveChangesAsync(token);
         return Results.Ok(new { managerSeesAllRecords = tenant.ManagerSeesAllRecords });
+    }
+
+    // Admin-only, same reasoning as manager visibility above - where a staff upload link/Upload
+    // page file lands is a tenant-wide policy choice, not something to infer silently. Doesn't
+    // validate that the chosen provider is actually connected - DocumentIngestionWorker's
+    // resolution already falls through gracefully if it isn't (disconnecting a source later
+    // shouldn't require also clearing this setting).
+    private static async Task<IResult> GetUploadDestinationAsync(AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var preferred = await db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.PreferredUploadProvider).FirstOrDefaultAsync(token);
+        return Results.Ok(new { preferredUploadProvider = preferred });
+    }
+
+    private sealed record UpdateUploadDestinationRequest(string? PreferredUploadProvider);
+
+    private static async Task<IResult> UpdateUploadDestinationAsync(
+        UpdateUploadDestinationRequest request,
+        AppDbContext db,
+        ITenantContextAccessor accessor,
+        CancellationToken token)
+    {
+        if (!RecordVisibility.IsAdmin(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var normalized = request.PreferredUploadProvider?.Trim().ToLowerInvariant();
+        if (normalized is not (null or "" or "gdrive" or "onedrive"))
+        {
+            return Results.BadRequest(new { error = "PreferredUploadProvider must be 'gdrive', 'onedrive', or null" });
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, token);
+        if (tenant is null)
+        {
+            return Results.NotFound();
+        }
+
+        tenant.PreferredUploadProvider = string.IsNullOrEmpty(normalized) ? null : normalized;
+        await db.SaveChangesAsync(token);
+        return Results.Ok(new { preferredUploadProvider = tenant.PreferredUploadProvider });
     }
 }

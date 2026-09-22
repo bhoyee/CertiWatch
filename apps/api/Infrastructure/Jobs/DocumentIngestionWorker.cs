@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Domain.Entities;
+using CertiWatch.Api.Features.Uploads;
 using CertiWatch.Api.Infrastructure.Emails;
 using CertiWatch.Api.Infrastructure.Persistence;
 using CertiWatch.Api.Infrastructure.Services;
@@ -48,6 +49,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var inference = scope.ServiceProvider.GetRequiredService<IRuleInferenceService>();
+                var cloudTransfer = scope.ServiceProvider.GetRequiredService<ICloudDocumentTransfer>();
 
                 var sourceId = docEvent.SourceId == Guid.Empty ? Guid.NewGuid() : docEvent.SourceId;
                 var source = await db.Sources.FirstOrDefaultAsync(s => s.Id == sourceId, stoppingToken);
@@ -229,7 +231,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
                     else
                     {
-                        await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                        await ArchiveOrRouteToCloudAsync(document, source, docEvent.PathOrUrl, cloudTransfer, stoppingToken);
                     }
 
                     var record = new Record
@@ -281,7 +283,7 @@ public sealed class DocumentIngestionWorker : BackgroundService
                     }
                     else
                     {
-                        await ArchiveDocumentIfNeededAsync(document, docEvent.PathOrUrl, stoppingToken);
+                        await ArchiveOrRouteToCloudAsync(document, source, docEvent.PathOrUrl, cloudTransfer, stoppingToken);
                     }
                     document.DocumentType = documentType;
                     document.ExtractionConfidence = extractionConfidence ?? document.ExtractionConfidence;
@@ -452,13 +454,58 @@ public sealed class DocumentIngestionWorker : BackgroundService
         document.PathOrUrl.StartsWith($"{document.TenantId}/documents/", StringComparison.Ordinal);
 
     // Set instead of ArchiveDocumentIfNeededAsync for a Google Drive/OneDrive-sourced document -
-    // CloudDocumentFetcher (Features/Documents) recognizes this prefix and fetches the bytes live
-    // from the source on demand, rather than a permanent copy ever landing in IFileStorage. The
-    // local staging copy OcrWorker downloaded is left for the ingestion queue's usual delayed
+    // CloudDocumentTransfer (Features/Documents) recognizes this prefix and fetches the bytes
+    // live from the source on demand, rather than a permanent copy ever landing in IFileStorage.
+    // The local staging copy OcrWorker downloaded is left for the ingestion queue's usual delayed
     // cleanup (the hash-status check, same as every other file) - nothing here needs it kept any
     // longer than that.
+    private const string CloudReferencePrefix = "cloudref:";
+
     private static void SetCloudReference(Document document, string cloudFileId) =>
-        document.PathOrUrl = $"cloudref:{cloudFileId}";
+        document.PathOrUrl = $"{CloudReferencePrefix}{cloudFileId}";
+
+    private static bool IsCloudReferenced(Document document) =>
+        document.PathOrUrl.StartsWith(CloudReferencePrefix, StringComparison.Ordinal);
+
+    // Tries to place a staff-upload-link/Upload-page file directly into the tenant's connected
+    // Google Drive or OneDrive (CloudDocumentTransfer.ResolveUploadDestinationAsync decides which
+    // one wins when both are connected) instead of archiving it into our own storage - the same
+    // data-minimization CloudFileId gets above, just in the other direction. Only "Upload Portal"
+    // - the dedicated Source the staff upload link and Upload page share (see
+    // UploadEndpoints.EnsureUploadSourceAsync) - is eligible; a local folder agent's documents
+    // always go straight to ArchiveDocumentIfNeededAsync, unchanged, since there's no tenant-owned
+    // destination a device upload has any particular claim to.
+    private async Task ArchiveOrRouteToCloudAsync(Document document, Source source, string localPath, ICloudDocumentTransfer cloudTransfer, CancellationToken token)
+    {
+        if (IsArchived(document) || IsCloudReferenced(document))
+        {
+            return;
+        }
+
+        if (source.DisplayName == UploadEndpoints.UploadSourceName && File.Exists(localPath))
+        {
+            var destinationSourceId = await cloudTransfer.ResolveUploadDestinationAsync(document.TenantId, token);
+            if (destinationSourceId.HasValue)
+            {
+                try
+                {
+                    await using var stream = File.OpenRead(localPath);
+                    var uploadedFileId = await cloudTransfer.UploadAsync(document.TenantId, destinationSourceId.Value, document.FileName, document.MimeType, stream, token);
+                    if (!string.IsNullOrWhiteSpace(uploadedFileId))
+                    {
+                        SetCloudReference(document, uploadedFileId);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to upload document {DocumentId} to tenant's connected Drive/OneDrive; falling back to local storage", document.Id);
+                }
+            }
+        }
+
+        await ArchiveDocumentIfNeededAsync(document, localPath, token);
+    }
 
     // Best-effort: archiving is a durability upgrade on top of ingestion that already succeeded
     // (the Document/Record rows are saved either way), not a precondition for it - if IFileStorage

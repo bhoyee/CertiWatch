@@ -21,7 +21,11 @@ namespace CertiWatch.Api.Features.Uploads;
 
 public static class UploadEndpoints
 {
-    private const string UploadSourceName = "Upload Portal";
+    // Internal, not private - DocumentIngestionWorker checks a Document's Source against this
+    // exact name to decide whether it's eligible to be routed into the tenant's connected Drive/
+    // OneDrive instead of archived locally (a staff upload link/Upload-page file only, not a
+    // local folder agent's).
+    internal const string UploadSourceName = "Upload Portal";
     private const string UploadDeviceToken = "upload-portal";
 
     public static IEndpointRouteBuilder MapUploadEndpoints(this IEndpointRouteBuilder routes)

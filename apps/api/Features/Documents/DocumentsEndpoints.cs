@@ -66,7 +66,7 @@ public static class DocumentsEndpoints
         AppDbContext db,
         ITenantContextAccessor accessor,
         IFileStorage fileStorage,
-        ICloudDocumentFetcher cloudFetcher,
+        ICloudDocumentTransfer cloudFetcher,
         HttpContext httpContext,
         CancellationToken token)
     {

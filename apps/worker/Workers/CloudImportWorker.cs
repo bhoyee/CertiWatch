@@ -250,7 +250,10 @@ public sealed class CloudImportWorker : BackgroundService
             ["client_secret"] = _options.MicrosoftOAuthClientSecret,
             ["refresh_token"] = refreshToken,
             ["grant_type"] = "refresh_token",
-            ["scope"] = "Files.Read.All offline_access"
+            // Matches SourceOAuthEndpoints.MicrosoftScope (apps/api) - Files.ReadWrite, not
+            // Files.Read.All, now that a staff upload/upload-link file can be written into a
+            // connected OneDrive folder (see CloudDocumentTransfer.UploadAsync).
+            ["scope"] = "Files.ReadWrite offline_access"
         }), token);
 
         if (!tokenResp.IsSuccessStatusCode)

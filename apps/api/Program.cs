@@ -66,7 +66,7 @@ builder.Services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();
 builder.Services.AddSingleton<IEmailService, EmailService>();
 builder.Services.AddSingleton<ITenantContextAccessor, TenantContextAccessor>();
 builder.Services.AddScoped<IMagicLinkService, MagicLinkService>();
-builder.Services.AddScoped<ICloudDocumentFetcher, CloudDocumentFetcher>();
+builder.Services.AddScoped<ICloudDocumentTransfer, CloudDocumentTransfer>();
 
 builder.Services.AddSingleton(new KeywordMatcher(KeywordMaps.Default));
 builder.Services.AddSingleton<ParsingPipeline>();

@@ -25,6 +25,12 @@ public sealed class Tenant : BaseEntity
     // admin trust managers with the full tenant-wide record set, matching what they can already
     // see on Compliance. Never affects viewers, who stay scoped either way.
     public bool ManagerSeesAllRecords { get; set; } = false;
+    // Where a staff upload link / Upload page file should land: "gdrive" or "onedrive" to force
+    // that provider, or null for the default (prefer Google Drive, then OneDrive, then fall back
+    // to archiving on our own storage - see DocumentIngestionWorker.ResolveUploadDestinationAsync).
+    // Only takes effect if that provider is actually connected and has a folder chosen; otherwise
+    // resolution falls through exactly as if this were null.
+    public string? PreferredUploadProvider { get; set; }
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<CourseRule> Rules { get; set; } = new List<CourseRule>();
 }
