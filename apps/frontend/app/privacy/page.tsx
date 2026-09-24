@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { LogoMark } from "../../components/LogoMark";
 
-export const metadata = { title: "Privacy Policy — CertiWatch" };
+export const metadata = {
+  title: "Privacy Policy",
+  description: "How CertiWatch collects, stores, and protects staff certificate data, including how Google Drive and OneDrive access is scoped and used."
+};
 
 export default function PrivacyPage() {
   return (

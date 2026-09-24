@@ -6,7 +6,7 @@ const PUBLIC_PATHS = ["/", "/signup", "/signup/success", "/login", "/magic", "/l
 // Any plain static file under public/ (images, fonts, etc.) should never be gated behind a
 // session - this is the second time a new public/<folder> of assets got silently redirected to
 // /login because it wasn't in PUBLIC_PATHS, so match by extension instead of by folder name.
-const STATIC_FILE_PATTERN = /\.(png|jpe?g|gif|webp|svg|avif|ico|css|js|map|woff2?|ttf|otf|txt|json|pdf)$/i;
+const STATIC_FILE_PATTERN = /\.(png|jpe?g|gif|webp|svg|avif|ico|css|js|map|woff2?|ttf|otf|txt|json|pdf|xml)$/i;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
