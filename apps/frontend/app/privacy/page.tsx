@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { LogoMark } from "../../components/LogoMark";
+import { display, body } from "@/lib/fonts";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata = {
   title: "Privacy Policy",
@@ -8,18 +10,8 @@ export const metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <LogoMark className="h-8 w-8" />
-            <span className="text-lg font-semibold text-slate-900">CertiWatch</span>
-          </Link>
-          <Link href="/login" className="text-sm font-medium text-blue-600 hover:underline">
-            Back to login
-          </Link>
-        </div>
-      </header>
+    <div className={`${display.variable} ${body.variable} min-h-screen bg-[#FAF7F0]`}>
+      <SiteHeader />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
         <h1 className="text-2xl font-bold text-slate-900">Privacy Policy</h1>
@@ -157,6 +149,8 @@ export default function PrivacyPage() {
           </Section>
         </div>
       </main>
+
+      <SiteFooter />
     </div>
   );
 }
