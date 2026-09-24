@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ContactModal, openContactModal } from "./ContactModal";
 
 export function SiteFooter() {
   const [hasSession, setHasSession] = useState(false);
@@ -25,6 +26,9 @@ export function SiteFooter() {
           <Link href="mailto:hello@certiwatch.com" className="text-[#C9C7BC] transition hover:text-white">
             hello@certiwatch.com
           </Link>
+          <button onClick={openContactModal} className="text-[#C9C7BC] transition hover:text-white">
+            Contact us
+          </button>
           <Link href="/terms" className="text-[#C9C7BC] transition hover:text-white">
             Terms
           </Link>
@@ -47,6 +51,7 @@ export function SiteFooter() {
           )}
         </div>
       </div>
+      <ContactModal />
     </footer>
   );
 }

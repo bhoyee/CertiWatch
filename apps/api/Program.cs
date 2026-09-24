@@ -2,6 +2,7 @@ using CertiWatch.Api.Configuration;
 using CertiWatch.Api.Features.Admin;
 using CertiWatch.Api.Features.Auth;
 using CertiWatch.Api.Features.Compliance;
+using CertiWatch.Api.Features.Contact;
 using CertiWatch.Api.Features.Devices;
 using CertiWatch.Api.Features.Documents;
 using CertiWatch.Api.Features.Notifications;
@@ -190,6 +191,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(10),
                 QueueLimit = 0
             }));
+
+    // The public marketing site's contact form - anonymous, no session, IP is the only signal.
+    // Tight: nobody legitimately submits this more than a couple of times in a row.
+    options.AddPolicy<string>("contact", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
 });
 
 builder.Services.Configure<JsonOptions>(o =>
@@ -264,6 +277,7 @@ app.MapProfileEndpoints();
 app.MapUserManagementEndpoints();
 app.MapUploadEndpoints();
 app.MapSupportEndpoints();
+app.MapContactEndpoints();
 app.MapStaffEndpoints();
 
 if (app.Environment.IsDevelopment())
