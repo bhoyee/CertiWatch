@@ -25,6 +25,12 @@ export function SiteFooter() {
           <Link href="mailto:hello@certiwatch.com" className="text-[#C9C7BC] transition hover:text-white">
             hello@certiwatch.com
           </Link>
+          <Link href="/terms" className="text-[#C9C7BC] transition hover:text-white">
+            Terms
+          </Link>
+          <Link href="/privacy" className="text-[#C9C7BC] transition hover:text-white">
+            Privacy
+          </Link>
           {hasSession ? (
             <Link href="/analytics" className="font-semibold text-[#4E9C74] hover:text-[#6FB98F]">
               Go to dashboard

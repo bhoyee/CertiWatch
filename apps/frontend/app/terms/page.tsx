@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { LogoMark } from "../../components/LogoMark";
 
-export const metadata = { title: "Terms of Service — CertiWatch" };
+export const metadata = {
+  title: "Terms of Service",
+  description: "The terms governing use of CertiWatch's staff certificate and compliance tracking platform, including billing, trials, and account responsibilities."
+};
 
 export default function TermsPage() {
   return (
