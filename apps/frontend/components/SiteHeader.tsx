@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { openContactModal } from "./ContactModal";
 
 export function SiteHeader() {
   const [hasSession, setHasSession] = useState(false);
@@ -29,9 +30,9 @@ export function SiteHeader() {
           <Link href="/#faq" className="transition hover:text-white">
             FAQ
           </Link>
-          <Link href="/#contact" className="transition hover:text-white">
+          <button onClick={openContactModal} className="transition hover:text-white">
             Contact
-          </Link>
+          </button>
         </nav>
         <div className="flex items-center gap-3">
           {hasSession ? (
