@@ -8,6 +8,17 @@ type Section = {
   content: React.ReactNode;
 };
 
+// Real screenshots of the actual app (captured against a seeded demo tenant, not mockups) so a
+// reader can see what a section looks like instead of having to picture it from prose alone.
+function DocScreenshot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+  return (
+    <figure className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+      <img src={src} alt={alt} className="w-full" />
+      <figcaption className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">{caption}</figcaption>
+    </figure>
+  );
+}
+
 const sections: Section[] = [
   {
     id: "getting-started",
@@ -27,6 +38,7 @@ const sections: Section[] = [
         <p className="mt-3">
           Nothing needs typing by hand for a normal certificate - the goal is that uploading is the only manual step.
         </p>
+        <DocScreenshot src="/docs/screenshots/dashboard.png" alt="The CertiWatch dashboard, showing plan usage, record counts, and upcoming expiries" caption="The dashboard once you're inside - a live overview of records, expiring certificates, and processing status." />
       </>
     )
   },
@@ -130,6 +142,7 @@ const sections: Section[] = [
           You can search and sort the queue by staff name, requirement type, issue date, expiry date, or confidence -
           useful once there are more than a handful of items waiting.
         </p>
+        <DocScreenshot src="/docs/screenshots/review.png" alt="The Review queue, showing a flagged document alongside its extracted fields for a human to check" caption="The Review queue - the flagged item's list on the left, the original document and its extracted fields on the right." />
       </>
     )
   },
@@ -155,6 +168,7 @@ const sections: Section[] = [
           your oldest tracked certifications up to that limit - the rest are still safely stored (nothing is deleted
           or lost), and all of them reappear automatically the moment you upgrade.
         </p>
+        <DocScreenshot src="/docs/screenshots/records.png" alt="The Records page, listing processed certificates with staff name, requirement, issuer, dates, and status" caption="Records - every processed certificate in one sortable, searchable, exportable list." />
       </>
     )
   },
@@ -170,8 +184,13 @@ const sections: Section[] = [
         </p>
         <p className="mt-3">
           This is the page to check before an inspection or audit - it answers &ldquo;who still needs what&rdquo; in
-          one screen instead of hunting through individual records.
+          one screen instead of hunting through individual records. <strong>Print report</strong> generates a
+          dated, audit-ready summary you can hand straight to an inspector, and <strong>Export CSV</strong> gives
+          you the same data as a flat register - one row per staff/requirement pair - for anything you need to work
+          with outside CertiWatch.
         </p>
+        <DocScreenshot src="/docs/screenshots/compliance.png" alt="The compliance matrix, showing every active staff member against every requirement with color-coded status" caption="The compliance matrix - staff down the side, requirements across the top, color-coded at a glance." />
+        <DocScreenshot src="/docs/screenshots/compliance-report.png" alt="A generated compliance report, showing overall status and a breakdown by requirement" caption="The generated report from Print report - a dated summary ready to hand to an inspector." />
       </>
     )
   },
@@ -205,6 +224,7 @@ const sections: Section[] = [
           The <strong>Reminder timing</strong> card at the top of this page controls when expiry alerts go out for
           your whole organization - see <strong>Reminders</strong> below for details.
         </p>
+        <DocScreenshot src="/docs/screenshots/requirements.png" alt="The Requirements page, showing reminder timing, manager visibility settings, and the requirement type catalog" caption="Requirements - reminder timing, manager visibility, and the full requirement catalog, all on one page." />
       </>
     )
   },
@@ -251,6 +271,7 @@ const sections: Section[] = [
           Each device gets its own token, which only ever allows it to push documents in - removing a device from
           this page immediately and completely cuts off its access.
         </p>
+        <DocScreenshot src="/docs/screenshots/devices.png" alt="The Devices page, showing the enrollment form and a list of connected devices with their status" caption="Devices - enroll a new agent, and see everything already connected and its last-seen status." />
       </>
     )
   },
