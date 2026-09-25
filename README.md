@@ -18,9 +18,9 @@ As a SaaS product, every tenant (a care home, a construction firm, whoever signs
 
 The marketing site and auth screens (public, no login needed to view):
 
-| Landing page | Sign up | Log in |
-|---|---|---|
-| [![Landing page](docs/assets/screenshots/landing.png)](docs/assets/screenshots/landing.png) | [![Signup page](docs/assets/screenshots/signup.png)](docs/assets/screenshots/signup.png) | [![Login page](docs/assets/screenshots/login.png)](docs/assets/screenshots/login.png) |
+| Landing page | Log in |
+|---|---|
+| [![Landing page](docs/assets/screenshots/landing.png)](docs/assets/screenshots/landing.png) | [![Login page](docs/assets/screenshots/login.png)](docs/assets/screenshots/login.png) |
 
 The tenant dashboard, captured against a demo tenant seeded with fictional staff and certificates
 (no real customer data) after logging in through the real magic-link flow — not a dev-login
