@@ -22,10 +22,25 @@ The marketing site and auth screens (public, no login needed to view):
 |---|---|---|
 | [![Landing page](docs/assets/screenshots/landing.png)](docs/assets/screenshots/landing.png) | [![Signup page](docs/assets/screenshots/signup.png)](docs/assets/screenshots/signup.png) | [![Login page](docs/assets/screenshots/login.png)](docs/assets/screenshots/login.png) |
 
-The tenant dashboard (compliance matrix, records, review queue, sources) and the `/platform`
-superadmin console both sit behind a real login with no password — a magic link sent by real
-email, since this project doesn't have a fabricated dev-login bypass. Screenshots of those aren't
-included here for that reason; run the app yourself (see Quickstart below) to see them.
+The tenant dashboard, captured against a demo tenant seeded with fictional staff and certificates
+(no real customer data) after logging in through the real magic-link flow — not a dev-login
+bypass, which this project doesn't have:
+
+| Dashboard | Compliance matrix | Records |
+|---|---|---|
+| [![Dashboard](docs/assets/screenshots/dashboard.png)](docs/assets/screenshots/dashboard.png) | [![Compliance matrix](docs/assets/screenshots/compliance.png)](docs/assets/screenshots/compliance.png) | [![Records](docs/assets/screenshots/records.png)](docs/assets/screenshots/records.png) |
+
+| Review queue | Requirements & settings | Devices |
+|---|---|---|
+| [![Review queue](docs/assets/screenshots/review.png)](docs/assets/screenshots/review.png) | [![Requirements](docs/assets/screenshots/requirements.png)](docs/assets/screenshots/requirements.png) | [![Devices](docs/assets/screenshots/devices.png)](docs/assets/screenshots/devices.png) |
+
+The generated compliance report (`/api/compliance-matrix/export.html`) — the same audit-ready
+document a tenant would print or hand to an inspector:
+
+[![Compliance report](docs/assets/screenshots/compliance-report.png)](docs/assets/screenshots/compliance-report.png)
+
+The `/platform` superadmin console isn't shown here, since it's an internal operator tool rather
+than something a prospective user needs to evaluate.
 
 ## How ingestion actually works (the part that's easy to get wrong)
 
