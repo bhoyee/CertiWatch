@@ -492,7 +492,7 @@ type TourStep = { href: string; title: string; body: string };
 // isNavItemVisibleForRole), so a step can never point at something this role doesn't have.
 const TOUR_STEP_CONTENT: TourStep[] = [
   { href: "/analytics", title: "Dashboard", body: "A live overview of your records, what's expiring soon, and anything that needs attention." },
-  { href: "/uploads", title: "Uploads", body: "Add certificates here - a single file, a bulk batch, or a no-login link you can send to a staff member." },
+  { href: "/uploads", title: "Uploads", body: "Add certificates here - a single file, a bulk batch, or a no-login link you can send to anyone." },
   { href: "/review", title: "Review queue", body: "Anything CertiWatch wasn't fully confident about lands here for a quick check before it counts as official." },
   { href: "/records", title: "Records", body: "Every processed certificate - searchable, sortable, and exportable to CSV or PDF." },
   { href: "/compliance", title: "Compliance", body: "Every staff member against every requirement, at a glance - the page to check before an inspection." },

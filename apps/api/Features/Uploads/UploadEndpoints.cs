@@ -38,6 +38,7 @@ public static class UploadEndpoints
         group.MapGet("/{token}", ValidateAsync).AllowAnonymous();
         group.MapPost("/{token}/file", UploadFileAsync).AllowAnonymous();
         group.MapPost("/bulk", BulkUploadAsync).RequireAuthorization();
+        group.MapDelete("/{id:guid}", DeleteRequestAsync).RequireAuthorization();
         return group;
     }
 
@@ -140,6 +141,40 @@ public static class UploadEndpoints
             u.UsedAt,
             u.ExpiresAt
         }));
+    }
+
+    // The frontend's history table has always had a Delete button (Uploads/page.tsx) wired to
+    // DELETE /api/uploads/{id}, but no matching route was ever mapped here - every delete attempt
+    // has been a silent 404 since the feature was built. Scoped the same way HistoryAsync already
+    // scopes what a role can even see: viewers can't reach this page at all, a manager can only
+    // delete links created by staff within their own visibility scope, admins can delete any of
+    // the tenant's links.
+    private static async Task<IResult> DeleteRequestAsync(Guid id, AppDbContext db, ITenantContextAccessor accessor, CancellationToken token)
+    {
+        if (RecordVisibility.IsViewer(accessor))
+        {
+            return Results.Forbid();
+        }
+
+        var tenantId = accessor.Current.TenantId;
+        var entity = await db.UploadRequests.FirstOrDefaultAsync(u => u.Id == id && u.TenantId == tenantId, token);
+        if (entity is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (RecordVisibility.IsManager(accessor))
+        {
+            var scope = await RecordVisibility.GetScopeAsync(db, accessor, token);
+            if (scope is null || !scope.AllowedCreatorIds.Contains(entity.CreatedByUserId ?? Guid.Empty))
+            {
+                return Results.Forbid();
+            }
+        }
+
+        db.UploadRequests.Remove(entity);
+        await db.SaveChangesAsync(token);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ValidateAsync([FromRoute(Name = "token")] string tokenValue, AppDbContext db, IDateTimeProvider clock, CancellationToken token)
