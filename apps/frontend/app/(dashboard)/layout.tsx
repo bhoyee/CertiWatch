@@ -497,6 +497,8 @@ const TOUR_STEP_CONTENT: TourStep[] = [
   { href: "/records", title: "Records", body: "Every processed certificate - searchable, sortable, and exportable to CSV or PDF." },
   { href: "/compliance", title: "Compliance", body: "Every staff member against every requirement, at a glance - the page to check before an inspection." },
   { href: "/requirements", title: "Requirements", body: "The certificate types CertiWatch checks against, plus reminder timing and manager-visibility settings." },
+  { href: "/devices", title: "Devices", body: "Connect a local folder watcher so certificates dropped into it are picked up automatically, with no manual upload." },
+  { href: "/sources", title: "Sources", body: "Link a Google Drive or OneDrive folder your team already uses, and CertiWatch keeps pulling certificates from it." },
   { href: "/invite", title: "Team & roles", body: "Invite your team and set what each person can see and do." },
   { href: "/plan", title: "Billing & plan", body: "See usage against your plan's limit, and manage your subscription." }
 ];
