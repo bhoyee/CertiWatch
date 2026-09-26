@@ -399,8 +399,12 @@ function Sparkline({ data }: { data: DayCount[] }) {
   const stepX = data.length > 1 ? width / (data.length - 1) : width;
   const points = data.map((d, i) => ({ x: i * stepX, y: height - (d.count / max) * (height - 4) - 2 }));
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const total = data.reduce((a, d) => a + d.count, 0);
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none">
+      {/* Too small for a custom floating tooltip without crowding the card - a native <title>
+          still gives a real hover readout, just via the browser's own tooltip. */}
+      <title>{`Last ${data.length} days · ${total} record${total === 1 ? "" : "s"}`}</title>
       <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
     </svg>
   );
@@ -480,6 +484,7 @@ function ChartCard({
 function TrendAreaChart({ data }: { data: DayCount[] }) {
   const width = 600;
   const height = 130;
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   if (data.length === 0) return <p className="text-sm text-slate-500">No data yet.</p>;
   const max = Math.max(1, ...data.map((d) => d.count));
   const stepX = data.length > 1 ? width / (data.length - 1) : width;
@@ -488,10 +493,26 @@ function TrendAreaChart({ data }: { data: DayCount[] }) {
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L 0 ${height} Z`;
   const last = points[points.length - 1];
   const total = data.reduce((a, d) => a + d.count, 0);
+  const hovered = hoverIndex !== null ? { point: points[hoverIndex], day: data[hoverIndex] } : null;
+
+  // Maps the pointer's fraction across the rendered width straight onto a data index - works
+  // regardless of the element's actual pixel size because preserveAspectRatio="none" stretches
+  // the 0..width viewBox space uniformly across whatever width the card ends up at.
+  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    setHoverIndex(Math.round(fraction * (data.length - 1)));
+  };
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full cursor-crosshair"
+        preserveAspectRatio="none"
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHoverIndex(null)}
+      >
         <defs>
           <linearGradient id="analyticsTrendFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
@@ -503,8 +524,35 @@ function TrendAreaChart({ data }: { data: DayCount[] }) {
         ))}
         <path d={areaPath} fill="url(#analyticsTrendFill)" />
         <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+        {hovered && (
+          <line
+            x1={hovered.point.x}
+            x2={hovered.point.x}
+            y1="0"
+            y2={height}
+            stroke="#94a3b8"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+          />
+        )}
         <circle cx={last.x} cy={last.y} r="3.5" fill="#6366f1" stroke="white" strokeWidth="1.5" />
+        {hovered && <circle cx={hovered.point.x} cy={hovered.point.y} r="5" fill="#6366f1" stroke="white" strokeWidth="2" />}
       </svg>
+      {hovered && (
+        <div
+          className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg"
+          style={{
+            left: `${(hovered.point.x / width) * 100}%`,
+            top: `${(hovered.point.y / height) * 100}%`,
+            transform: "translate(-50%, calc(-100% - 10px))"
+          }}
+        >
+          <p className="font-semibold">{formatShortDate(hovered.day.date)}</p>
+          <p className="text-slate-300">
+            {hovered.day.count} record{hovered.day.count === 1 ? "" : "s"}
+          </p>
+        </div>
+      )}
       <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
         <span>{formatShortDate(data[0].date)}</span>
         <span className="font-medium text-slate-500">{total} total</span>
@@ -533,6 +581,7 @@ function colorForStatus(status: string) {
 
 function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
   const total = entries.reduce((acc, [, v]) => acc + v, 0);
+  const [hovered, setHovered] = useState<string | null>(null);
   if (total === 0) return <p className="text-sm text-slate-500">No data yet.</p>;
 
   const radius = 40;
@@ -541,6 +590,7 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
   // Biggest share first, so the legend/bars read as a ranked breakdown rather than whatever
   // order the status dictionary happened to enumerate in.
   const ranked = [...entries].sort((a, b) => b[1] - a[1]);
+  const hoveredEntry = ranked.find(([status]) => status === hovered);
 
   return (
     <div className="flex flex-col items-center gap-8 sm:flex-row sm:items-center">
@@ -554,6 +604,7 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
           {ranked.map(([status, count]) => {
             const pct = count / total;
             const dash = pct * circumference;
+            const isHovered = hovered === status;
             const segment = (
               <circle
                 key={status}
@@ -562,19 +613,36 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
                 r={radius}
                 fill="none"
                 stroke={colorForStatus(status)}
-                strokeWidth="14"
+                strokeWidth={isHovered ? 17 : 14}
                 strokeLinecap={ranked.length > 1 ? "butt" : "round"}
                 strokeDasharray={`${dash} ${circumference - dash}`}
                 strokeDashoffset={-offsetAcc}
+                opacity={hovered && !isHovered ? 0.35 : 1}
+                className="cursor-pointer transition-all duration-150"
+                onMouseEnter={() => setHovered(status)}
+                onMouseLeave={() => setHovered(null)}
               />
             );
             offsetAcc += dash;
             return segment;
           })}
         </svg>
+        {/* Hovering swaps the center readout from the overall total to that segment's own count
+            and share - the donut's own hover detail, not just a highlight - and the legend below
+            drives the same state so either side can be the one the user points at. */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold text-slate-900">{total}</span>
-          <span className="text-[11px] text-slate-400">total records</span>
+          {hoveredEntry ? (
+            <>
+              <span className="text-2xl font-bold text-slate-900">{hoveredEntry[1]}</span>
+              <span className="max-w-[7rem] truncate text-[11px] capitalize text-slate-500">{hoveredEntry[0].toLowerCase()}</span>
+              <span className="text-[10px] text-slate-400">{Math.round((hoveredEntry[1] / total) * 100)}%</span>
+            </>
+          ) : (
+            <>
+              <span className="text-2xl font-bold text-slate-900">{total}</span>
+              <span className="text-[11px] text-slate-400">total records</span>
+            </>
+          )}
         </div>
       </div>
       {/* Rows instead of a 2-col grid: a bar naturally stretches to fill whatever width the card
@@ -584,15 +652,25 @@ function StatusDonut({ entries }: { entries: Array<[string, number]> }) {
       <div className="w-full min-w-0 space-y-3.5">
         {ranked.map(([status, count]) => {
           const pct = count / total;
+          const isHovered = hovered === status;
           return (
-            <div key={status} className="flex items-center gap-3">
+            <div
+              key={status}
+              className={`flex cursor-pointer items-center gap-3 rounded-md px-1 py-0.5 transition-colors ${isHovered ? "bg-slate-50" : ""}`}
+              onMouseEnter={() => setHovered(status)}
+              onMouseLeave={() => setHovered(null)}
+            >
               <span className="w-24 flex-shrink-0 truncate text-sm font-medium capitalize text-slate-700 sm:w-28">
                 {status.toLowerCase()}
               </span>
               <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
                 <div
                   className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.max(pct * 100, 2)}%`, backgroundColor: colorForStatus(status) }}
+                  style={{
+                    width: `${Math.max(pct * 100, 2)}%`,
+                    backgroundColor: colorForStatus(status),
+                    opacity: hovered && !isHovered ? 0.4 : 1
+                  }}
                 />
               </div>
               <span className="w-10 flex-shrink-0 text-right text-sm font-semibold text-slate-900">{count}</span>
@@ -613,28 +691,54 @@ function ExpiryBarChart({ buckets }: { buckets: ExpiryBuckets }) {
     { label: "60+ days", value: buckets.next90Plus, color: "bg-emerald-500" }
   ];
   const max = Math.max(1, ...items.map((i) => i.value));
+  const total = items.reduce((a, i) => a + i.value, 0);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <div className="flex h-full min-h-[140px] items-stretch justify-between gap-2">
-      {items.map((item) => (
-        <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
-          <span className="text-sm font-semibold text-slate-900">{item.value}</span>
-          {/* A flex-grow "bar chart without measuring" trick: the spacer above and the bar below
-              share the track's height in proportion to (max - value) : value, so the bar's
-              rendered height always reflects its share of the tallest bucket, and it naturally
-              sits at the bottom of the track (last child in a column flex) - values stay pinned
-              to the top of the card and labels to the bottom regardless of the track's actual
-              pixel height, which changes whenever this card is stretched to match a taller sibling. */}
-          <div className="flex w-full flex-1 flex-col items-center">
-            <div style={{ flex: `${Math.max(0, max - item.value)} 1 0%` }} />
-            <div
-              className={`w-7 rounded-t-md transition-all duration-500 sm:w-9 ${item.color}`}
-              style={{ flex: `${item.value === 0 ? 0 : item.value} 1 0%`, minHeight: item.value === 0 ? 4 : 6 }}
-            />
+      {items.map((item) => {
+        const pct = total === 0 ? 0 : Math.round((item.value / total) * 100);
+        return (
+          <div
+            key={item.label}
+            className="flex flex-1 flex-col items-center gap-2"
+            onMouseEnter={() => setHovered(item.label)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <span className="text-sm font-semibold text-slate-900">{item.value}</span>
+            {/* A flex-grow "bar chart without measuring" trick: the spacer above and the bar below
+                share the track's height in proportion to (max - value) : value, so the bar's
+                rendered height always reflects its share of the tallest bucket, and it naturally
+                sits at the bottom of the track (last child in a column flex) - values stay pinned
+                to the top of the card and labels to the bottom regardless of the track's actual
+                pixel height, which changes whenever this card is stretched to match a taller sibling. */}
+            <div className="flex w-full flex-1 flex-col items-center">
+              <div style={{ flex: `${Math.max(0, max - item.value)} 1 0%` }} />
+              <div
+                className={`relative w-7 cursor-pointer rounded-t-md transition-all duration-500 sm:w-9 ${item.color} ${
+                  hovered === item.label ? "brightness-110 ring-2 ring-slate-300 ring-offset-1" : ""
+                }`}
+                style={{ flex: `${item.value === 0 ? 0 : item.value} 1 0%`, minHeight: item.value === 0 ? 4 : 6 }}
+              >
+                {/* Anchored to the bar's own (dynamic) top edge, not the column's fixed top -
+                    a short bar has a tall spacer above it, so this always has room to sit above
+                    the bar without colliding with the card's title/subtitle. */}
+                {hovered === item.label && (
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg">
+                    <p className="font-semibold">
+                      {item.value} record{item.value === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-slate-300">
+                      {item.label} · {pct}% of upcoming
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <span className="text-center text-[11px] leading-tight text-slate-500">{item.label}</span>
           </div>
-          <span className="text-center text-[11px] leading-tight text-slate-500">{item.label}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
