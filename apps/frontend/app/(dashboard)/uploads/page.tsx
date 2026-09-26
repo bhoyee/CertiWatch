@@ -378,10 +378,10 @@ export default function UploadsPage() {
       {roleReady && !isViewer ? (
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h1 className="text-lg font-semibold text-slate-900">Create upload link</h1>
-          <p className="text-sm text-slate-600">Generate a one-time link for staff to submit a certificate. Expiry is optional.</p>
+          <p className="text-sm text-slate-600">Generate a one-time link for anyone to submit a certificate - the recipient doesn't need to be an existing staff member. Expiry is optional.</p>
           <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={submit}>
             <div className="space-y-1">
-              <label className="text-sm font-medium text-slate-700">Staff email</label>
+              <label className="text-sm font-medium text-slate-700">Email</label>
               <input
                 type="email"
                 value={form.staffEmail}
