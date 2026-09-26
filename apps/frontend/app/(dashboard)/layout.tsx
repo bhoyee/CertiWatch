@@ -178,7 +178,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <RoleProvider role={role} refreshPlan={loadPlan}>
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <div className="flex min-h-screen">
-          <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6">
+          <aside className="hidden w-68 flex-shrink-0 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur md:flex md:flex-col md:gap-6 print:hidden">
             <Logo isSuper={isSuper} />
             <NavLinks isBlocked={isBlocked} role={role} roleLoading={roleLoading} isSuper={isSuper} userId={userId} />
           </aside>
@@ -190,7 +190,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               of it floating right under whatever content happens to be there, while still
               scrolling normally (not overlapping content) on tall pages. */}
           <main className="flex min-w-0 flex-1 flex-col px-4 py-6 md:px-10">
-            <div className="mb-4 flex items-center justify-between md:hidden">
+            <div className="mb-4 flex items-center justify-between md:hidden print:hidden">
               <Logo isSuper={isSuper} />
               <button
                 onClick={() => setOpen((v) => !v)}
@@ -200,7 +200,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
             {open && (
-              <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden">
+              <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:hidden print:hidden">
                 <NavLinks
                   isBlocked={isBlocked}
                   role={role}
@@ -211,10 +211,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 />
               </div>
             )}
-            <TopBar isBlocked={isBlocked} role={role} isSuper={isSuper} onShowTour={() => setShowTour(true)} />
-            {(!isSuper && (isBlocked || (!isViewer && !isManager))) && (
-              <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
-            )}
+            <div className="print:hidden">
+              <TopBar isBlocked={isBlocked} role={role} isSuper={isSuper} onShowTour={() => setShowTour(true)} />
+              {(!isSuper && (isBlocked || (!isViewer && !isManager))) && (
+                <PlanBanner plan={plan} error={planError} loading={planLoading} onPayNow={handlePayNow} />
+              )}
+            </div>
             <div
               className={`mt-4 space-y-4 ${
                 isViewerRestricted || isManagerRestricted || !isBlocked ? "" : "pointer-events-none opacity-60"
@@ -224,8 +226,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             {/* Grows to fill any leftover space on short pages, pinning Footer to the bottom of
                 the viewport; collapses to 0 on tall pages, leaving Footer's own mt-6 as the gap. */}
-            <div className="flex-1" />
-            <Footer />
+            <div className="flex-1 print:hidden" />
+            <div className="print:hidden">
+              <Footer />
+            </div>
           </main>
         </div>
         <OnboardingTour

@@ -134,10 +134,11 @@ export default function CompliancePage() {
     }
   };
 
-  // The printable report opens as a normal page navigation (not a fetch) so the browser's own
-  // print / "Save as PDF" flow can act on it directly - no PDF library needed on either end.
+  // The printable report is a real page in this app (not a backend-generated static HTML blob) -
+  // same sidebar/routing pattern as every other page, opened in a new tab so the underlying
+  // Compliance page's filters/scroll position aren't disturbed while printing.
   const openPrintReport = () => {
-    window.open(`${apiBase}/api/compliance-matrix/export.html${exportParams()}`, "_blank");
+    window.open(`/compliance/report${exportParams()}`, "_blank");
   };
 
   const requirementById = useMemo(() => {
