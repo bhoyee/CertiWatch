@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchJson, postJson } from "../../../lib/api";
+import { deleteJson, fetchJson, postJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
 
 type UploadHistoryItem = {
@@ -569,8 +569,7 @@ export default function UploadsPage() {
                   if (!confirmDelete) return;
                   setDeleting(true);
                   try {
-                    const res = await fetch(`/api/uploads/${confirmDelete.id}`, { method: "DELETE" });
-                    if (!res.ok) throw new Error("Failed to delete upload");
+                    await deleteJson(`/api/uploads/${confirmDelete.id}`);
                     setConfirmDelete(null);
                     loadHistory();
                   } catch (err: any) {
