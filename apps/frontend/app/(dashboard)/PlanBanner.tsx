@@ -54,7 +54,7 @@ export function PlanBanner({
         <div>
           <p className="text-sm text-slate-500">Current plan</p>
           {/* Name + status sit together, since status describes the plan itself; usage counts are
-              a separate fact below. Only the tracked-certifications count and Status are badged -
+              a separate fact below. Only the tracked-requirements count and Status are badged -
               they're the two things here with a real state (a threshold, an active/past-due/
               canceled distinction). Devices/Sources are plain counts with no such state, so they
               stay as plain text rather than being badged just for visual consistency. */}
@@ -66,7 +66,7 @@ export function PlanBanner({
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${usageColor}`}>
-              Certifications tracked: {plan.recordCount}
+              Requirements tracked: {plan.recordCount}
               {plan.recordLimit > 0 ? ` / ${plan.recordLimit}` : " (no limit)"}
             </span>
             <span>Devices: {plan.deviceCount}</span>
@@ -103,7 +103,7 @@ export function PlanBanner({
       </div>
       {nearLimit && !atLimit && isActive && (
         <p className="mt-2 text-sm text-amber-700">
-          You are approaching your plan's tracked-certification limit. Consider upgrading to avoid interruptions.
+          You are approaching your plan's tracked-requirement limit. Consider upgrading to avoid interruptions.
         </p>
       )}
       {atLimit && isActive && (
@@ -115,11 +115,11 @@ export function PlanBanner({
             </svg>
             <div>
               <p className="text-base font-bold text-rose-800">
-                You&apos;ve reached your {plan.recordLimit}-certification plan limit ({plan.recordCount} tracked)
+                You&apos;ve reached your {plan.recordLimit}-requirement plan limit ({plan.recordCount} tracked)
               </p>
               <p className="mt-1 text-sm text-rose-700">
-                Every document is still being fully processed and safely stored - nothing is lost, and renewing a
-                certificate you already track never counts against this limit. New staff or requirements past your
+                Every document is still being fully processed and safely stored - nothing is lost, and renewing
+                something you already track never counts against this limit. New staff or requirements past your
                 plan&apos;s allowance just stay hidden from your lists until you upgrade, at which point they all
                 appear automatically.
               </p>

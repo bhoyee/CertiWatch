@@ -25,14 +25,14 @@ const plans: Plan[] = [
     name: "Starter",
     price: "$99",
     description: "For small teams getting off spreadsheets.",
-    features: ["Up to 15 staff", "Local folder & cloud drive ingestion", "Standard support"]
+    features: ["Up to 15 staff (300 requirements tracked)", "Local folder & cloud drive ingestion", "Standard support"]
   },
   {
     id: "growth",
     name: "Growth",
     price: "$249",
     description: "For growing orgs bringing cloud drives online.",
-    features: ["Up to 75 staff", "Google Drive & OneDrive sync", "Standard support"],
+    features: ["Up to 75 staff (1,500 requirements tracked)", "Google Drive & OneDrive sync", "Standard support"],
     highlighted: true
   },
   {
@@ -40,7 +40,7 @@ const plans: Plan[] = [
     name: "Pro",
     price: "$499",
     description: "For ops teams that need it all wired in.",
-    features: ["Unlimited staff", "Everything in Growth", "Priority support"]
+    features: ["Unlimited staff (no cap on requirements tracked)", "Everything in Growth", "Priority support"]
   }
 ];
 

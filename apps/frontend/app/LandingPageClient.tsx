@@ -79,15 +79,19 @@ const steps = [
   }
 ];
 
-// The only thing that actually differs by plan on the backend is how many staff certifications
-// count toward your allowance (see PlanLimits.GetActiveRecordIdsAsync) - there's no code-level
-// gating on ingestion channels, retention, or an API that doesn't exist. So the tiers are honest
-// about that: same platform on every plan, sized by how many people you're tracking - not three
-// different feature lists invented to make three columns look different. The allowance is a
-// standing total, not a monthly quota that resets - and renewing a certificate you already track
-// never counts against it, only a new staff member or a newly-tracked requirement does. It's sized
-// generously against the staff count so a full onboarding import (everyone's existing history at
-// once) fits comfortably inside the plan that actually matches your headcount.
+// The only thing that actually differs by plan on the backend is how many distinct (staff,
+// requirement) pairs count toward your allowance (see PlanLimits.GetActiveRecordIdsAsync) - there's
+// no code-level gating on ingestion channels, retention, or an API that doesn't exist. So the tiers
+// are honest about that: same platform on every plan, sized by how many people you're tracking -
+// not three different feature lists invented to make three columns look different. "Requirement"
+// covers training courses (First Aid, Fire Safety) and non-course checks alike (DBS, right-to-work,
+// professional registrations like NMC) - it's not only "certificates" in the literal sense, so the
+// pricing copy says requirements, matching the app's own Requirements page rather than a narrower
+// word. The allowance is a standing total, not a monthly quota that resets - and renewing something
+// you already track never counts against it, only a new staff member or a newly-tracked requirement
+// does. The "up to N staff" headline is a friendly translation of the real cap (staffCount x ~20
+// requirements each, the generous default), shown alongside the actual number so a tenant with an
+// unusually dense requirement list isn't surprised by hitting it before reaching that headcount.
 const sharedFeatures = [
   "Staff directory & live compliance matrix",
   "Local folder, Google Drive & OneDrive ingestion",
@@ -102,6 +106,7 @@ const plans = [
     price: "$99",
     blurb: "For small teams tracking their first few renewal dates.",
     limit: "Up to 15 staff",
+    recordLimit: "300 requirements tracked",
     support: "Standard support"
   },
   {
@@ -109,6 +114,7 @@ const plans = [
     price: "$249",
     blurb: "For growing orgs juggling certs, licenses, and insurance.",
     limit: "Up to 75 staff",
+    recordLimit: "1,500 requirements tracked",
     support: "Standard support",
     highlighted: true
   },
@@ -117,6 +123,7 @@ const plans = [
     price: "$499",
     blurb: "For ops teams tracking everything that could lapse.",
     limit: "Unlimited staff",
+    recordLimit: "No cap on requirements tracked",
     support: "Priority support"
   }
 ];
@@ -418,8 +425,10 @@ export default function LandingPageClient() {
           </h2>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#6B6A61]">
             Every plan below runs the exact same product — the compliance matrix, both cloud connectors, custom
-            rules, reminders, the lot. The only thing that changes is how many staff you're tracking, and every
-            plan leaves generous headroom for onboarding a whole staff history at once.
+            rules, reminders, the lot. The only thing that changes is how many requirements you're tracking per
+            staff member — training courses, DBS checks, right-to-work checks, professional registrations, anything
+            you set up — and renewing something you already track never counts against your limit, so a stable team
+            never gets squeezed by its own renewal history.
           </p>
 
           {/* What's included everywhere - stated once so the three cards below aren't three
@@ -458,6 +467,7 @@ export default function LandingPageClient() {
                 <p className={`mt-2 text-sm ${plan.highlighted ? "text-[#C9C7BC]" : "text-[#6B6A61]"}`}>{plan.blurb}</p>
                 <div className={`mt-5 space-y-1.5 border-t pt-4 ${plan.highlighted ? "border-white/10" : "border-[#EFEAE0]"}`}>
                   <p className="text-sm font-semibold">{plan.limit}</p>
+                  <p className={`text-xs ${plan.highlighted ? "text-[#8B8A7F]" : "text-[#9B9A8E]"}`}>{plan.recordLimit}</p>
                   <p className={`text-sm ${plan.highlighted ? "text-[#9B9A8E]" : "text-[#8A8A7E]"}`}>{plan.support}</p>
                 </div>
                 <Link
