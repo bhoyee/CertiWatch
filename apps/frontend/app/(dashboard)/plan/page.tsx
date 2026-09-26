@@ -33,6 +33,7 @@ const catalog = [
     price: "$99/mo",
     summary: "For small teams getting off spreadsheets.",
     limits: "Up to 15 staff",
+    recordLimit: "300 requirements tracked",
     extras: ["Local folders & cloud drives", "Standard support"]
   },
   {
@@ -41,6 +42,7 @@ const catalog = [
     price: "$249/mo",
     summary: "For growing orgs with cloud connectors.",
     limits: "Up to 75 staff",
+    recordLimit: "1,500 requirements tracked",
     extras: ["Google Drive & OneDrive", "Standard support"]
   },
   {
@@ -49,6 +51,7 @@ const catalog = [
     price: "$499/mo",
     summary: "For ops teams that need everything.",
     limits: "Unlimited staff",
+    recordLimit: "No cap on requirements tracked",
     extras: ["Everything in Growth", "Priority support"]
   }
 ];
@@ -196,7 +199,7 @@ export default function PlanPage() {
                 {renewDate ? `Renews on ${renewDate}` : "Renewal date not available"} - Status: {subscriptionLabel}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <UsageCard label="Certifications tracked" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
+                <UsageCard label="Requirements tracked" used={plan.recordCount} limit={plan.recordLimit > 0 ? plan.recordLimit : "No cap"} percent={usage.recordPct} />
                 <UsageCard label="Devices" used={plan.deviceCount} limit="Included" percent={0} />
                 <UsageCard label="Sources" used={plan.sourceCount} limit="Included" percent={0} />
               </div>
@@ -239,6 +242,7 @@ export default function PlanPage() {
                       <li className="flex items-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         {p.limits}
+                        <span className="text-xs text-slate-400">({p.recordLimit})</span>
                       </li>
                       {p.extras.map((f) => (
                         <li key={f} className="flex items-center gap-2">

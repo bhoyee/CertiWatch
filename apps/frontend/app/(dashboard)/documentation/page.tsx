@@ -162,11 +162,12 @@ const sections: Section[] = [
           across staff/requirement, and export the current view to CSV or PDF.
         </p>
         <p className="mt-3">
-          Your plan's limit is counted in distinct staff certifications tracked (one person plus one requirement),
-          not raw documents - renewing something you already track is always free, only a new staff member or a
-          newly-tracked requirement uses more of the allowance. If you're over your plan's limit, Records only shows
-          your oldest tracked certifications up to that limit - the rest are still safely stored (nothing is deleted
-          or lost), and all of them reappear automatically the moment you upgrade.
+          Your plan's limit is counted in distinct requirements tracked (one staff member plus one requirement type -
+          a training course, a DBS check, a right-to-work check, a professional registration, or anything else you're
+          tracking), not raw documents - renewing something you already track is always free, only a new staff member
+          or a newly-tracked requirement uses more of the allowance. If you're over your plan's limit, Records only
+          shows your oldest tracked requirements up to that limit - the rest are still safely stored (nothing is
+          deleted or lost), and all of them reappear automatically the moment you upgrade.
         </p>
         <DocScreenshot src="/docs/screenshots/records.png" alt="The Records page, listing processed certificates with staff name, requirement, issuer, dates, and status" caption="Records - every processed certificate in one sortable, searchable, exportable list." />
       </>
@@ -333,7 +334,7 @@ const sections: Section[] = [
     content: (
       <>
         <p>
-          <strong>Manage plan</strong> shows your current usage against your plan's tracked-certification limit, lets
+          <strong>Manage plan</strong> shows your current usage against your plan's tracked-requirement limit, lets
           you change plans, and lists your billing history with downloadable invoices. If you're approaching your
           limit you'll see a notice here and on the dashboard - upgrading takes effect immediately and reveals any
           records that were hidden past the previous limit right away.
