@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { deleteJson, fetchJson, postJson, patchJson } from "../../../lib/api";
+import { useToast } from "../Toast";
 
 type RequirementTypeDto = {
   id: string;
@@ -43,6 +44,7 @@ export default function RequirementsPage() {
 }
 
 function RequirementsPageInner() {
+  const toast = useToast();
   const searchParams = useSearchParams();
   const addFormRef = useRef<HTMLDivElement>(null);
   const [types, setTypes] = useState<RequirementTypeDto[] | null>(null);
@@ -389,9 +391,12 @@ function RequirementsPageInner() {
               await postJson("/api/requirement-types", body);
               const refreshed = await fetchJson<RequirementTypeDto[]>("/api/requirement-types");
               setTypes(refreshed);
+              toast.success(`"${body.name}" added to your requirements.`);
               setForm({ name: "", defaultValidityMonths: "", isRenewable: true });
             } catch (err: any) {
-              setError(err.message ?? "Failed to create requirement");
+              const message = err.message ?? "Failed to create requirement";
+              setError(message);
+              toast.error(message);
             } finally {
               setCreating(false);
             }
@@ -447,10 +452,13 @@ function RequirementsPageInner() {
                 await patchJson(`/api/requirement-types/${editing.id}`, body);
                 const refreshed = await fetchJson<RequirementTypeDto[]>("/api/requirement-types");
                 setTypes(refreshed);
+                toast.success(`"${body.name}" updated.`);
                 setEditing(null);
                 setEditForm(null);
               } catch (err: any) {
-                setError(err.message ?? "Failed to update requirement");
+                const message = err.message ?? "Failed to update requirement";
+                setError(message);
+                toast.error(message);
               } finally {
                 setSavingEdit(false);
               }
@@ -521,9 +529,12 @@ function RequirementsPageInner() {
                     await deleteJson(`/api/requirement-types/${confirmDelete.id}`);
                     const refreshed = await fetchJson<RequirementTypeDto[]>("/api/requirement-types");
                     setTypes(refreshed);
+                    toast.success(`"${confirmDelete.name}" deleted.`);
                     setConfirmDelete(null);
                   } catch (err: any) {
-                    setError(err.message ?? "Failed to delete requirement");
+                    const message = err.message ?? "Failed to delete requirement";
+                    setError(message);
+                    toast.error(message);
                   }
                 }}
                 className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
