@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deleteJson, fetchJson, postJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
+import { useToast } from "../Toast";
 
 type UploadHistoryItem = {
   id: string;
@@ -25,6 +26,7 @@ type BulkResult = { fileName: string; status: string; message?: string | null };
 
 export default function UploadsPage() {
   const { role } = useRole();
+  const toast = useToast();
   const isViewer = role?.toLowerCase() === "viewer";
   const roleReady = role !== null;
   const [history, setHistory] = useState<UploadHistoryItem[]>([]);
@@ -76,9 +78,12 @@ export default function UploadsPage() {
       };
       const res = await postJson<CreateResponse, typeof body>("/api/uploads/requests", body);
       setLastLink(res);
+      toast.success("Upload link created.");
       loadHistory();
     } catch (err: any) {
-      setError(err.message ?? "Failed to create upload link");
+      const message = err.message ?? "Failed to create upload link";
+      setError(message);
+      toast.error(message);
     } finally {
       setCreating(false);
     }
@@ -570,10 +575,13 @@ export default function UploadsPage() {
                   setDeleting(true);
                   try {
                     await deleteJson(`/api/uploads/${confirmDelete.id}`);
+                    toast.success("Upload link deleted.");
                     setConfirmDelete(null);
                     loadHistory();
                   } catch (err: any) {
-                    setError(err.message ?? "Failed to delete upload");
+                    const message = err.message ?? "Failed to delete upload";
+                    setError(message);
+                    toast.error(message);
                   } finally {
                     setDeleting(false);
                   }

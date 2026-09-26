@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import { fetchJson, patchJson, deleteJson } from "../../../lib/api";
 import { useRole } from "../RoleContext";
+import { useToast } from "../Toast";
 
 type RecordDto = {
   id: string;
@@ -474,6 +475,7 @@ function ReviewCard({
   onDeleted: () => void;
 }) {
   const { refreshPlan } = useRole();
+  const toast = useToast();
   const [staffName, setStaffName] = useState(record.staffName ?? "");
   const [courseName, setCourseName] = useState(record.courseName ?? "");
   const [issuer, setIssuer] = useState(record.issuer ?? "");
@@ -557,9 +559,16 @@ function ReviewCard({
         reviewNotes,
         processingStatus
       });
+      toast.success(
+        processingStatus === NEEDS_REVIEW
+          ? `Changes to ${staffName || record.staffName} saved - still in the review queue.`
+          : `${staffName || record.staffName} approved.`
+      );
       onUpdated();
     } catch (err: any) {
-      setError(err?.message ?? "Failed to update record");
+      const message = err?.message ?? "Failed to update record";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -574,10 +583,13 @@ function ReviewCard({
     setError(null);
     try {
       await deleteJson(`/api/records/${record.id}`);
+      toast.success(`${staffName || record.staffName} rejected and deleted.`);
       onDeleted();
       refreshPlan();
     } catch (err: any) {
-      setError(err?.message ?? "Failed to delete record");
+      const message = err?.message ?? "Failed to delete record";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
       setConfirmingDelete(false);

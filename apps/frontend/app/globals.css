@@ -58,3 +58,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .cw-flow-dot { animation: none !important; opacity: 0.9; }
 }
+
+/* Toast notifications (see Toast.tsx) - a small slide-and-fade so a new one arriving reads as an
+   event, not content that was just always there. */
+@keyframes cw-toast-in {
+  0% { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[cw-toast-in"] { animation: none !important; }
+}

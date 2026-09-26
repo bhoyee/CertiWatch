@@ -7,6 +7,7 @@ import { fetchJson, postJson } from "../../lib/api";
 import { NotificationBell } from "./NotificationBell";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
+import { ToastProvider } from "./Toast";
 import { LogoMark } from "../../components/LogoMark";
 import { navItems, isNavItemVisibleForRole } from "./navItems";
 import { GlobalSearch } from "./GlobalSearch";
@@ -173,6 +174,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   return (
+    <ToastProvider>
     <RoleProvider role={role} refreshPlan={loadPlan}>
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <div className="flex min-h-screen">
@@ -242,6 +244,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         />
       </div>
     </RoleProvider>
+    </ToastProvider>
   );
 }
 
