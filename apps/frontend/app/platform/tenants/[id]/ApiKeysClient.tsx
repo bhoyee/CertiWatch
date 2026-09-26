@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from "react";
-import { postJson } from "@/lib/api";
+import { postJson, postVoid } from "@/lib/api";
 
 type ApiKey = { id: string; name: string; key: string; isRevoked: boolean; createdAt: string };
 
@@ -21,7 +21,7 @@ export function ApiKeysClient({ tenantId, initialKeys }: { tenantId: string; ini
 
   const revoke = async (id: string) => {
     setPending(true);
-    await fetch(`/api/platform/tenants/${tenantId}/api-keys/${id}/revoke`, { method: "POST", credentials: "include" });
+    await postVoid(`/api/platform/tenants/${tenantId}/api-keys/${id}/revoke`);
     setKeys((k) => k.map((a) => (a.id === id ? { ...a, isRevoked: true } : a)));
     setPending(false);
   };

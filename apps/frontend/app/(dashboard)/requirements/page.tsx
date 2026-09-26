@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchJson, postJson, patchJson } from "../../../lib/api";
+import { deleteJson, fetchJson, postJson, patchJson } from "../../../lib/api";
 
 type RequirementTypeDto = {
   id: string;
@@ -439,18 +439,12 @@ function RequirementsPageInner() {
               setSavingEdit(true);
               setError(null);
               try {
-                const body: any = {
+                const body = {
                   name: editForm.name.trim(),
                   defaultValidityMonths: editForm.defaultValidityMonths ? Number(editForm.defaultValidityMonths) : null,
                   isRenewable: editForm.isRenewable
                 };
-                await fetch(`/api/requirement-types/${editing.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(body)
-                }).then((res) => {
-                  if (!res.ok) throw new Error("Failed to update requirement");
-                });
+                await patchJson(`/api/requirement-types/${editing.id}`, body);
                 const refreshed = await fetchJson<RequirementTypeDto[]>("/api/requirement-types");
                 setTypes(refreshed);
                 setEditing(null);
@@ -524,8 +518,7 @@ function RequirementsPageInner() {
                 onClick={async () => {
                   if (!confirmDelete) return;
                   try {
-                    const res = await fetch(`/api/requirement-types/${confirmDelete.id}`, { method: "DELETE" });
-                    if (!res.ok) throw new Error("Failed to delete requirement");
+                    await deleteJson(`/api/requirement-types/${confirmDelete.id}`);
                     const refreshed = await fetchJson<RequirementTypeDto[]>("/api/requirement-types");
                     setTypes(refreshed);
                     setConfirmDelete(null);
