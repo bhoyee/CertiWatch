@@ -8,7 +8,7 @@ import { NotificationBell } from "./NotificationBell";
 import { PlanBanner } from "./PlanBanner";
 import { RoleProvider } from "./RoleContext";
 import { LogoMark } from "../../components/LogoMark";
-import { navItems } from "./navItems";
+import { navItems, isNavItemVisibleForRole } from "./navItems";
 import { GlobalSearch } from "./GlobalSearch";
 
 type TenantPlanDto = {
@@ -46,9 +46,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [tourStep, setTourStep] = useState(0);
   const isViewer = role?.toLowerCase() === "viewer";
   const isManager = role?.toLowerCase() === "manager";
-  const tourSteps = useMemo(() => getTourSteps(role), [role]);
   const roleLower = role?.toLowerCase();
   const isSuper = roleLower === "superadmin";
+  const tourSteps = useMemo(() => getTourSteps(role, isSuper), [role, isSuper]);
   const blockedByError =
     planError?.toLowerCase().includes("subscription inactive") ||
     planError?.toLowerCase().includes("payment") ||
@@ -352,17 +352,10 @@ function NavLinks({
   const isViewer = roleLower === "viewer";
   const isSuperRole = isSuper || roleLower === "superadmin";
   const currentUserId = userId ?? null;
-  const filteredItems = useMemo(() => {
-    return navItems.filter((item) => {
-      if (isSuperRole) {
-        return item.superOnly || item.href === "/profile" || item.href === "/logout";
-      }
-      if (isViewer && item.viewerHidden) return false;
-      if (roleLower === "manager" && item.managerHidden) return false;
-      if (item.superOnly && roleLower !== "superadmin") return false;
-      return true;
-    });
-  }, [isSuperRole, isViewer, roleLower]);
+  const filteredItems = useMemo(
+    () => navItems.filter((item) => isNavItemVisibleForRole(item, role, isSuperRole)),
+    [isSuperRole, role]
+  );
 
   useEffect(() => {
     if (isViewer || roleLoading || isSuperRole) {
@@ -429,6 +422,7 @@ function NavLinks({
           <Link
             key={item.href}
             href={item.href}
+            data-tour={item.href}
             onClick={onClick}
             className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
               item.divider ? "mt-4 border-t border-slate-200 pt-4" : ""
@@ -490,26 +484,35 @@ function Footer() {
   );
 }
 
-function getTourSteps(role: string | null) {
-  const common = [
-    { title: "Uploads", body: "Add certificates via single upload, bulk, or shareable links." },
-    { title: "Records & Analytics", body: "Browse records and track expiries, confidence, and trends." }
-  ];
-  const review = { title: "Review queue", body: "Review flagged certificates, approve, or request fixes." };
-  const team = { title: "Team & Roles", body: "Admins manage managers/viewers; managers oversee their viewers and invites." };
-  const billing = { title: "Billing & Plan", body: "Admins can manage plans and billing from the Manage Plan page." };
+type TourStep = { href: string; title: string; body: string };
 
-  const r = role?.toLowerCase();
-  if (r === "viewer") {
-    return common;
-  }
-  if (r === "manager") {
-    return [common[0], review, common[1], team];
-  }
-  // admin or unknown
-  return [common[0], review, common[1], team, billing];
+// One master list, in sidebar order, each tied to a real nav href - not a hand-written per-role
+// list that could quietly drift from what's actually in the sidebar. getTourSteps below filters
+// this exactly the way the sidebar itself decides what to show a given role (see
+// isNavItemVisibleForRole), so a step can never point at something this role doesn't have.
+const TOUR_STEP_CONTENT: TourStep[] = [
+  { href: "/analytics", title: "Dashboard", body: "A live overview of your records, what's expiring soon, and anything that needs attention." },
+  { href: "/uploads", title: "Uploads", body: "Add certificates here - a single file, a bulk batch, or a no-login link you can send to a staff member." },
+  { href: "/review", title: "Review queue", body: "Anything CertiWatch wasn't fully confident about lands here for a quick check before it counts as official." },
+  { href: "/records", title: "Records", body: "Every processed certificate - searchable, sortable, and exportable to CSV or PDF." },
+  { href: "/compliance", title: "Compliance", body: "Every staff member against every requirement, at a glance - the page to check before an inspection." },
+  { href: "/requirements", title: "Requirements", body: "The certificate types CertiWatch checks against, plus reminder timing and manager-visibility settings." },
+  { href: "/invite", title: "Team & roles", body: "Invite your team and set what each person can see and do." },
+  { href: "/plan", title: "Billing & plan", body: "See usage against your plan's limit, and manage your subscription." }
+];
+
+function getTourSteps(role: string | null, isSuperRole: boolean): TourStep[] {
+  return TOUR_STEP_CONTENT.filter((step) => {
+    const navItem = navItems.find((n) => n.href === step.href);
+    return navItem && isNavItemVisibleForRole(navItem, role, isSuperRole);
+  });
 }
 
+// A standard "spotlight" product tour (Intercom/Appcues-style): each step highlights the actual
+// sidebar item it's talking about and anchors a tooltip card next to it, rather than one generic
+// card floating in the middle of the page regardless of what it's describing. Falls back to a
+// centered card only if the target genuinely isn't on screen (the sidebar collapses below the md
+// breakpoint, so this is what mobile gets automatically - no separate mobile-tour logic needed).
 function OnboardingTour({
   open,
   step,
@@ -520,71 +523,139 @@ function OnboardingTour({
 }: {
   open: boolean;
   step: number;
-  steps: { title: string; body: string }[];
+  steps: TourStep[];
   onClose: (markSeen: boolean) => void;
   onNext: () => void;
   onPrev: () => void;
 }) {
   const current = steps[step];
-  if (!open || steps.length === 0) return null;
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (!open || !current) {
+      setRect(null);
+      return;
+    }
+
+    // The same href appears twice in the DOM (the desktop sidebar, kept mounted but
+    // display:none below the md breakpoint, and the slide-down mobile menu) - pick whichever
+    // copy is actually laid out rather than the first match, which on mobile is the hidden one
+    // and would otherwise measure as a zero-size rect anchored at the top-left corner.
+    const findVisible = () => {
+      const candidates = document.querySelectorAll(`[data-tour="${current.href}"]`);
+      for (const el of candidates) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return r;
+      }
+      return null;
+    };
+
+    const measure = () => setRect(findVisible());
+
+    document.querySelector(`[data-tour="${current.href}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+
+    measure();
+    // Re-measure once more shortly after, in case the scrollIntoView above was still animating
+    // when the first measurement ran.
+    const settle = setTimeout(measure, 350);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      clearTimeout(settle);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open, current]);
+
+  if (!open || !current) return null;
   const isLast = step === steps.length - 1;
-  const progress = ((step + 1) / steps.length) * 100;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-sm">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
-                <path d="M9 18h6M10 21h4M8.5 14a4.5 4.5 0 1 1 7 0c-.7.8-1.2 1.4-1.4 2.2-.1.4-.4.8-1.1.8h-2c-.7 0-1-.4-1.1-.8-.2-.8-.7-1.4-1.4-2.2Z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-              Getting started · Step {step + 1} of {steps.length}
-            </p>
-          </div>
-          <button
-            onClick={() => onClose(true)}
-            aria-label="Close tour"
-            className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
+  const card = (
+    <div className="w-[320px] rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-black/5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
+          Step {step + 1} of {steps.length}
+        </p>
+        <button
+          onClick={() => onClose(true)}
+          aria-label="Close tour"
+          className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+            <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
 
-        <h3 className="mt-4 text-xl font-bold text-slate-900">{current.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">{current.body}</p>
+      <h3 className="mt-2 text-base font-bold text-slate-900">{current.title}</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{current.body}</p>
 
-        <div className="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+      <div className="mt-4 flex items-center gap-1.5" aria-hidden="true">
+        {steps.map((_, i) => (
+          <span key={i} className={`h-1.5 rounded-full transition-all ${i === step ? "w-5 bg-indigo-600" : "w-1.5 bg-slate-200"}`} />
+        ))}
+      </div>
 
-        <div className="mt-5 flex items-center justify-between">
-          <button
-            onClick={onPrev}
-            disabled={step === 0}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-          >
-            Back
-          </button>
-          <button
-            onClick={() => {
-              if (isLast) onClose(true);
-              else onNext();
-            }}
-            className="rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-          >
-            {isLast ? "Done" : "Next"}
-          </button>
-        </div>
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          onClick={onPrev}
+          disabled={step === 0}
+          className="rounded-full border border-slate-200 px-3.5 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-0"
+        >
+          Back
+        </button>
+        <button
+          onClick={() => (isLast ? onClose(true) : onNext())}
+          className="rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+        >
+          {isLast ? "Done" : "Next"}
+        </button>
       </div>
     </div>
+  );
+
+  // No target found - the sidebar is collapsed (mobile) or the item isn't rendered for some
+  // other reason. Same centered presentation this tour used everywhere before, so it degrades
+  // gracefully instead of breaking.
+  if (!rect) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm" onClick={() => onClose(true)}>
+        <div onClick={(e) => e.stopPropagation()}>{card}</div>
+      </div>
+    );
+  }
+
+  const GAP = 16;
+  const CARD_WIDTH = 320;
+  const placeRight = window.innerWidth - rect.right >= CARD_WIDTH + GAP + 24;
+  const top = Math.min(Math.max(rect.top + rect.height / 2 - 90, 12), window.innerHeight - 300);
+  const left = placeRight ? rect.right + GAP : Math.max(rect.left - CARD_WIDTH - GAP, 12);
+
+  return (
+    <>
+      {/* Dims the page and highlights the target with a glowing ring, rather than a full SVG
+          cutout mask - the simpler technique most lightweight product tours actually use, for a
+          fraction of the code. */}
+      <div className="fixed inset-0 z-50 bg-slate-900/50" onClick={() => onClose(true)} />
+      <div
+        className="pointer-events-none fixed z-50 rounded-xl transition-all"
+        style={{
+          top: rect.top - 6,
+          left: rect.left - 6,
+          width: rect.width + 12,
+          height: rect.height + 12,
+          boxShadow: "0 0 0 4px rgba(99,102,241,0.35), 0 0 0 9999px rgba(15,23,42,0.001), 0 0 28px rgba(99,102,241,0.45)",
+          background: "rgba(255,255,255,0.06)"
+        }}
+      />
+      <div className="fixed z-50" style={{ top, left }} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 bg-white ${placeRight ? "-left-1.5" : "-right-1.5"}`}
+          aria-hidden="true"
+        />
+        {card}
+      </div>
+    </>
   );
 }
 
