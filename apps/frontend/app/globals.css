@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Browsers drop plain background-color (and box-shadow) when printing/saving as PDF unless told
+   otherwise - "Background graphics" is off by default in Chrome's print dialog. Without this, any
+   colored bar/badge/chip that's just a background-color (the compliance report's status bars,
+   e.g.) renders as an invisible blank block on paper even though it looks correct on screen. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}
+
 :root {
   --cw-surface: #ffffff;
   --cw-surface-muted: #f8fafc;
